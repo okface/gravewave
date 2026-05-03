@@ -713,6 +713,147 @@
     padding: 10px 12px 12px;
   }
 
+  /* ============================================================
+     ATLAS — top-level tree overview (single-screen graph view)
+     ============================================================ */
+  .atlas-intro {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-dim);
+    line-height: 1.45;
+    padding: 6px 8px 12px;
+    text-align: center;
+    border-bottom: 1px dashed rgba(110, 104, 144, 0.18);
+    margin-bottom: 10px;
+  }
+  .atlas-section {
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed rgba(110, 104, 144, 0.18);
+  }
+  .atlas-section:last-child { border-bottom: none; }
+  .atlas-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 0 4px;
+  }
+  .atlas-section[data-tree-id="gravity"]     { --node-accent: var(--grav); }
+  .atlas-section[data-tree-id="electricity"] { --node-accent: var(--elec); }
+  .atlas-section[data-tree-id="fire"]        { --node-accent: var(--fire); }
+  .atlas-section[data-tree-id="frost"]       { --node-accent: var(--frost); }
+  .atlas-section[data-tree-id="vigil"]       { --node-accent: var(--gold); }
+  .atlas-tree-icon {
+    font-size: 18px;
+    color: var(--node-accent, var(--gold));
+    filter: drop-shadow(0 0 6px var(--node-accent, var(--gold)));
+  }
+  .atlas-tree-name {
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--ink-bright);
+    text-transform: uppercase;
+    flex: 1 1 auto;
+  }
+  .atlas-tree-points {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--node-accent, var(--gold));
+    letter-spacing: 0.06em;
+  }
+  .atlas-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  /* Prereq lines — dim by default, lit when the prereq is taken. */
+  .atlas-line {
+    stroke: rgba(110, 104, 144, 0.30);
+    stroke-width: 1.2;
+    fill: none;
+  }
+  .atlas-line.lit {
+    stroke: var(--node-accent, var(--gold));
+    stroke-opacity: 0.7;
+    stroke-width: 1.6;
+  }
+  /* Mutex line — bright dashed crimson between locked-keystone pairs. */
+  .atlas-mutex-line {
+    stroke: var(--crimson);
+    stroke-width: 1.4;
+    stroke-dasharray: 3 3;
+    fill: none;
+    opacity: 0.85;
+  }
+  /* Node base. Tap target slightly larger via stroke. */
+  .atlas-node circle,
+  .atlas-node rect {
+    fill: rgba(20, 18, 42, 0.92);
+    stroke: rgba(110, 104, 144, 0.5);
+    stroke-width: 1.5;
+    cursor: pointer;
+    transition: stroke 0.12s, stroke-width 0.12s, fill 0.12s;
+  }
+  .atlas-node.locked circle,
+  .atlas-node.locked rect {
+    opacity: 0.55;
+  }
+  .atlas-node.eligible circle,
+  .atlas-node.eligible rect {
+    stroke: var(--node-accent, var(--gold));
+    stroke-width: 2;
+  }
+  .atlas-node.taken circle,
+  .atlas-node.taken rect {
+    fill: rgba(50, 38, 80, 0.92);
+    stroke: var(--node-accent, var(--gold));
+    stroke-width: 2.4;
+  }
+  .atlas-node.taken-full circle,
+  .atlas-node.taken-full rect {
+    fill: var(--node-accent, var(--gold));
+    stroke: var(--gold);
+    stroke-width: 2.4;
+  }
+  .atlas-node.mutex-locked circle,
+  .atlas-node.mutex-locked rect {
+    stroke: var(--crimson);
+    stroke-width: 1.8;
+    opacity: 0.75;
+  }
+  .atlas-node.unlock circle {
+    /* Spell unlocks slightly larger via inverse fill */
+    fill: rgba(20, 18, 42, 0.95);
+  }
+  .atlas-node-label {
+    text-anchor: middle;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    fill: var(--ink-bright);
+    pointer-events: none;
+    font-weight: 700;
+  }
+  .atlas-node.locked .atlas-node-label { fill: var(--ink-dim); }
+  .atlas-node.taken-full .atlas-node-label { fill: #1a1410; }
+  .atlas-node-name {
+    text-anchor: middle;
+    font-family: 'Cinzel', serif;
+    font-size: 8px;
+    letter-spacing: 0.05em;
+    fill: var(--ink-mid);
+    pointer-events: none;
+  }
+  .atlas-node.eligible .atlas-node-name,
+  .atlas-node.taken .atlas-node-name,
+  .atlas-node.taken-full .atlas-node-name {
+    fill: var(--ink-bright);
+  }
+  /* Atlas tab gets a distinct icon color treatment */
+  .tree-tab.atlas-tab .tab-icon { color: var(--gold); }
+  .tree-tab.atlas-tab.active .tab-icon { filter: drop-shadow(0 0 4px var(--gold)); }
+
   /* Spell groups — each spell + its talents. The unlock card is the
      header (full-width, prominent). Talents below are small chips. */
   .spell-group {
@@ -1016,6 +1157,38 @@
     line-height: 1.4;
     opacity: 0.85;
   }
+  .tree-fusion-card .fusion-card-inherit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--gold);
+    margin-top: 6px;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+  }
+  .tree-fusion-card .fusion-card-inherit.dim {
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+  .tree-fusion-card .fusion-card-lock {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--crimson);
+    margin-top: 6px;
+    letter-spacing: 0.05em;
+  }
+  .tree-fusion-card.locked {
+    background: linear-gradient(180deg, rgba(110, 104, 144, 0.10), rgba(20, 18, 42, 0.95));
+    border-color: rgba(110, 104, 144, 0.55);
+    box-shadow: none;
+    cursor: not-allowed;
+    animation: none;
+    opacity: 0.86;
+  }
+  .tree-fusion-card.locked .fusion-tag,
+  .tree-fusion-card.locked .fusion-card-cta {
+    color: var(--ink-mid);
+  }
+  .tree-fusion-card.locked:hover { transform: none; }
 
   /* ============================================================
      NODE DETAIL MODAL — opens when a tree node is tapped
@@ -1752,6 +1925,7 @@ const SPELLS = {
     id: 'magnetar_pulse',
     name: 'Magnetar Pulse',
     tree: 'fusion',
+    parents: ['gravity_bolt', 'lightning_bolt'],   // inherits parent talents
     color: '#f0c674',
     cooldown: 1.5,
     cast(game, caster, mods) {
@@ -1792,6 +1966,7 @@ const SPELLS = {
     id: 'storm_singularity',
     name: 'Storm Singularity',
     tree: 'fusion',
+    parents: ['gravity_well', 'storm_cloud'],
     color: '#a07cff',
     cooldown: 6.5,
     cast(game, caster, mods) {
@@ -1822,6 +1997,7 @@ const SPELLS = {
     id: 'tidal_sphere',
     name: 'Tidal Sphere',
     tree: 'fusion',
+    parents: ['gravity_bolt', 'static_field'],
     color: '#9af0e6',
     cooldown: 1.8,
     cast(game, caster, mods) {
@@ -1858,6 +2034,7 @@ const SPELLS = {
     id: 'tempest',
     name: 'Tempest',
     tree: 'fusion',
+    parents: ['storm_cloud'],     // evolution: only one parent spell
     color: '#5ae5ff',
     cooldown: 1.6,
     cast(game, caster, mods) {
@@ -1880,6 +2057,7 @@ const SPELLS = {
     id: 'black_bolt',
     name: 'Black Bolt',
     tree: 'fusion',
+    parents: ['gravity_bolt'],     // evolution
     color: '#3a1a78',
     cooldown: 2.6,
     cast(game, caster, mods) {
@@ -2525,7 +2703,13 @@ const FUSIONS = {
     name: 'Magnetar Pulse',
     desc: 'A volatile orb of crushed spacetime, crackling with current. Pulls foes inward, then arcs lightning to anything nearby.',
     flavor: 'true_fusion',
-    requires: { spells: ['gravity_bolt', 'lightning_bolt'], items: [], nodes: [] },
+    requires: {
+      spells: ['gravity_bolt', 'lightning_bolt'],
+      items: [], nodes: [],
+      // Player must have invested in BOTH parent spells. Caps fusion
+      // discovery to mid-run, after they've actually used them.
+      spellInvestment: { gravity_bolt: 2, lightning_bolt: 2 },
+    },
     consumes: { spells: ['gravity_bolt', 'lightning_bolt'], items: [] },
     grants: 'magnetar_pulse',
   },
@@ -2534,7 +2718,11 @@ const FUSIONS = {
     name: 'Storm Singularity',
     desc: 'A gravity well that perpetually discharges chain lightning to all foes ensnared within its event horizon.',
     flavor: 'true_fusion',
-    requires: { spells: ['gravity_well', 'storm_cloud'], items: [], nodes: [] },
+    requires: {
+      spells: ['gravity_well', 'storm_cloud'],
+      items: [], nodes: [],
+      spellInvestment: { gravity_well: 2, storm_cloud: 2 },
+    },
     consumes: { spells: ['gravity_well', 'storm_cloud'], items: [] },
     grants: 'storm_singularity',
   },
@@ -2543,7 +2731,11 @@ const FUSIONS = {
     name: 'Tidal Sphere',
     desc: 'A slow, heavy comet of compressed gravity. On impact it leaves a crackling field that grinds enemies in a wide area.',
     flavor: 'true_fusion',
-    requires: { spells: ['gravity_bolt', 'static_field'], items: [], nodes: [] },
+    requires: {
+      spells: ['gravity_bolt', 'static_field'],
+      items: [], nodes: [],
+      spellInvestment: { gravity_bolt: 2, static_field: 2 },
+    },
     consumes: { spells: ['gravity_bolt', 'static_field'], items: [] },
     grants: 'tidal_sphere',
   },
@@ -2552,7 +2744,10 @@ const FUSIONS = {
     name: 'Tempest',
     desc: 'Evolution: Storm Cloud splits into a roaring storm — far more frequent strikes across a wider radius.',
     flavor: 'evolution',
-    requires: { spells: ['storm_cloud'], items: ['stormcaller'], nodes: [] },
+    requires: {
+      spells: ['storm_cloud'], items: ['stormcaller'], nodes: [],
+      spellInvestment: { storm_cloud: 2 },
+    },
     consumes: { spells: ['storm_cloud'], items: [] },         // item stays
     grants: 'tempest',
   },
@@ -2561,7 +2756,10 @@ const FUSIONS = {
     name: 'Black Bolt',
     desc: 'Evolution: Gravity Bolt collapses inward, becoming a slow, devastating singularity that obliterates clusters on impact.',
     flavor: 'evolution',
-    requires: { spells: ['gravity_bolt'], items: ['voidstone'], nodes: [] },
+    requires: {
+      spells: ['gravity_bolt'], items: ['voidstone'], nodes: [],
+      spellInvestment: { gravity_bolt: 2 },
+    },
     consumes: { spells: ['gravity_bolt'], items: [] },           // item stays
     grants: 'black_bolt',
   },
@@ -2963,6 +3161,14 @@ function computeSpellMods(playerState, spellId) {
    *   4. Keystone behavior flags merged into `behavior` (e.g. noPull, explodeOnHit).
    */
   const tree = SPELLS[spellId].tree;
+  // Fusion lineage: a fused spell INHERITS its consumed parents' talent
+  // investment. Spending TP on Fireball before fusing into Magnetar Pulse
+  // is preserved as power on the fused spell. Set `parents` on a fusion
+  // SPELL definition to opt into this inheritance.
+  const parents = SPELLS[spellId].parents || [];
+  const matchSpellId = (talentSpellId) =>
+    talentSpellId === spellId || parents.includes(talentSpellId);
+
   let dmgMult = 1.0;
   let critChance = CONFIG.spell.baseCritChance;
   let critMult = CONFIG.spell.baseCritMult;
@@ -2981,7 +3187,7 @@ function computeSpellMods(playerState, spellId) {
     if (rank <= 0) continue;
     const node = findNode(nodeId);
     if (!node) continue;
-    if (node.type === 'spell_mod' && node.spellId === spellId) {
+    if (node.type === 'spell_mod' && matchSpellId(node.spellId)) {
       const m = node.mods;
       if (m.dmgMult)    dmgMult    += m.dmgMult * rank;
       if (m.radiusMult) radiusMult += m.radiusMult * rank;
@@ -3039,7 +3245,10 @@ function computeSpellMods(playerState, spellId) {
       behavior: node.behavior,
     }];
     for (const t of targets) {
-      if (t.spell && t.spell !== spellId) continue;
+      // Keystone identity is also inherited by fused descendants — taking
+      // Annihilation on Gravity Bolt before fusing carries its damage
+      // multiplier into Magnetar Pulse.
+      if (t.spell && !matchSpellId(t.spell)) continue;
       if (t.behavior) Object.assign(behavior, t.behavior);
       if (t.modAdjust) {
         const a = t.modAdjust;
@@ -3078,6 +3287,10 @@ function computeConditionalDamageMult(playerState, enemy) {
 function computeSpellCooldown(playerState, spellId) {
   let cd = SPELLS[spellId].cooldown;
   const tree = SPELLS[spellId].tree;
+  const parents = SPELLS[spellId].parents || [];
+  // Fused spells also inherit per-tree CDR investments by tagging the
+  // tree of each parent as eligible.
+  const eligibleTrees = new Set([tree, ...parents.map(p => SPELLS[p]?.tree).filter(Boolean)]);
 
   // CDR mods scale with rank
   for (const nodeId in playerState.takenNodes) {
@@ -3089,12 +3302,14 @@ function computeSpellCooldown(playerState, spellId) {
       const m = node.mods;
       // Per-rank CDR: applied once per rank multiplicatively
       for (let i = 0; i < rank; i++) {
-        if (tree === 'gravity' && m.gravityCdrMult)        cd *= m.gravityCdrMult;
-        if (tree === 'electricity' && m.electricityCdrMult) cd *= m.electricityCdrMult;
-        if (tree === 'fire' && m.fireCdrMult)               cd *= m.fireCdrMult;
+        if (eligibleTrees.has('gravity') && m.gravityCdrMult)        cd *= m.gravityCdrMult;
+        if (eligibleTrees.has('electricity') && m.electricityCdrMult) cd *= m.electricityCdrMult;
+        if (eligibleTrees.has('fire') && m.fireCdrMult)               cd *= m.fireCdrMult;
       }
     }
-    if (node.type === 'spell_mod' && node.spellId === spellId && node.mods?.cdMult) {
+    if (node.type === 'spell_mod' &&
+        (node.spellId === spellId || parents.includes(node.spellId)) &&
+        node.mods?.cdMult) {
       // cdMult is "additive bonus to base"; with ranks, multiply per rank.
       for (let i = 0; i < rank; i++) {
         cd *= (1 + node.mods.cdMult);
@@ -3211,6 +3426,63 @@ function pointsInTree(playerState, treeId) {
     if (findNodeTree(id) === treeId) n += playerState.takenNodes[id];
   }
   return n;
+}
+
+/*
+ * Total ranks the player has put into spell_mod talents for a specific
+ * spell. The unlock SP cost is excluded — this is purely about how
+ * much they've *invested in shaping* that spell. Used by fusion gates
+ * so a recipe can demand "you've actually built around Fireball, not
+ * just unlocked it."
+ */
+function pointsInSpell(playerState, spellId) {
+  let n = 0;
+  for (const id in playerState.takenNodes) {
+    const node = findNode(id);
+    if (!node) continue;
+    if (node.type === 'spell_mod' && node.spellId === spellId) {
+      n += playerState.takenNodes[id];
+    }
+  }
+  return n;
+}
+
+/*
+ * Returns null if the fusion is fully eligible, or a structured
+ * { reason, missing } description of what's still blocking it. Used
+ * both for buildFusionChoices filtering and for greying-out the card
+ * with an explicit "Need 2 more TP in Fireball" hint.
+ */
+function fusionBlockedReason(fusion, playerState) {
+  const crafted = new Set(playerState.craftedFusions || []);
+  if (crafted.has(fusion.id)) return { reason: 'crafted' };
+  const ownedSpells = new Set(playerState.spells);
+  const missingSpells = fusion.requires.spells.filter(s => !ownedSpells.has(s));
+  if (missingSpells.length) {
+    return { reason: 'spell', missing: missingSpells.map(s => SPELLS[s]?.name || s) };
+  }
+  const ownedItems = new Set(playerState.items.filter(i => i).map(i => i.id));
+  const missingItems = fusion.requires.items.filter(i => !ownedItems.has(i));
+  if (missingItems.length) {
+    return { reason: 'item', missing: missingItems.map(i => ITEMS[i]?.name || i) };
+  }
+  const takenNodes = new Set(Object.keys(playerState.takenNodes));
+  const missingNodes = fusion.requires.nodes.filter(n => !takenNodes.has(n));
+  if (missingNodes.length) {
+    return { reason: 'node', missing: missingNodes };
+  }
+  // Spell-investment gate — minimum TP you've put into each parent spell.
+  if (fusion.requires.spellInvestment) {
+    const shortfalls = [];
+    for (const [spellId, need] of Object.entries(fusion.requires.spellInvestment)) {
+      const have = pointsInSpell(playerState, spellId);
+      if (have < need) {
+        shortfalls.push({ spell: SPELLS[spellId]?.name || spellId, need, have });
+      }
+    }
+    if (shortfalls.length) return { reason: 'investment', missing: shortfalls };
+  }
+  return null;
 }
 
 /*
@@ -3370,23 +3642,37 @@ const ChoiceEngine = {
 
   buildFusionChoices(playerState) {
     /*
-     * Returns all currently-eligible fusion recipes:
-     *   - not yet crafted
-     *   - all required spells in playerState.spells
-     *   - all required items present in equipment slots
-     *   - all required nodes taken
+     * Returns all currently-eligible fusion recipes — gated by spells
+     * owned, items equipped, prereq nodes taken, AND minimum TP invested
+     * in each parent spell (the "you've actually built around it" rule).
      */
-    const crafted = new Set(playerState.craftedFusions || []);
-    const ownedItems = new Set(playerState.items.filter(i => i).map(i => i.id));
-    const ownedSpells = new Set(playerState.spells);
-    const takenNodes = new Set(Object.keys(playerState.takenNodes));
     const out = [];
     for (const fusion of Object.values(FUSIONS)) {
-      if (crafted.has(fusion.id)) continue;
-      if (!fusion.requires.spells.every(s => ownedSpells.has(s))) continue;
-      if (!fusion.requires.items.every(i => ownedItems.has(i))) continue;
-      if (!fusion.requires.nodes.every(n => takenNodes.has(n))) continue;
-      out.push(fusion);
+      if (!fusionBlockedReason(fusion, playerState)) out.push(fusion);
+    }
+    return out;
+  },
+
+  /*
+   * All recipes that exist for this character's spell pool, regardless
+   * of whether they're currently craftable. Used by the tree-overview
+   * "Recipes" rail so locked fusions are still discoverable.
+   */
+  allFusionsForCharacter(playerState) {
+    const charSpells = new Set();
+    for (const treeId of playerState.charDef.skillTrees) {
+      const tree = SKILL_TREES[treeId];
+      if (!tree) continue;
+      for (const node of tree.nodes) {
+        if (node.type === 'unlock_spell') charSpells.add(node.spellId);
+      }
+    }
+    const out = [];
+    for (const fusion of Object.values(FUSIONS)) {
+      // Surface any recipe whose parent spells are at least theoretically
+      // reachable for this character. Item-required recipes still surface
+      // (player could pick the item up).
+      if (fusion.requires.spells.every(s => charSpells.has(s))) out.push(fusion);
     }
     return out;
   },
@@ -6138,13 +6424,11 @@ const UI = {
   },
 
   showSkillTree(ps, wave, ptsAwarded = {}, healAmount = 0) {
-    // Default tab: their chosen elemental path (if not yet set this run),
-    // otherwise preserve whichever tab they were last viewing.
-    if (!this._currentTreeTab || !ps.charDef.skillTrees.includes(this._currentTreeTab)) {
-      const primaryTree = ps.charDef.skillTrees.find(
-        tid => Object.keys(ps.takenNodes).some(id => findNodeTree(id) === tid)
-      );
-      this._currentTreeTab = primaryTree || ps.charDef.skillTrees[0];
+    // Default tab: the atlas overview, so the player sees the whole map
+    // first and can pick a path. Detail tabs are still available afterward.
+    const validTabs = ['atlas', ...ps.charDef.skillTrees];
+    if (!this._currentTreeTab || !validTabs.includes(this._currentTreeTab)) {
+      this._currentTreeTab = 'atlas';
     }
     // Mechanical wave summary — what you got, no flavor.
     // wave === 0 is the pre-game tree (player just finished path-select).
@@ -6184,6 +6468,25 @@ const UI = {
   _renderTreeTabs(ps) {
     const tabsEl = this.$('tree-tabs');
     tabsEl.innerHTML = '';
+
+    // Atlas — virtual first tab. Shows all trees on a single graph so the
+    // player can see at a glance what's invested, what's available, and
+    // what they're working toward.
+    const atlasTab = document.createElement('button');
+    atlasTab.className = 'tree-tab atlas-tab';
+    atlasTab.dataset.tab = 'atlas';
+    if (this._currentTreeTab === 'atlas') atlasTab.classList.add('active');
+    atlasTab.innerHTML = `
+      <span class="tab-icon">⌖</span>
+      <span class="tab-name">Atlas</span>
+    `;
+    atlasTab.addEventListener('click', () => {
+      this._currentTreeTab = 'atlas';
+      this._renderTreeTabs(ps);
+      this._renderTreeContent(ps);
+    });
+    tabsEl.appendChild(atlasTab);
+
     for (const treeId of ps.charDef.skillTrees) {
       const tree = SKILL_TREES[treeId];
       if (!tree) continue;
@@ -6207,10 +6510,240 @@ const UI = {
     }
   },
 
+  /*
+   * Atlas — top-level overview. Renders every tree the character has
+   * access to as a compact node graph: spell unlocks at the top, talents
+   * stratified by prereq depth, keystone forks at the bottom (with a
+   * mutex line between paired keystones). Tap any node to open its
+   * existing detail modal — the spend flow doesn't change.
+   */
+  _renderAtlas(container, ps) {
+    const intro = document.createElement('div');
+    intro.className = 'atlas-intro';
+    intro.innerHTML = 'Tap any node to read its description and spend points. Lines show prerequisites; dashed red lines mark mutually-exclusive keystones.';
+    container.appendChild(intro);
+
+    for (const treeId of ps.charDef.skillTrees) {
+      const tree = SKILL_TREES[treeId];
+      if (!tree) continue;
+      const section = document.createElement('div');
+      section.className = 'atlas-section';
+      section.dataset.treeId = treeId;
+
+      const header = document.createElement('div');
+      header.className = 'atlas-section-header';
+      const icon = this.TREE_ICONS[treeId] || '·';
+      header.innerHTML = `
+        <span class="atlas-tree-icon">${icon}</span>
+        <span class="atlas-tree-name">${tree.name}</span>
+        <span class="atlas-tree-points">${pointsInTree(ps, treeId)} pts invested</span>
+      `;
+      section.appendChild(header);
+
+      const graph = this._buildAtlasGraph(tree, ps, treeId);
+      section.appendChild(graph);
+
+      container.appendChild(section);
+    }
+  },
+
+  /*
+   * Build the SVG-based graph for one tree:
+   *   - tier auto-layout (longest requires-chain depth)
+   *   - nodes rendered as <foreignObject>-free SVG circles + text
+   *   - prereq lines drawn between requires → dependent
+   *   - mutex lines drawn between keystones with `lockedBy` pointing at
+   *     each other (red dashed)
+   *   - click handlers open the existing node modal
+   */
+  _buildAtlasGraph(tree, ps, treeId) {
+    const nodes = tree.nodes.filter(n => !n.hidden);
+
+    // 1. Compute tier (longest dependency chain) for each node.
+    const tier = {};
+    let safety = 32;
+    while (safety-- > 0) {
+      let progress = false;
+      for (const n of nodes) {
+        if (tier[n.id] !== undefined) continue;
+        const reqs = n.requires || [];
+        if (reqs.length === 0) {
+          tier[n.id] = 0; progress = true;
+        } else if (reqs.every(r => tier[r] !== undefined)) {
+          tier[n.id] = Math.max(...reqs.map(r => tier[r])) + 1;
+          progress = true;
+        }
+      }
+      if (!progress) break;
+    }
+    // Anything still unresolved (cyclic / orphan) gets parked at tier 0.
+    for (const n of nodes) if (tier[n.id] === undefined) tier[n.id] = 0;
+
+    // 2. Group by tier and sort each tier deterministically.
+    const byTier = {};
+    let maxTier = 0;
+    for (const n of nodes) {
+      const t = tier[n.id];
+      (byTier[t] ||= []).push(n);
+      if (t > maxTier) maxTier = t;
+    }
+    for (const t of Object.keys(byTier)) {
+      byTier[t].sort((a, b) => {
+        // Keystones cluster to the right; otherwise alphabetical.
+        if (!!a.keystone !== !!b.keystone) return a.keystone ? 1 : -1;
+        return a.id.localeCompare(b.id);
+      });
+    }
+
+    // 3. Layout: fixed pixel coordinates by tier-row × index-in-tier.
+    const W = 320;                 // target svg width
+    const ROW_H = 60;
+    const PAD_X = 18;
+    const PAD_Y = 18;
+    const NODE_R = 14;
+    const positions = {};
+    for (let t = 0; t <= maxTier; t++) {
+      const row = byTier[t] || [];
+      const usable = W - PAD_X * 2;
+      const step = row.length > 1 ? usable / (row.length - 1) : 0;
+      for (let i = 0; i < row.length; i++) {
+        const cx = row.length === 1
+          ? W / 2
+          : PAD_X + i * step;
+        const cy = PAD_Y + t * ROW_H + NODE_R;
+        positions[row[i].id] = { cx, cy };
+      }
+    }
+    const H = PAD_Y * 2 + (maxTier + 1) * ROW_H;
+
+    // 4. Build SVG.
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'atlas-svg');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    // 4a. Prereq lines (drawn first → behind nodes).
+    for (const n of nodes) {
+      const to = positions[n.id]; if (!to) continue;
+      for (const reqId of (n.requires || [])) {
+        const from = positions[reqId]; if (!from) continue;
+        const line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('x1', from.cx);
+        line.setAttribute('y1', from.cy + NODE_R - 1);
+        line.setAttribute('x2', to.cx);
+        line.setAttribute('y2', to.cy - NODE_R + 1);
+        line.setAttribute('class', 'atlas-line');
+        // Highlight lines whose REQUIRES are taken — the player has earned
+        // this path. Otherwise dim it.
+        if (isNodeTaken(ps, reqId)) line.classList.add('lit');
+        svg.appendChild(line);
+      }
+    }
+
+    // 4b. Mutex lines (between keystone pairs that lock each other).
+    const drawnMutex = new Set();
+    for (const n of nodes) {
+      if (!n.keystone || !n.lockedBy) continue;
+      for (const otherId of n.lockedBy) {
+        const key = [n.id, otherId].sort().join('|');
+        if (drawnMutex.has(key)) continue;
+        drawnMutex.add(key);
+        const a = positions[n.id], b = positions[otherId];
+        if (!a || !b) continue;
+        const line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('x1', a.cx);
+        line.setAttribute('y1', a.cy);
+        line.setAttribute('x2', b.cx);
+        line.setAttribute('y2', b.cy);
+        line.setAttribute('class', 'atlas-mutex-line');
+        svg.appendChild(line);
+      }
+    }
+
+    // 4c. Nodes.
+    for (const n of nodes) {
+      const pos = positions[n.id]; if (!pos) continue;
+      const taken = isNodeTaken(ps, n.id);
+      const rank = ps.takenNodes[n.id] || 0;
+      const blocked = nodeBlockedReason(n, ps);
+      const eligible = !blocked || blocked === 'taken';
+      const isFull = isNodeFull(ps, n);
+
+      let stateClass = 'locked';
+      if (taken && isFull) stateClass = 'taken-full';
+      else if (taken) stateClass = 'taken';
+      else if (eligible) stateClass = 'eligible';
+      else if (blocked && blocked !== 'unknown' && blocked.toString().startsWith('Locked by')) stateClass = 'mutex-locked';
+
+      const g = document.createElementNS(svgNS, 'g');
+      g.setAttribute('class', `atlas-node ${stateClass} ${n.keystone ? 'keystone' : (n.type === 'unlock_spell' ? 'unlock' : 'talent')}`);
+      g.setAttribute('data-tree', treeId);
+
+      const circle = document.createElementNS(svgNS, n.keystone ? 'rect' : 'circle');
+      if (n.keystone) {
+        // Keystones rendered as squares so they're visually distinct.
+        const s = NODE_R * 1.6;
+        circle.setAttribute('x', pos.cx - s / 2);
+        circle.setAttribute('y', pos.cy - s / 2);
+        circle.setAttribute('width', s);
+        circle.setAttribute('height', s);
+        circle.setAttribute('rx', 2);
+      } else {
+        circle.setAttribute('cx', pos.cx);
+        circle.setAttribute('cy', pos.cy);
+        circle.setAttribute('r', NODE_R);
+      }
+      g.appendChild(circle);
+
+      // Center label: rank for taken multi-rank, type glyph otherwise.
+      const label = document.createElementNS(svgNS, 'text');
+      label.setAttribute('x', pos.cx);
+      label.setAttribute('y', pos.cy + 3);
+      label.setAttribute('class', 'atlas-node-label');
+      if (taken && (n.maxRank || 1) > 1) {
+        label.textContent = `${rank}/${n.maxRank}`;
+      } else if (n.type === 'unlock_spell') {
+        label.textContent = '✦';
+      } else if (n.keystone) {
+        label.textContent = '◆';
+      } else if (taken) {
+        label.textContent = '✓';
+      } else {
+        label.textContent = '';
+      }
+      g.appendChild(label);
+
+      // Name caption below.
+      const name = document.createElementNS(svgNS, 'text');
+      name.setAttribute('x', pos.cx);
+      name.setAttribute('y', pos.cy + NODE_R + 11);
+      name.setAttribute('class', 'atlas-node-name');
+      // Trim long names so adjacent labels don't collide.
+      const shortName = n.name.length > 12 ? n.name.slice(0, 11) + '…' : n.name;
+      name.textContent = shortName;
+      g.appendChild(name);
+
+      g.addEventListener('click', () => {
+        // Defer to existing detail modal — keeps the spend flow consistent
+        // with the per-tree tabs.
+        this._openNodeModal(n, ps, treeId);
+      });
+
+      svg.appendChild(g);
+    }
+
+    return svg;
+  },
+
   _renderTreeContent(ps) {
     const content = this.$('tree-content');
     content.innerHTML = '';
     const treeId = this._currentTreeTab;
+    if (treeId === 'atlas') {
+      this._renderAtlas(content, ps);
+      return;
+    }
     const tree = SKILL_TREES[treeId];
     if (!tree) return;
 
@@ -6538,28 +7071,75 @@ const UI = {
   _renderTreeFusions(ps) {
     const cont = this.$('tree-fusions');
     cont.innerHTML = '';
-    const fusions = ChoiceEngine.buildFusionChoices(ps).slice(0, 2);
-    if (!fusions.length) return;
-    for (const fusion of fusions) {
+    // Surface BOTH craftable AND in-progress recipes so the player sees
+    // what they're working toward. In-progress recipes show their gate
+    // ("Need 2 more TP in Fireball") so it's never a surprise.
+    const allRecipes = ChoiceEngine.allFusionsForCharacter(ps);
+    const visible = [];
+    for (const fusion of allRecipes) {
+      const block = fusionBlockedReason(fusion, ps);
+      if (block?.reason === 'crafted') continue;
+      // Only show recipes whose parent SPELLS are at least owned — locked
+      // by raw spell ownership stays hidden until those spells exist.
+      if (block?.reason === 'spell') continue;
+      visible.push({ fusion, block });
+    }
+    if (!visible.length) return;
+
+    for (const { fusion, block } of visible) {
       const card = document.createElement('div');
-      card.className = 'tree-fusion-card';
+      card.className = 'tree-fusion-card' + (block ? ' locked' : '');
       const recipeParts = [
         ...fusion.requires.spells.map(s => SPELLS[s]?.name || s),
         ...fusion.requires.items.map(i => ITEMS[i]?.name || i),
       ];
       const grantedSpell = SPELLS[fusion.grants];
-      const tagText = fusion.flavor === 'evolution' ? '✦ Evolution Ready' : '✦ Fusion Ready';
+      const tagText = block
+        ? (fusion.flavor === 'evolution' ? '✦ Evolution — Locked' : '✦ Fusion — Locked')
+        : (fusion.flavor === 'evolution' ? '✦ Evolution Ready' : '✦ Fusion Ready');
       const effectText = fusion.desc || grantedSpell?.shortDesc || '';
+
+      // Block hint — what's still missing
+      let lockHint = '';
+      if (block?.reason === 'investment') {
+        const parts = block.missing.map(m => `${m.spell} ${m.have}/${m.need}`);
+        lockHint = `<div class="fusion-card-lock">Needs: ${parts.join(' · ')}</div>`;
+      } else if (block?.reason === 'item') {
+        lockHint = `<div class="fusion-card-lock">Needs item: ${block.missing.join(', ')}</div>`;
+      } else if (block?.reason === 'node') {
+        lockHint = `<div class="fusion-card-lock">Needs talent: ${block.missing.join(', ')}</div>`;
+      }
+
+      // Inheritance preview — show how much investment will carry forward
+      const inheritParts = [];
+      for (const parentId of fusion.consumes.spells) {
+        const inv = pointsInSpell(ps, parentId);
+        if (inv > 0) inheritParts.push(`${SPELLS[parentId]?.name || parentId} (${inv} TP)`);
+      }
+      const inheritNote = inheritParts.length
+        ? `<div class="fusion-card-inherit">★ Inherits all talents from: ${inheritParts.join(' + ')}</div>`
+        : '<div class="fusion-card-inherit dim">★ Investment in parent spells carries forward as power</div>';
+
       const consumedNote = fusion.flavor === 'evolution'
         ? `Consumes ${fusion.consumes.spells.map(s => SPELLS[s]?.name || s).join(' + ')} (item retained)`
         : `Consumes ${fusion.consumes.spells.map(s => SPELLS[s]?.name || s).join(' + ')}`;
+
+      const ctaText = block ? consumedNote : `${consumedNote} · Tap to forge ▶`;
+
       card.innerHTML = `
         <div class="fusion-tag">${tagText}</div>
         <div class="fusion-card-name">${fusion.name}</div>
         <div class="fusion-card-recipe">${recipeParts.join(' + ')} <span class="arrow">→</span> ${grantedSpell?.name || fusion.name}</div>
         <div class="fusion-card-effect">${effectText}</div>
-        <div class="fusion-card-cta">${consumedNote} · Tap to forge ▶</div>
+        ${inheritNote}
+        ${lockHint}
+        <div class="fusion-card-cta">${ctaText}</div>
       `;
+      if (block) {
+        // Locked cards aren't clickable.
+        cont.appendChild(card);
+        continue;
+      }
       card.addEventListener('click', () => {
         this.game._applyFusionInline(fusion);
         this._renderTreeContent(ps);
