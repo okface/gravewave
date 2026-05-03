@@ -678,6 +678,8 @@
   .tree-tab[data-tab="fire"]         { --accent: var(--fire); }
   .tree-tab[data-tab="frost"]        { --accent: var(--frost); }
   .tree-tab[data-tab="vigil"]        { --accent: var(--gold); }
+  .tree-tab[data-tab="steel"]        { --accent: var(--crimson); }
+  .tree-tab[data-tab="shadow"]       { --accent: var(--grav); }
   .tree-tab .tab-icon {
     display: block;
     font-size: 16px;
@@ -744,6 +746,8 @@
   .atlas-section[data-tree-id="fire"]        { --node-accent: var(--fire); }
   .atlas-section[data-tree-id="frost"]       { --node-accent: var(--frost); }
   .atlas-section[data-tree-id="vigil"]       { --node-accent: var(--gold); }
+  .atlas-section[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .atlas-section[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .atlas-tree-icon {
     font-size: 18px;
     color: var(--node-accent, var(--gold));
@@ -763,11 +767,45 @@
     color: var(--node-accent, var(--gold));
     letter-spacing: 0.06em;
   }
-  .atlas-svg {
+  /* SVG container — wrapped in a horizontal scroller so wide trees stay
+     readable on phones instead of cramming all nodes into 320px. */
+  .atlas-svg-wrap {
     width: 100%;
-    height: auto;
-    display: block;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
+  .atlas-svg {
+    display: block;
+    height: auto;
+    /* Force the SVG to render at its native CELL_W * widestTier width
+       so each node always has room for its full name. */
+  }
+  .atlas-node-name-html {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--ink-mid);
+    text-align: center;
+    line-height: 1.15;
+    pointer-events: none;
+    /* 2-line clamp with ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    box-sizing: border-box;
+  }
+  .atlas-node.eligible .atlas-node-name-html,
+  .atlas-node.taken .atlas-node-name-html,
+  .atlas-node.taken-full .atlas-node-name-html {
+    color: var(--ink-bright);
+  }
+  .atlas-node.locked .atlas-node-name-html { color: var(--ink-dim); }
   /* Prereq lines — dim by default, lit when the prereq is taken. */
   .atlas-line {
     stroke: rgba(110, 104, 144, 0.30);
@@ -881,6 +919,8 @@
   .spell-unlock-card[data-tree-id="electricity"] { --node-accent: var(--elec); }
   .spell-unlock-card[data-tree-id="fire"]        { --node-accent: var(--fire); }
   .spell-unlock-card[data-tree-id="frost"]       { --node-accent: var(--frost); }
+  .spell-unlock-card[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .spell-unlock-card[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .spell-unlock-card[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .spell-unlock-card.eligible,
   .spell-unlock-card.taken {
@@ -1005,6 +1045,8 @@
   .talent-chip[data-tree-id="electricity"] { --node-accent: var(--elec); }
   .talent-chip[data-tree-id="fire"]        { --node-accent: var(--fire); }
   .talent-chip[data-tree-id="frost"]       { --node-accent: var(--frost); }
+  .talent-chip[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .talent-chip[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .talent-chip[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .talent-chip.eligible {
     border-color: var(--node-accent);
@@ -1224,6 +1266,8 @@
   .node-modal-card[data-tree-id="electricity"] { --node-accent: var(--elec); }
   .node-modal-card[data-tree-id="fire"]        { --node-accent: var(--fire); }
   .node-modal-card[data-tree-id="frost"]       { --node-accent: var(--frost); }
+  .node-modal-card[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .node-modal-card[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .node-modal-card[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .modal-tag {
     font-family: 'Cinzel', serif;
@@ -1358,6 +1402,11 @@
       <div class="hud-stat">
         <span class="label">Time</span>
         <span class="value" id="hud-time">0:00</span>
+      </div>
+      <!-- Focus stacks — only visible when the active class accumulates them. -->
+      <div class="hud-stat hud-focus" id="hud-focus-wrap" style="display:none;">
+        <span class="label">Focus</span>
+        <span class="value" id="hud-focus">0</span>
       </div>
     </div>
 
@@ -1702,6 +1751,18 @@ const CHARACTERS = {
     startingSpells: [],                      // Path selection injects starting spell
     skillTrees: ['gravity', 'electricity', 'fire', 'frost', 'vigil'],
     stats: { maxHp: 100, moveSpeed: 0 /* AFK */ },
+    available: true,
+  },
+  ninja: {
+    id: 'ninja',
+    name: 'The Ninja',
+    title: 'Whisper of steel and shadow',
+    description: 'A glass scalpel. Where the Magician metronomes through long cooldowns, the Ninja accelerates with every kill — short cycles compounding into a blender of shuriken and flickering blade-arts. Lower HP, but every kill shaves cooldowns until the wave is dust.',
+    color: '#e94560',
+    accent: '#1a1a2e',
+    startingSpells: ['shuriken_toss'],       // baseline thrown
+    skillTrees: ['shadow', 'steel', 'vigil'],
+    stats: { maxHp: 70, moveSpeed: 0 /* AFK as well — ninja "moves" via spell flicker */ },
     available: true,
   },
   // === FUTURE CHARACTERS (add here, set available: true when ready) ===
@@ -2225,8 +2286,9 @@ const SPELLS = {
       const target = game.findFarthestEnemy(caster);
       if (!target) return;
       const dir = Vec.norm(Vec.sub(target, caster));
+      const b = mods.behavior || {};
       const baseDmg = 12 * mods.dmgMult;
-      const pierce = 2 + (mods.pierceBonus || 0);   // baseline pierce: 2 (was 1)
+      const pierce = 2 + (mods.pierceBonus || 0);
       const baseSlow = { slow: { duration: 1.5, factor: 0.65 } };
       const statusToApply = mods.applyStatus || baseSlow;
       game.spawnProjectile({
@@ -2235,13 +2297,164 @@ const SPELLS = {
         radius: 6 * (mods.sizeMult || 1),
         damage: baseDmg,
         color: '#9af0e6',
-        life: 2.2,                              // longer lifespan to traverse field
+        life: 2.2,
         pierce,
         crit: { chance: mods.critChance, mult: mods.critMult },
         applyStatus: statusToApply,
+        // Frost-specific behavior flags read by the projectile hit code.
+        // freezeOnSlow + freezeDurationBonus → glacial path
+        // splitsOnFirstHit + splitDmgMult → shatter path
+        // shatterOnFrozenExplodes / absoluteZero → capstones
+        behavior: b,
+        // Splinter fragment hit can read this to know where it came from.
+        spellBaseDmg: baseDmg,
         trail: 'frost',
         spell: 'frost_spike',
       });
+    },
+  },
+
+  /* ===== NINJA SPELLS — short-cycle melee + thrown =====
+   * The Ninja's identity is *tempo*. Every kill drops a Focus stack on
+   * the player which compounds onto cooldowns — so a packed wave is
+   * exponentially faster to clear than a sparse one. Spell numbers are
+   * intentionally lower per-cast than Magician's; the speed of the
+   * cycle is where the damage lives.
+   */
+
+  shuriken_toss: {
+    id: 'shuriken_toss',
+    name: 'Shuriken Toss',
+    tree: 'steel',
+    color: '#c8c8d0',
+    cooldown: 0.85,
+    cast(game, caster, mods) {
+      const target = game.findFarthestEnemy(caster);
+      if (!target) return;
+      const baseDir = Vec.norm(Vec.sub(target, caster));
+      const b = mods.behavior || {};
+      // Storm Path keystone: fan of 5 small shuriken at 50% damage each.
+      // Spear Path keystone: single shuriken pierces all at 140% damage.
+      let count = 1, spread = 0, dmgScale = 1, pierce = 0;
+      if (b.spreadFan) { count = 5; spread = 0.45; dmgScale = 0.5; }
+      else if (b.piercingShot) { pierce = 8; dmgScale = 1.4; }
+      else if (b.twinFang) { count = 2; spread = 0.16; dmgScale = 0.85; }
+      const baseDmg = 9 * mods.dmgMult * dmgScale;
+      for (let i = 0; i < count; i++) {
+        const off = count > 1 ? (i - (count - 1) / 2) * spread : 0;
+        const cos = Math.cos(off), sin = Math.sin(off);
+        const vx = (baseDir.x * cos - baseDir.y * sin) * 460;
+        const vy = (baseDir.x * sin + baseDir.y * cos) * 460;
+        game.spawnProjectile({
+          x: caster.x, y: caster.y, vx, vy,
+          radius: 5 * (mods.sizeMult || 1),
+          damage: baseDmg,
+          color: '#c8c8d0',
+          life: 1.4,
+          pierce,
+          crit: { chance: mods.critChance, mult: mods.critMult },
+          applyStatus: mods.applyStatus,
+          behavior: b,
+          spellBaseDmg: baseDmg,
+          trail: 'frost',         // visual reuse — silvery streak
+          spell: 'shuriken_toss',
+        });
+      }
+    },
+  },
+
+  flicker_step: {
+    id: 'flicker_step',
+    name: 'Flicker Step',
+    tree: 'shadow',
+    color: '#2a2438',
+    cooldown: 4.0,
+    cast(game, caster, mods) {
+      // Visually "dashes" by spawning a slash AOE at the nearest enemy
+      // (the player is AFK — the spell is the movement). Awards short
+      // iframes for survivability cycle.
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const radius = 70 * (mods.radiusMult || 1);
+      const dmg = 16 * mods.dmgMult;
+      const b = mods.behavior || {};
+      // Damage every enemy in a small disc at the target's position.
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(target, e) < radius + e.radius) {
+          const isCrit = Math.random() < (mods.critChance || 0);
+          const final = isCrit ? dmg * mods.critMult : dmg;
+          const final2 = final * computeConditionalDamageMult(game.playerState, e);
+          const a = e.takeDamage(final2, { spell: 'flicker_step' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
+          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
+        }
+      }
+      // Visual: an explosion at the target — colored as a dark slash arc.
+      game.spawnExplosion(target.x, target.y, radius, '#3a1a78');
+      game.spawnHitParticles(target.x, target.y, '#c8c8d0', 14);
+      game.addShake(0.10);
+      // Phase Step: refunds Shuriken Toss CD on cast.
+      if (b.refundShuriken) {
+        for (const s of game.activeSpells) {
+          if (s.spellId === 'shuriken_toss') s.cdAcc = s.cd;   // ready
+        }
+      }
+      // Brief iframes: the ninja was "elsewhere".
+      caster.iframes = Math.max(caster.iframes, 0.5);
+    },
+  },
+
+  crescent_strike: {
+    id: 'crescent_strike',
+    name: 'Crescent Strike',
+    tree: 'steel',
+    color: '#e94560',
+    cooldown: 1.4,
+    cast(game, caster, mods) {
+      // Auto-aims the densest cluster within reach and damages all
+      // enemies in a generous disc — represents a sweeping arc that
+      // catches everything bunched up on the player.
+      const range = 90 * (mods.radiusMult || 1);
+      const dmg = 20 * mods.dmgMult;
+      const b = mods.behavior || {};
+      const center = b.targetCluster
+        ? (game.findEnemyCluster(caster) || game.findNearestEnemy(caster))
+        : caster;
+      if (!center) return;
+      const isWhirlwind = b.whirlwind;
+      const isExecutioner = b.executioner;
+      const arcDmg = isWhirlwind ? dmg * 0.75 : (isExecutioner ? dmg * 2.0 : dmg);
+      let killCount = 0;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(center, e) < range + e.radius) {
+          const isCrit = Math.random() < (mods.critChance || 0);
+          let final = isCrit ? arcDmg * mods.critMult : arcDmg;
+          // Executioner: instakill below 15% HP.
+          if (isExecutioner && e.hp <= e.maxHp * 0.15) final = e.hp + 1;
+          final *= computeConditionalDamageMult(game.playerState, e);
+          const a = e.takeDamage(final, { spell: 'crescent_strike' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
+          if (!e.alive) killCount++;
+          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
+        }
+      }
+      // Whirlwind hits a second time after a beat (brief tween simulated
+      // by an immediate re-pass — gameplay reads as "two hits").
+      if (isWhirlwind) {
+        for (const e of game.enemies) {
+          if (!e.alive) continue;
+          if (Vec.dist(center, e) < range + e.radius) {
+            const a = e.takeDamage(arcDmg * 0.6, { spell: 'crescent_strike' });
+            game.totalDamageDealt += a;
+          }
+        }
+      }
+      game.spawnExplosion(center.x, center.y, range, '#e94560');
+      game.addShake(0.12);
     },
   },
 };
@@ -2511,23 +2724,175 @@ const SKILL_TREES = {
   frost: {
     id: 'frost', name: 'Frost', color: 'frost',
     nodes: [
-      // ===== FROST SPIKE — tier 1 (1 SP) =====
+      // ===== FROST SPIKE — unlock =====
       { id: 'fr_unlock_spike', name: 'Frost Spike', tier: 1, cost: 1, requires: [],
         type: 'unlock_spell', spellId: 'frost_spike',
         desc: 'Pierces toward farthest enemy. 12 dmg, 2 pierce, slows hit targets 35% for 1.5s, 0.85s CD.' },
 
+      // ===== ENTRY TALENTS (path-agnostic) =====
       { id: 'fr_spike_dmg', name: 'Sharpened', requires: ['fr_unlock_spike'],
-        type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.20 },
-        maxRank: 3, desc: '+20% damage per rank.' },
-
-      { id: 'fr_spike_pierce', name: 'Pierce', requires: ['fr_unlock_spike'],
-        type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
-        maxRank: 3, desc: '+1 pierce per rank.' },
+        type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.15 },
+        maxRank: 3, desc: '+15% Frost Spike damage per rank.' },
 
       { id: 'fr_spike_chill', name: 'Lasting Chill', requires: ['fr_unlock_spike'],
         type: 'spell_mod', spellId: 'frost_spike',
         mods: { applyStatus: { slow: { duration: 3.0, factor: 0.5 } } },
-        desc: 'Frost Spike slow becomes 50% strength (was 35%) and lasts 3s (was 1.5s).' },
+        desc: 'Slow becomes 50% strength (was 35%) and lasts 3s (was 1.5s).' },
+
+      // ===== SHATTER PATH — keystone (mutex with Glacial) =====
+      { id: 'fr_keystone_shatter', name: 'Shatter Path', requires: ['fr_unlock_spike'],
+        type: 'keystone', affects: 'frost_spike',
+        modAdjust: { dmgMult: 0.85, pierceBonus: -1 },
+        behavior: { splitsOnFirstHit: 3 },
+        lockedBy: ['fr_keystone_glacial'], keystone: true,
+        desc: 'On first hit, Frost Spike splits into 3 fragments at 65% damage each. Pierce −1.' },
+
+      { id: 'fr_shatter_pierce', name: 'Pierce', requires: ['fr_keystone_shatter'],
+        type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
+        maxRank: 2, desc: '+1 pierce per rank — fragments still split.' },
+
+      { id: 'fr_shatter_splinter', name: 'Splintering', requires: ['fr_keystone_shatter'],
+        type: 'spell_mod', spellId: 'frost_spike', mods: { splitDmgMult: 0.25 },
+        maxRank: 2, desc: 'Fragments deal +25% of full damage per rank (65% → 90% → 115%).' },
+
+      { id: 'fr_shatter_capstone', name: 'Crystal Cascade',
+        requires: ['fr_keystone_shatter', 'fr_shatter_splinter'],
+        type: 'spell_mod', spellId: 'frost_spike',
+        behaviorOverride: { shatterOnFrozenExplodes: true },
+        desc: 'Hitting a frozen enemy detonates them — 3.0 unit explosion at 200% Frost Spike damage. Synergises with Glacial allies.' },
+
+      // ===== GLACIAL PATH — keystone (mutex with Shatter) =====
+      { id: 'fr_keystone_glacial', name: 'Glacial Path', requires: ['fr_unlock_spike'],
+        type: 'keystone', affects: 'frost_spike',
+        modAdjust: { dmgMult: 0.90 },
+        behavior: { freezeOnSlow: { duration: 1.5 } },
+        lockedBy: ['fr_keystone_shatter'], keystone: true,
+        desc: 'Hitting an already-slowed enemy fully FREEZES them for 1.5s instead of refreshing slow. −10% damage.' },
+
+      { id: 'fr_glacial_freeze', name: 'Deep Freeze', requires: ['fr_keystone_glacial'],
+        type: 'spell_mod', spellId: 'frost_spike',
+        mods: { freezeDurationBonus: 0.5 },
+        maxRank: 2, desc: '+0.5s freeze duration per rank.' },
+
+      { id: 'fr_glacial_hypothermia', name: 'Hypothermia', requires: ['fr_keystone_glacial'],
+        type: 'global_mod',
+        mods: { dmgVsFrozen: 0.20 },
+        maxRank: 2, desc: '+20% damage from ALL your spells against frozen enemies, per rank.' },
+
+      { id: 'fr_glacial_capstone', name: 'Absolute Zero',
+        requires: ['fr_keystone_glacial', 'fr_glacial_hypothermia'],
+        type: 'spell_mod', spellId: 'frost_spike',
+        behaviorOverride: { absoluteZero: { radius: 60, duration: 1.0 } },
+        desc: 'Killing a frozen enemy spreads freeze to all enemies within 60u for 1s. Chain-freezes the screen.' },
+    ],
+  },
+
+  // ===== STEEL — Ninja's offensive tree (shuriken + crescent) =====
+  steel: {
+    id: 'steel', name: 'Steel', color: 'crimson',
+    nodes: [
+      // Shuriken Toss already in starter loadout — entry talents.
+      { id: 'st_shuriken_dmg', name: 'Honed Edge', requires: [],
+        type: 'spell_mod', spellId: 'shuriken_toss', mods: { dmgMult: 0.18 },
+        maxRank: 3, desc: '+18% Shuriken damage per rank.' },
+
+      { id: 'st_shuriken_twin', name: 'Twin Fang', requires: [],
+        type: 'spell_mod', spellId: 'shuriken_toss',
+        behaviorOverride: { twinFang: true },
+        desc: 'Throws 2 shuriken in a tight spread (each at 85% damage).' },
+
+      { id: 'st_shuriken_bleed', name: 'Bleeding Cuts', requires: ['st_shuriken_dmg'],
+        type: 'spell_mod', spellId: 'shuriken_toss',
+        mods: { applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.4, critOnHit: false } } },
+        desc: 'Shuriken open bleeding wounds — DoT for 40% of impact damage over 3s.' },
+
+      // Shuriken keystone fork (Storm fan vs Spear pierce)
+      { id: 'st_shuriken_storm', name: 'Storm Path', requires: ['st_shuriken_twin'],
+        type: 'keystone', affects: 'shuriken_toss',
+        behavior: { spreadFan: true },
+        lockedBy: ['st_shuriken_spear'], keystone: true,
+        desc: 'Shuriken Toss fans 5 blades at 50% damage each. Wave-clear specialist.' },
+
+      { id: 'st_shuriken_spear', name: 'Spear Path', requires: ['st_shuriken_dmg'],
+        type: 'keystone', affects: 'shuriken_toss',
+        behavior: { piercingShot: true },
+        lockedBy: ['st_shuriken_storm'], keystone: true,
+        desc: 'A single shuriken pierces every enemy in a line at 140% damage.' },
+
+      // Crescent Strike — tier 2 unlock
+      { id: 'st_unlock_crescent', name: 'Crescent Strike', tier: 2, cost: 2, requires: [],
+        type: 'unlock_spell', spellId: 'crescent_strike',
+        desc: 'A wide arc that catches every enemy in a 90u disc — 20 damage, 1.4s CD.' },
+
+      { id: 'st_crescent_dmg', name: 'Heavy Steel', requires: ['st_unlock_crescent'],
+        type: 'spell_mod', spellId: 'crescent_strike', mods: { dmgMult: 0.20 },
+        maxRank: 3, desc: '+20% Crescent damage per rank.' },
+
+      { id: 'st_crescent_cluster', name: 'Cluster Strike', requires: ['st_unlock_crescent'],
+        type: 'spell_mod', spellId: 'crescent_strike',
+        behaviorOverride: { targetCluster: true },
+        desc: 'Crescent Strike auto-aims the densest enemy cluster instead of staying centered on you.' },
+
+      // Crescent keystone fork
+      { id: 'st_crescent_whirl', name: 'Whirlwind', requires: ['st_crescent_dmg'],
+        type: 'keystone', affects: 'crescent_strike',
+        behavior: { whirlwind: true },
+        modAdjust: { radiusMult: 1.30 },
+        lockedBy: ['st_crescent_exec'], keystone: true,
+        desc: 'Wider, hits twice (75% + 60% of damage). +30% radius.' },
+
+      { id: 'st_crescent_exec', name: 'Executioner', requires: ['st_crescent_dmg'],
+        type: 'keystone', affects: 'crescent_strike',
+        behavior: { executioner: true },
+        modAdjust: { dmgMult: 1.5 },
+        lockedBy: ['st_crescent_whirl'], keystone: true,
+        desc: '+150% damage. Instakills enemies below 15% HP.' },
+    ],
+  },
+
+  // ===== SHADOW — Ninja's mobility/utility tree (flicker + focus) =====
+  shadow: {
+    id: 'shadow', name: 'Shadow', color: 'grav',
+    nodes: [
+      // Focus stack passives — make the combo feel deeper before unlocks.
+      { id: 'sh_focus_cap', name: 'Deeper Reserves', requires: [],
+        type: 'global_mod', mods: { focusCapBonus: 1 },
+        maxRank: 2, desc: '+1 maximum Focus stack per rank (base 5 → 6 → 7).' },
+
+      { id: 'sh_focus_grace', name: 'Lingering Edge', requires: [],
+        type: 'global_mod', mods: { focusGraceBonus: 1.0 },
+        desc: 'Focus stacks decay 1.0s slower (4s → 5s window).' },
+
+      // Flicker Step — tier 2 unlock
+      { id: 'sh_unlock_flicker', name: 'Flicker Step', tier: 2, cost: 2, requires: [],
+        type: 'unlock_spell', spellId: 'flicker_step',
+        desc: 'Vanish to the nearest foe and slash everyone in a 70u disc. 16 damage, 4s CD, 0.5s iframes on cast.' },
+
+      { id: 'sh_flicker_dmg', name: 'Killing Edge', requires: ['sh_unlock_flicker'],
+        type: 'spell_mod', spellId: 'flicker_step', mods: { dmgMult: 0.20 },
+        maxRank: 3, desc: '+20% Flicker damage per rank.' },
+
+      { id: 'sh_flicker_cdr', name: 'Quick Recovery', requires: ['sh_unlock_flicker'],
+        type: 'spell_mod', spellId: 'flicker_step', mods: { cdMult: -0.15 },
+        maxRank: 2, desc: '−15% Flicker cooldown per rank.' },
+
+      { id: 'sh_flicker_cold', name: 'Cold Trail', requires: ['sh_unlock_flicker'],
+        type: 'spell_mod', spellId: 'flicker_step',
+        mods: { applyStatus: { slow: { duration: 2.0, factor: 0.55 } } },
+        desc: 'Enemies caught in the slash are slowed 45% for 2s — lines up with Glacial frost.' },
+
+      // Flicker keystone fork
+      { id: 'sh_flicker_phase', name: 'Phase Step', requires: ['sh_flicker_cdr'],
+        type: 'keystone', affects: 'flicker_step',
+        behavior: { refundShuriken: true },
+        lockedBy: ['sh_flicker_war'], keystone: true,
+        desc: 'Casting Flicker instantly refunds Shuriken Toss\'s cooldown. Endless rotation.' },
+
+      { id: 'sh_flicker_war', name: 'War Step', requires: ['sh_flicker_dmg'],
+        type: 'keystone', affects: 'flicker_step',
+        modAdjust: { dmgMult: 1.6, radiusMult: 1.20 },
+        lockedBy: ['sh_flicker_phase'], keystone: true,
+        desc: '+60% Flicker damage and +20% radius. Pure burst slash.' },
     ],
   },
 
@@ -2865,6 +3230,13 @@ class Player {
     // Visual state
     this.castFlash = 0;
     this.bob = 0;
+    // Ninja Focus mechanic — only the Ninja class accumulates these,
+    // but the fields exist on every player for uniform access. Each
+    // stack reduces all spell cooldowns; expires after 4s of no kills.
+    this.focusStacks = 0;
+    this.focusDecayTimer = 0;
+    this._focusCap = 5;
+    this._focusDecayInterval = 4.0;
   }
   /*
    * Damage pipeline:
@@ -2951,6 +3323,15 @@ class Player {
     if (this.iframes > 0) this.iframes -= dt;
     if (this.castFlash > 0) this.castFlash -= dt;
     this.bob += dt;
+    // Focus decay — once per cycle (4s of no kills) drop one stack and
+    // reset the timer to a shorter grace window so collapse is gentle.
+    if (this.focusStacks > 0) {
+      this.focusDecayTimer -= dt;
+      if (this.focusDecayTimer <= 0) {
+        this.focusStacks -= 1;
+        this.focusDecayTimer = 1.5;
+      }
+    }
   }
 }
 
@@ -3274,12 +3655,24 @@ function computeSpellMods(playerState, spellId) {
 function computeConditionalDamageMult(playerState, enemy) {
   let m = 1.0;
   if (!enemy?.statuses) return m;
+  // Item-driven (Frostbite Lens, Stormcoil, etc.)
   for (const item of playerState.items) {
     if (!item) continue;
     const e = item.effect;
     if (e.dmgVsSlowed && enemy.statuses.slow) m *= (1 + e.dmgVsSlowed);
     if (e.dmgVsIgnited && enemy.statuses.ignite) m *= (1 + e.dmgVsIgnited);
     if (e.dmgVsShocked && enemy.statuses.shock) m *= (1 + e.dmgVsShocked);
+    if (e.dmgVsFrozen && enemy.statuses.freeze) m *= (1 + e.dmgVsFrozen);
+  }
+  // Talent-driven (Hypothermia: dmgVsFrozen 20% per rank, etc.)
+  for (const id in playerState.takenNodes) {
+    const rank = playerState.takenNodes[id]; if (rank <= 0) continue;
+    const node = findNode(id);
+    const mm = node?.mods; if (!mm) continue;
+    if (mm.dmgVsSlowed && enemy.statuses.slow)   m *= (1 + mm.dmgVsSlowed * rank);
+    if (mm.dmgVsIgnited && enemy.statuses.ignite) m *= (1 + mm.dmgVsIgnited * rank);
+    if (mm.dmgVsShocked && enemy.statuses.shock)  m *= (1 + mm.dmgVsShocked * rank);
+    if (mm.dmgVsFrozen && enemy.statuses.freeze)  m *= (1 + mm.dmgVsFrozen * rank);
   }
   return m;
 }
@@ -3940,6 +4333,64 @@ class Game {
     Logger.event('run_start', { character: charId, path: pathTreeId, starter: starterItemId });
   }
 
+  /*
+   * Frost Spike — Shatter Path: spawn 3 fragments at -30°, 0°, +30°
+   * relative to the parent's velocity. Fragments inherit base damage
+   * scaled by splitDmgMult (default 0.65). They cannot split again.
+   */
+  _spawnFrostFragments(parent, hitEnemy, behavior) {
+    const speed = Math.hypot(parent.vx, parent.vy) || 1;
+    const dir = { x: parent.vx / speed, y: parent.vy / speed };
+    const splitMult = (behavior.splitDmgMult ?? 0) > 0
+      ? behavior.splitDmgMult
+      : 0.65;
+    const angles = [-0.52, 0, 0.52];   // ±30° in radians + center
+    for (const aOff of angles) {
+      const cos = Math.cos(aOff), sin = Math.sin(aOff);
+      const nx = dir.x * cos - dir.y * sin;
+      const ny = dir.x * sin + dir.y * cos;
+      this.spawnProjectile({
+        x: parent.x, y: parent.y,
+        vx: nx * speed, vy: ny * speed,
+        radius: parent.radius * 0.85,
+        damage: parent.damage * splitMult,
+        color: parent.color,
+        life: 1.4,
+        pierce: 0,
+        crit: parent.crit,
+        applyStatus: parent.applyStatus,
+        // Fragments inherit *most* behavior so capstones cascade — but
+        // they can't split themselves (unset splitsOnFirstHit so we don't
+        // recursively shatter into oblivion).
+        behavior: { ...behavior, splitsOnFirstHit: false },
+        spellBaseDmg: parent.spellBaseDmg,
+        trail: 'frost',
+        spell: parent.spell + ':frag',
+      });
+    }
+  }
+
+  /*
+   * Sum the freezeDurationBonus from any taken talents that target the
+   * given spell or its parents. Lets Deep Freeze stack additively.
+   */
+  _freezeDurationBonus(spellId) {
+    if (!spellId) return 0;
+    const ps = this.playerState;
+    const spell = SPELLS[spellId];
+    const parents = spell?.parents || [];
+    let bonus = 0;
+    for (const id in ps.takenNodes) {
+      const rank = ps.takenNodes[id]; if (rank <= 0) continue;
+      const node = findNode(id);
+      if (!node?.mods?.freezeDurationBonus) continue;
+      const okSpell = node.spellId === spellId || parents.includes(node.spellId);
+      if (!okSpell) continue;
+      bonus += node.mods.freezeDurationBonus * rank;
+    }
+    return bonus;
+  }
+
   /* ---- Spell + entity factories ---- */
   spawnProjectile(opts) {
     this.projectiles.push(new Projectile(opts));
@@ -4174,8 +4625,14 @@ class Game {
   }
 
   tickSpells(dt) {
+    // Focus combo (Ninja): each stack shaves 8% off effective cooldowns.
+    // Clamp the multiplier so a maxed combo doesn't break the cast loop.
+    const focusMult = Math.max(
+      0.45,
+      1 - 0.08 * (this.player?.focusStacks || 0)
+    );
     for (const s of this.activeSpells) {
-      const cd = computeSpellCooldown(this.playerState, s.spellId);
+      const cd = computeSpellCooldown(this.playerState, s.spellId) * focusMult;
       s.cdAcc += dt;
       if (s.cdAcc >= cd) {
         s.cdAcc = 0;
@@ -4216,6 +4673,14 @@ class Game {
         // Battle Meditation: heal a small amount per kill
         if (this._healPerKill && this.player.alive) {
           this.player.hp = Math.min(this.player.maxHp, this.player.hp + this._healPerKill);
+        }
+        // Ninja Focus mechanic — kills feed the combo, each stack
+        // shaves cooldowns. Cap raised by Deeper Reserves; decay window
+        // widened by Lingering Edge.
+        if (this.player.alive && this.playerState.charDef.id === 'ninja') {
+          const cap = (this.player._focusCap || 5);
+          this.player.focusStacks = Math.min(cap, (this.player.focusStacks || 0) + 1);
+          this.player.focusDecayTimer = this.player._focusDecayInterval || 4.0;
         }
         this.enemies.splice(i, 1);
         continue;
@@ -4346,9 +4811,55 @@ class Game {
           this.spawnHitParticles(p.x, p.y, p.color, isCrit ? 12 : 5);
           this.spawnDamageNumber(e.x, e.y - e.radius - 6, actual, isCrit);
           this.addShake(isCrit ? 0.18 : 0.06);
-          // Apply status effects from spell talents (Slow / Ignite / Shock)
-          if (p.applyStatus) {
-            this.applyStatusesToEnemy(e, p.applyStatus, p.spellBaseDmg ?? p.damage);
+          // Apply status effects from spell talents (Slow / Ignite / Shock).
+          // Frost's Glacial path swaps slow → freeze when target was already
+          // slowed (handled here, before falling through to applyStatus).
+          const beh = p.behavior || {};
+          let statusToApply = p.applyStatus;
+          if (beh.freezeOnSlow && e.statuses?.slow && !e.statuses?.freeze) {
+            const dur = (beh.freezeOnSlow.duration || 1.5)
+                      + (this._freezeDurationBonus(p.spell) || 0);
+            // Apply freeze; remove the existing slow so the visual cleanly
+            // upgrades from "blue crust" to "frozen cage".
+            e.applyStatus('freeze', { duration: dur, factor: 0 }, this.runElapsed);
+            delete e.statuses.slow;
+            // Drop the regular slow payload — we just upgraded it.
+            statusToApply = null;
+          }
+          if (statusToApply) {
+            this.applyStatusesToEnemy(e, statusToApply, p.spellBaseDmg ?? p.damage);
+          }
+          // Crystal Cascade capstone — hitting a frozen enemy detonates them.
+          if (beh.shatterOnFrozenExplodes && e.statuses?.freeze) {
+            const aoeR = 60;
+            const aoeDmg = (p.spellBaseDmg ?? p.damage) * 2.0;
+            for (const o of this.enemies) {
+              if (!o.alive || o === e) continue;
+              if (Vec.dist({ x: p.x, y: p.y }, o) < aoeR + o.radius) {
+                const a = o.takeDamage(aoeDmg, { spell: p.spell + ':shatter' });
+                this.totalDamageDealt += a;
+                this.spawnDamageNumber(o.x, o.y - o.radius - 6, a, true);
+              }
+            }
+            this.spawnExplosion(e.x, e.y, aoeR, '#9af0e6');
+            this.addShake(0.20);
+          }
+          // Absolute Zero capstone — killing a frozen enemy spreads freeze.
+          if (beh.absoluteZero && !e.alive && e.statuses?.freeze) {
+            const r = beh.absoluteZero.radius || 60;
+            const d2 = beh.absoluteZero.duration || 1.0;
+            for (const o of this.enemies) {
+              if (!o.alive || o === e) continue;
+              if (Vec.dist({ x: e.x, y: e.y }, o) < r + o.radius) {
+                o.applyStatus('freeze', { duration: d2, factor: 0 }, this.runElapsed);
+              }
+            }
+            this.spawnExplosion(e.x, e.y, r, '#bce8ff');
+          }
+          // Shatter Path — first hit splits into 3 fragments.
+          if (beh.splitsOnFirstHit && !p._hasSplit) {
+            p._hasSplit = true;
+            this._spawnFrostFragments(p, e, beh);
           }
           p.hits.add(e);
           if (p.onHit) p.onHit(this, { x: p.x, y: p.y });
@@ -4612,6 +5123,19 @@ class Game {
    */
   refreshPlayerStats() {
     const stats = computePlayerStats(this.playerState);
+    // Ninja Focus tuning — Shadow tree's focusCapBonus / focusGraceBonus
+    // raise the maximum stack count and slow the decay window.
+    let focusCap = 5;
+    let focusGrace = 4.0;
+    for (const id in this.playerState.takenNodes) {
+      const rank = this.playerState.takenNodes[id]; if (rank <= 0) continue;
+      const node = findNode(id);
+      const m = node?.mods; if (!m) continue;
+      if (m.focusCapBonus)   focusCap   += m.focusCapBonus * rank;
+      if (m.focusGraceBonus) focusGrace += m.focusGraceBonus * rank;
+    }
+    this.player._focusCap = focusCap;
+    this.player._focusDecayInterval = focusGrace;
     const charBaseHp = this.playerState.charDef.stats.maxHp;
     const newMax = charBaseHp + stats.maxHpBonus;
     if (newMax !== this.player.maxHp) {
@@ -6407,6 +6931,8 @@ const UI = {
     fire: '🔥',
     frost: '❄',
     vigil: '🛡',
+    steel: '✦',
+    shadow: '☾',
   },
 
   // Spell icons for the unlock card headers
@@ -6540,8 +7066,11 @@ const UI = {
       `;
       section.appendChild(header);
 
+      const wrap = document.createElement('div');
+      wrap.className = 'atlas-svg-wrap';
       const graph = this._buildAtlasGraph(tree, ps, treeId);
-      section.appendChild(graph);
+      wrap.appendChild(graph);
+      section.appendChild(wrap);
 
       container.appendChild(section);
     }
@@ -6596,20 +7125,24 @@ const UI = {
     }
 
     // 3. Layout: fixed pixel coordinates by tier-row × index-in-tier.
-    const W = 320;                 // target svg width
-    const ROW_H = 60;
-    const PAD_X = 18;
-    const PAD_Y = 18;
+    // Each row's width adapts to node count so labels never overflow.
     const NODE_R = 14;
+    const NAME_H = 26;            // height reserved under each circle for names
+    const ROW_H = NODE_R * 2 + NAME_H + 18;
+    const PAD_Y = 14;
+    // Cell width — minimum room each node gets so its name doesn't overlap
+    // the next node's name. Stretch SVG width to hold the widest tier.
+    const CELL_W = 70;
+    const widestTier = Math.max(...Object.values(byTier).map(r => r.length));
+    const W = Math.max(320, widestTier * CELL_W + 24);
+    const PAD_X = 12;
     const positions = {};
     for (let t = 0; t <= maxTier; t++) {
       const row = byTier[t] || [];
-      const usable = W - PAD_X * 2;
-      const step = row.length > 1 ? usable / (row.length - 1) : 0;
+      const totalRowW = row.length * CELL_W;
+      const startX = (W - totalRowW) / 2 + CELL_W / 2;
       for (let i = 0; i < row.length; i++) {
-        const cx = row.length === 1
-          ? W / 2
-          : PAD_X + i * step;
+        const cx = startX + i * CELL_W;
         const cy = PAD_Y + t * ROW_H + NODE_R;
         positions[row[i].id] = { cx, cy };
       }
@@ -6620,6 +7153,8 @@ const UI = {
     const svgNS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
     svg.setAttribute('class', 'atlas-svg');
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
@@ -6714,15 +7249,22 @@ const UI = {
       }
       g.appendChild(label);
 
-      // Name caption below.
-      const name = document.createElementNS(svgNS, 'text');
-      name.setAttribute('x', pos.cx);
-      name.setAttribute('y', pos.cy + NODE_R + 11);
-      name.setAttribute('class', 'atlas-node-name');
-      // Trim long names so adjacent labels don't collide.
-      const shortName = n.name.length > 12 ? n.name.slice(0, 11) + '…' : n.name;
-      name.textContent = shortName;
-      g.appendChild(name);
+      // Name caption below — rendered via foreignObject so HTML's
+      // text-overflow + line-clamp handle wrapping cleanly. SVG text
+      // alone with text-anchor:middle clipped at edge nodes and
+      // overlapped neighbors when many nodes shared a tier.
+      const fo = document.createElementNS(svgNS, 'foreignObject');
+      const cellW = CELL_W - 4;
+      fo.setAttribute('x', pos.cx - cellW / 2);
+      fo.setAttribute('y', pos.cy + NODE_R + 2);
+      fo.setAttribute('width', cellW);
+      fo.setAttribute('height', NAME_H);
+      const nameDiv = document.createElement('div');
+      nameDiv.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      nameDiv.className = 'atlas-node-name-html';
+      nameDiv.textContent = n.name;
+      fo.appendChild(nameDiv);
+      g.appendChild(fo);
 
       g.addEventListener('click', () => {
         // Defer to existing detail modal — keeps the spend flow consistent
@@ -7324,6 +7866,19 @@ const UI = {
     this.$('hud-wave').textContent = game.waveMgr.wave || '—';
     this.$('hud-hp').textContent = `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`;
     this.$('hud-time').textContent = formatTime(game.runElapsed);
+    // Focus stacks (Ninja-only) — show stack count + cap, hidden for
+    // characters that don't generate Focus.
+    const focusWrap = this.$('hud-focus-wrap');
+    if (focusWrap) {
+      const isNinja = game.playerState?.charDef?.id === 'ninja';
+      if (isNinja) {
+        focusWrap.style.display = '';
+        const cap = game.player._focusCap || 5;
+        this.$('hud-focus').textContent = `${game.player.focusStacks || 0} / ${cap}`;
+      } else {
+        focusWrap.style.display = 'none';
+      }
+    }
 
     // Slots
     for (let i = 0; i < 2; i++) {
