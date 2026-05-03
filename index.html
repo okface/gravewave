@@ -389,6 +389,56 @@
   }
   .btn-primary:hover { transform: translateY(-2px); }
 
+  /* Fusion-ready toast — fires the moment a recipe becomes craftable.
+     z-index sits ABOVE the skill tree modal (which is 100) so spending
+     a point that unlocks a fusion immediately announces it on top of
+     whatever overlay is open. */
+  #fusion-toast {
+    position: fixed;
+    top: 14%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0;
+    background: linear-gradient(180deg, rgba(232, 184, 64, 0.18), rgba(20, 18, 42, 0.88));
+    border: 1px solid rgba(232, 184, 64, 0.7);
+    box-shadow: 0 0 28px rgba(232, 184, 64, 0.25);
+    padding: 10px 22px;
+    border-radius: 2px;
+    text-align: center;
+    min-width: 240px;
+  }
+  #fusion-toast.show { animation: fusionToastShow 3.2s ease-out forwards; }
+  #fusion-toast .ft-tag {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.4em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  #fusion-toast .ft-name {
+    font-family: 'Cinzel', serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--ink-bright);
+    text-shadow: 0 0 18px rgba(232, 184, 64, 0.5);
+    margin-top: 4px;
+  }
+  #fusion-toast .ft-recipe {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-mid);
+    margin-top: 6px;
+  }
+  @keyframes fusionToastShow {
+    0%   { opacity: 0; transform: translate(-50%, -10px); }
+    12%  { opacity: 1; transform: translate(-50%, 0); }
+    82%  { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -10px); }
+  }
+
   /* Wave banner */
   #wave-banner {
     position: absolute;
@@ -909,23 +959,62 @@
     margin-bottom: 8px;
   }
   .tree-fusion-card {
-    background: linear-gradient(180deg, rgba(240, 198, 116, 0.08), rgba(20, 18, 42, 0.95));
-    border: 1px solid rgba(240, 198, 116, 0.45);
-    padding: 8px 10px;
+    background: linear-gradient(180deg, rgba(240, 198, 116, 0.20), rgba(20, 18, 42, 0.95));
+    border: 1.5px solid rgba(240, 198, 116, 0.85);
+    padding: 12px 14px;
     cursor: pointer;
     border-radius: 2px;
+    position: relative;
+    box-shadow: 0 0 18px rgba(240, 198, 116, 0.18);
+    animation: treeFusionPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes treeFusionPulse {
+    0%, 100% { box-shadow: 0 0 14px rgba(240, 198, 116, 0.18); }
+    50%      { box-shadow: 0 0 26px rgba(240, 198, 116, 0.45); }
+  }
+  .tree-fusion-card:hover { transform: translateY(-1px); }
+  .tree-fusion-card .fusion-tag {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.35em;
+    color: var(--gold);
+    text-transform: uppercase;
+    font-weight: 700;
   }
   .tree-fusion-card .fusion-card-name {
     font-family: 'Cinzel', serif;
-    font-size: 12px;
-    color: var(--gold);
+    font-size: 15px;
+    color: var(--ink-bright);
     font-weight: 700;
+    margin-top: 3px;
+    letter-spacing: 0.06em;
   }
   .tree-fusion-card .fusion-card-recipe {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     color: var(--ink-mid);
-    margin-top: 2px;
+    margin-top: 6px;
+  }
+  .tree-fusion-card .fusion-card-recipe .arrow {
+    color: var(--gold);
+    margin: 0 5px;
+  }
+  .tree-fusion-card .fusion-card-cta {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-top: 6px;
+    text-align: right;
+  }
+  .tree-fusion-card .fusion-card-effect {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-bright);
+    margin-top: 6px;
+    line-height: 1.4;
+    opacity: 0.85;
   }
 
   /* ============================================================
@@ -1097,6 +1186,12 @@
         <span class="label">Time</span>
         <span class="value" id="hud-time">0:00</span>
       </div>
+    </div>
+
+    <div id="fusion-toast">
+      <div class="ft-tag">✦ Fusion Ready ✦</div>
+      <div class="ft-name" id="fusion-toast-name">—</div>
+      <div class="ft-recipe" id="fusion-toast-recipe">—</div>
     </div>
 
     <div id="wave-banner">
@@ -2302,56 +2397,115 @@ const SKILL_TREES = {
  * Items occupy equipment slots. A character has N slots (default 2).
  * Each item has an `effect` config that ItemEngine reads.
  * ----------------------------------------------------------------------- */
+/*
+ * Items aim for the "Hades rarity tiers" curve: commons feel small but
+ * useful early; rares lean conditional or build-defining; epics are
+ * run-shaping. Power was nerfed across the board in v0.4 so a single
+ * "S-tier" pickup (Echo / Voidstone) doesn't trivialise the run.
+ */
 const ITEMS = {
-  glyph_of_echo: {
-    id: 'glyph_of_echo',
-    name: 'Glyph of Echo',
-    icon: '✦',
-    rarity: 'epic',
-    description: 'Spells echo a moment after casting, repeating at 50% damage.',
-    effect: { echoChance: 1.0, echoDmgMult: 0.5, echoDelay: 0.28 },
-  },
+  // ===== COMMON — small flat bonuses, safe early picks =====
   crystal_focus: {
     id: 'crystal_focus',
     name: 'Crystal Focus',
     icon: '◆',
     rarity: 'common',
-    description: '−15% cooldown on all spells.',
-    effect: { globalCdrMult: 0.85 },
-  },
-  jagged_prism: {
-    id: 'jagged_prism',
-    name: 'Jagged Prism',
-    icon: '✧',
-    rarity: 'rare',
-    description: '+12% global critical strike chance and +25% critical damage.',
-    effect: { critChanceBonus: 0.12, critMultBonus: 0.25 },
-  },
-  voidstone: {
-    id: 'voidstone',
-    name: 'Voidstone',
-    icon: '◉',
-    rarity: 'rare',
-    description: '+25% damage to all spells, but spell cooldowns are 10% longer.',
-    effect: { globalDmgMult: 1.25, globalCdrMult: 1.10 },
+    description: '−10% cooldown on all spells.',
+    effect: { globalCdrMult: 0.90 },
   },
   warden_seal: {
     id: 'warden_seal',
     name: 'Warden Seal',
     icon: '✥',
     rarity: 'common',
-    description: '+30 maximum health.',
-    effect: { hpBonus: 30 },
+    description: '+25 maximum health.',
+    effect: { hpBonus: 25 },
+  },
+  cinder_brand: {
+    id: 'cinder_brand',
+    name: 'Cinder Brand',
+    icon: '🜂',
+    rarity: 'common',
+    description: 'Your fire spells brand targets — they take a critical hit from every spell of yours for 3s.',
+    // Mirrors the Ignite talent payload but gates only fire spells.
+    effect: { applyStatus: { tree: 'fire', statuses: { ignite: { duration: 3.0, dpsRatio: 0.0, critOnHit: true } } } },
+  },
+  iron_glove: {
+    id: 'iron_glove',
+    name: 'Iron Glove',
+    icon: '✜',
+    rarity: 'common',
+    description: '+15 max HP and 5% damage reduction. The defensive baseline.',
+    effect: { hpBonus: 15, dmgReductionBonus: 0.05 },
+  },
+
+  // ===== RARE — conditional or tree-focused power =====
+  jagged_prism: {
+    id: 'jagged_prism',
+    name: 'Jagged Prism',
+    icon: '✧',
+    rarity: 'rare',
+    description: '+8% global critical strike chance and +20% critical damage.',
+    effect: { critChanceBonus: 0.08, critMultBonus: 0.20 },
+  },
+  voidstone: {
+    id: 'voidstone',
+    name: 'Voidstone',
+    icon: '◉',
+    rarity: 'rare',
+    description: '+18% damage to all spells, but cooldowns are 6% longer.',
+    effect: { globalDmgMult: 1.18, globalCdrMult: 1.06 },
   },
   stormcaller: {
     id: 'stormcaller',
     name: 'Stormcaller',
     icon: '⚡',
     rarity: 'rare',
-    description: 'Each spell cast has a 18% chance to also fire a free Lightning Bolt.',
-    effect: { proc: { chance: 0.18, spellId: 'lightning_bolt' } },
+    description: 'Each spell cast has a 12% chance to also fire a free Lightning Bolt.',
+    effect: { proc: { chance: 0.12, spellId: 'lightning_bolt' } },
   },
-  // === FUTURE ITEMS ===
+  frostbite_lens: {
+    id: 'frostbite_lens',
+    name: 'Frostbite Lens',
+    icon: '❄',
+    rarity: 'rare',
+    description: 'Slowed enemies take +15% damage from your spells.',
+    effect: { dmgVsSlowed: 0.15 },
+  },
+  stormcoil: {
+    id: 'stormcoil',
+    name: 'Stormcoil',
+    icon: '⌇',
+    rarity: 'rare',
+    description: 'Lightning spells bounce one extra time. Shocked enemies take +12% damage.',
+    effect: { chainBonus: 1, dmgVsShocked: 0.12 },
+  },
+  gravecharm: {
+    id: 'gravecharm',
+    name: 'Gravecharm',
+    icon: '◎',
+    rarity: 'rare',
+    description: 'Gravity-tree spells deal +20% damage and have +10% larger radius.',
+    effect: { treeDmgMult: { gravity: 1.20 }, treeRadiusMult: { gravity: 1.10 } },
+  },
+
+  // ===== EPIC — run-defining =====
+  glyph_of_echo: {
+    id: 'glyph_of_echo',
+    name: 'Glyph of Echo',
+    icon: '✦',
+    rarity: 'epic',
+    description: 'Spells echo a moment later, repeating at 35% damage.',
+    effect: { echoChance: 1.0, echoDmgMult: 0.35, echoDelay: 0.32 },
+  },
+  abyssal_mantle: {
+    id: 'abyssal_mantle',
+    name: 'Abyssal Mantle',
+    icon: '☉',
+    rarity: 'epic',
+    description: 'Once per wave, lethal damage spares you at 1 HP and grants 1.5s of iframes.',
+    effect: { mantleSave: true },
+  },
 };
 
 
@@ -2552,6 +2706,22 @@ class Player {
       game.spawnHitParticles(attacker.x, attacker.y, '#ff5b6e', 4);
     }
     if (this.hp <= 0) {
+      // Abyssal Mantle — item save: once per wave, lethal damage is
+      // converted into a 1-HP brace + 1.5s iframes. Cheap insurance
+      // that rewards risky play but won't carry you alone.
+      const hasMantle = game?.playerState?.items?.some(i => i?.id === 'abyssal_mantle');
+      if (hasMantle && !this._mantleUsedThisWave) {
+        this._mantleUsedThisWave = true;
+        this.hp = 1;
+        this.iframes = 1.5;
+        if (game) {
+          game.addShake(0.25);
+          game.spawnDamageNumber(this.x, this.y - this.radius - 12, 'SPARED', true);
+          game.spawnHitParticles(this.x, this.y, '#a07cff', 16);
+        }
+        Logger.event('mantle_save');
+        return;
+      }
       // Eternal Vigil revive — once per run, restore to revivePct of maxHp
       if (stats.revivePct > 0 && !this._reviveUsed) {
         this._reviveUsed = true;
@@ -2801,6 +2971,7 @@ function computeSpellMods(playerState, spellId) {
   let pierceBonus = 0;
   let chainBonus = 0;
   let burnDmgMult = 0;        // Conflagration follow-up: lingering flame DPS bonus
+  let applyStatus = null;     // Merged from talents AND items (cinder_brand etc.)
   const behavior = {};
 
   // Skill node mods — multiply each contribution by current rank.
@@ -2818,6 +2989,12 @@ function computeSpellMods(playerState, spellId) {
       if (m.pierceBonus) pierceBonus += m.pierceBonus * rank;
       if (m.chainBonus)  chainBonus  += m.chainBonus * rank;
       if (m.burnDmgMult) burnDmgMult += m.burnDmgMult * rank;
+      // Status payload from talents (Ignite/Glacial Pull/etc.) — merge so
+      // multiple sources can stack on the same spell.
+      if (m.applyStatus) {
+        applyStatus = applyStatus || {};
+        Object.assign(applyStatus, m.applyStatus);
+      }
       // Behavior flags applied once regardless of rank
       if (node.behaviorOverride) Object.assign(behavior, node.behaviorOverride);
     }
@@ -2827,13 +3004,26 @@ function computeSpellMods(playerState, spellId) {
     }
   }
 
-  // Item mods
+  // Item mods — flat bonuses + optional tree-gated contributions.
   for (const item of playerState.items) {
     if (!item) continue;
     const e = item.effect;
     if (e.globalDmgMult) dmgMult *= e.globalDmgMult;
     if (e.critChanceBonus) critChance += e.critChanceBonus;
     if (e.critMultBonus) critMult += e.critMultBonus;
+    if (e.chainBonus) chainBonus += e.chainBonus;
+    // Per-tree damage multiplier — e.g. Gravecharm: { treeDmgMult: { gravity: 1.20 } }
+    if (e.treeDmgMult && e.treeDmgMult[tree]) dmgMult *= e.treeDmgMult[tree];
+    if (e.treeRadiusMult && e.treeRadiusMult[tree]) radiusMult *= e.treeRadiusMult[tree];
+    // Item-driven status payload (Cinder Brand: ignite on fire spells).
+    // Optional `tree` filter restricts which spells the status piggybacks on.
+    if (e.applyStatus) {
+      const okTree = !e.applyStatus.tree || e.applyStatus.tree === tree;
+      if (okTree && e.applyStatus.statuses) {
+        applyStatus = applyStatus || {};
+        Object.assign(applyStatus, e.applyStatus.statuses);
+      }
+    }
   }
 
   // Keystone adjustments + behavior flags (applied last). Keystones are
@@ -2863,7 +3053,26 @@ function computeSpellMods(playerState, spellId) {
     }
   }
 
-  return { dmgMult, critChance, critMult, radiusMult, sizeMult, pierceBonus, chainBonus, burnDmgMult, behavior };
+  return { dmgMult, critChance, critMult, radiusMult, sizeMult, pierceBonus, chainBonus, burnDmgMult, applyStatus, behavior };
+}
+
+/*
+ * Multiplier applied to a single spell hit based on the *target's* current
+ * status set. Reads conditional-damage flags off equipped items so artifacts
+ * like Frostbite Lens (slowed enemies take +15%) don't have to be wired
+ * into every spell's cast logic.
+ */
+function computeConditionalDamageMult(playerState, enemy) {
+  let m = 1.0;
+  if (!enemy?.statuses) return m;
+  for (const item of playerState.items) {
+    if (!item) continue;
+    const e = item.effect;
+    if (e.dmgVsSlowed && enemy.statuses.slow) m *= (1 + e.dmgVsSlowed);
+    if (e.dmgVsIgnited && enemy.statuses.ignite) m *= (1 + e.dmgVsIgnited);
+    if (e.dmgVsShocked && enemy.statuses.shock) m *= (1 + e.dmgVsShocked);
+  }
+  return m;
 }
 
 function computeSpellCooldown(playerState, spellId) {
@@ -3073,12 +3282,18 @@ function computePlayerStats(playerState) {
       if (node.behavior.damageReduction) stats.dmgReduction  += node.behavior.damageReduction;
     }
   }
-  // Item bonuses (existing items already grant hpBonus on pickup, but we
-  // also aggregate here for consistency)
+  // Item bonuses — additional defensive stats (Iron Glove etc.) layer on
+  // top of skill-tree contributions.
   for (const item of playerState.items) {
     if (!item) continue;
-    if (item.effect.hpBonus) stats.maxHpBonus += item.effect.hpBonus;
+    const e = item.effect;
+    if (e.hpBonus) stats.maxHpBonus += e.hpBonus;
+    if (e.dmgReductionBonus) stats.dmgReduction += e.dmgReductionBonus;
+    if (e.dodgeBonus) stats.dodgeChance += e.dodgeBonus;
   }
+  // Cap derived stats so defensive items don't compound into invulnerability.
+  stats.dmgReduction = Math.min(stats.dmgReduction, 0.65);
+  stats.dodgeChance  = Math.min(stats.dodgeChance, 0.50);
   return stats;
 }
 
@@ -3198,6 +3413,8 @@ class WaveManager {
     this.spawnAcc = 0;
     this.elapsed = 0;
     this.alive = true;
+    // Reset per-wave item flags (Abyssal Mantle "spared once" cooldown).
+    if (this.game.player) this.game.player._mantleUsedThisWave = false;
     Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
   }
 
@@ -3765,7 +3982,13 @@ class Game {
       // *will* reach you eventually" rather than "I'm chewing your HP".
       const d = Vec.dist(player, e);
       if (d < player.radius + e.radius) {
-        player.takeDamage(e.damage, e, this);
+        // Contact damage scales with current HP — a chipped tank is a
+        // smaller threat, a full-HP tank is a wrecking ball. Encourages
+        // chip-damage play even when you can't outright kill.
+        const baseDmg = e.damage * 0.6;
+        const hpDmg = e.hp * 0.08;
+        const contactDmg = Math.max(1, Math.round(baseDmg + hpDmg));
+        player.takeDamage(contactDmg, e, this);
         // Detonate
         e.hp = 0;
         e.alive = false;
@@ -3823,6 +4046,10 @@ class Game {
           const ignited = e.statuses?.ignite?.critOnHit;
           const isCrit = ignited || Math.random() < (p.crit?.chance || 0);
           let dmg = isCrit ? p.damage * (p.crit?.mult || 2) : p.damage;
+          // Conditional item damage — slowed/shocked enemies are softer
+          // targets if the player has the right artifact. Kept here so all
+          // projectile hits benefit, not just one spell tree.
+          dmg *= computeConditionalDamageMult(this.playerState, e);
           // Execute behavior: instant kill if enemy already below threshold
           if (p.execBelow && e.hp <= e.maxHp * p.execBelow) {
             dmg = e.hp + 1;
@@ -4077,6 +4304,24 @@ class Game {
   }
 
   /*
+   * Diff the currently-eligible fusion set against what we've already
+   * announced this run. For each *new* recipe, fire a toast banner so
+   * the player learns the synergy moment it unlocks. Recipes that have
+   * already been crafted don't toast again.
+   */
+  announceNewFusions() {
+    const ps = this.playerState;
+    if (!ps._announcedFusions) ps._announcedFusions = new Set();
+    const eligible = ChoiceEngine.buildFusionChoices(ps);
+    for (const fusion of eligible) {
+      if (ps._announcedFusions.has(fusion.id)) continue;
+      ps._announcedFusions.add(fusion.id);
+      UI.showFusionToast(fusion);
+      Logger.event('fusion_eligible', { fusion: fusion.id });
+    }
+  }
+
+  /*
    * Re-applies tree-derived stats to the live Player entity.
    */
   refreshPlayerStats() {
@@ -4124,6 +4369,7 @@ class Game {
       this.activeSpells = deriveActiveSpells(this.playerState);
     }
     this.refreshPlayerStats();
+    this.announceNewFusions();
     Logger.event('skill_point_spent', {
       node: node.id, tree: findNodeTree(node.id),
       cost, currency: cur, newRank: currentRank + 1,
@@ -4138,11 +4384,24 @@ class Game {
     // applyChoice now handles only items and fusions (which still use
     // the random 3-card UI — items are loot, fusions are recipes).
     if (choice.kind === 'item') {
-      const slotIdx = this.playerState.items.findIndex(i => !i);
-      if (slotIdx !== -1) this.playerState.items[slotIdx] = choice.item;
-      else this.playerState.items[0] = choice.item; // overwrite slot 0 if full
+      // Slot specified by replace-picker (slotIdx >= 0): direct overwrite.
+      // Otherwise: place in first empty slot, or hand off to picker UI
+      // if the loadout is full (player explicitly chooses what to drop).
+      if (typeof choice.slotIdx === 'number') {
+        this.playerState.items[choice.slotIdx] = choice.item;
+      } else {
+        const empty = this.playerState.items.findIndex(i => !i);
+        if (empty !== -1) {
+          this.playerState.items[empty] = choice.item;
+        } else {
+          // Loadout full — defer to slot picker, do NOT advance the wave.
+          UI.showItemReplacePicker(this.playerState, choice.item);
+          return;
+        }
+      }
       this.applyItemPassive(choice.item);
       this.refreshPlayerStats();
+      this.announceNewFusions();
       Logger.event('item_pick', { item: choice.item.id });
     } else if (choice.kind === 'fusion') {
       this._applyFusionInline(choice.fusion);
@@ -5821,6 +6080,29 @@ const UI = {
   },
 
   /*
+   * Show a brief toast when a fusion recipe becomes craftable for the
+   * first time. Re-fires only when the eligibility set GAINS a new
+   * recipe — repeated re-renders during the same recipe's lifetime
+   * stay quiet. Source of truth for "have I seen this?" is
+   * playerState._announcedFusions.
+   */
+  showFusionToast(fusion) {
+    const el = this.$('fusion-toast');
+    if (!el) return;
+    const grantedSpell = SPELLS[fusion.grants];
+    const recipeParts = [
+      ...fusion.requires.spells.map(s => SPELLS[s]?.name || s),
+      ...fusion.requires.items.map(i => ITEMS[i]?.name || i),
+    ];
+    this.$('fusion-toast-name').textContent = fusion.name;
+    this.$('fusion-toast-recipe').textContent =
+      `${recipeParts.join(' + ')} → ${grantedSpell?.name || fusion.name}`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+  },
+
+  /*
    * Build the full skill-tree overlay. Replaces the old random 3-card
    * picker. Players see all 4 trees in tabs, every node visible (taken,
    * eligible, or locked-with-reason), and can spend their banked skill
@@ -6266,10 +6548,17 @@ const UI = {
         ...fusion.requires.items.map(i => ITEMS[i]?.name || i),
       ];
       const grantedSpell = SPELLS[fusion.grants];
-      const tagText = fusion.flavor === 'evolution' ? 'EVOLUTION' : 'FUSION';
+      const tagText = fusion.flavor === 'evolution' ? '✦ Evolution Ready' : '✦ Fusion Ready';
+      const effectText = fusion.desc || grantedSpell?.shortDesc || '';
+      const consumedNote = fusion.flavor === 'evolution'
+        ? `Consumes ${fusion.consumes.spells.map(s => SPELLS[s]?.name || s).join(' + ')} (item retained)`
+        : `Consumes ${fusion.consumes.spells.map(s => SPELLS[s]?.name || s).join(' + ')}`;
       card.innerHTML = `
-        <div class="fusion-card-name">✦ ${tagText} — ${fusion.name}</div>
-        <div class="fusion-card-recipe">${recipeParts.join(' + ')} → ${grantedSpell?.name || fusion.name}</div>
+        <div class="fusion-tag">${tagText}</div>
+        <div class="fusion-card-name">${fusion.name}</div>
+        <div class="fusion-card-recipe">${recipeParts.join(' + ')} <span class="arrow">→</span> ${grantedSpell?.name || fusion.name}</div>
+        <div class="fusion-card-effect">${effectText}</div>
+        <div class="fusion-card-cta">${consumedNote} · Tap to forge ▶</div>
       `;
       card.addEventListener('click', () => {
         this.game._applyFusionInline(fusion);
@@ -6281,6 +6570,14 @@ const UI = {
   },
 
   showItemChoices(ps) {
+    // Restore default headings (replace-picker may have overridden them).
+    const overlay = this.$('overlay-item');
+    const inner = overlay.querySelector('.overlay-inner');
+    const subtitle = inner.querySelector('.subtitle');
+    const heading = inner.querySelector('h1');
+    if (subtitle) subtitle.textContent = '— A relic stirs —';
+    if (heading)  heading.textContent = 'Choose an Artifact';
+
     const items = ChoiceEngine.buildItemChoices(ps, 3);
     const cont = this.$('item-choices');
     cont.innerHTML = '';
@@ -6319,6 +6616,7 @@ const UI = {
     // Skip button — explicit "I want to keep what I have" path. Item picks
     // are now rare (every 5 waves) so refusing is a real strategic choice.
     const skipBtn = this.$('btn-skip-item');
+    skipBtn.textContent = 'Keep my current items';
     skipBtn.onclick = () => {
       this.hideAllOverlays();
       this.game.afterChoice();
@@ -6329,10 +6627,8 @@ const UI = {
   _renderCurrentItemsBar(ps) {
     const bar = this.$('current-items-bar');
     bar.innerHTML = '';
-    // Same logic as applyChoice's slot-finding: first empty wins, else
-    // overwrite slot 0. Show that to the player visually.
-    const firstEmpty = ps.items.findIndex(i => !i);
-    const replaceIdx = firstEmpty === -1 ? 0 : -1;       // -1 means no replace needed
+    // Loadout-full now triggers an explicit replace picker, so this bar
+    // simply previews what's already equipped — no auto-flagging.
     for (let i = 0; i < ps.items.length; i++) {
       const slot = ps.items[i];
       const slotEl = document.createElement('div');
@@ -6344,15 +6640,79 @@ const UI = {
           <div class="ci-name">empty</div>
         `;
       } else {
-        if (i === replaceIdx) slotEl.classList.add('replacing');
         slotEl.innerHTML = `
           <div class="ci-label">Slot ${i + 1}</div>
           <div class="ci-name"><span class="ci-icon">${slot.icon || '✦'}</span>${slot.name}</div>
-          ${i === replaceIdx ? '<div class="ci-replace-tag">Will replace</div>' : ''}
         `;
       }
       bar.appendChild(slotEl);
     }
+  },
+
+  /*
+   * Replacement picker — shown when the player picked an item card but
+   * their loadout is full. Re-renders the item overlay with: a "new
+   * artifact" preview card on top, the existing slots as click targets
+   * underneath. Clicking a slot replaces it; the skip button discards
+   * the new artifact entirely. Wave does not advance until they decide.
+   */
+  showItemReplacePicker(ps, newItem) {
+    // Header subtitle hint
+    const overlay = this.$('overlay-item');
+    const inner = overlay.querySelector('.overlay-inner');
+    const subtitle = inner.querySelector('.subtitle');
+    const heading = inner.querySelector('h1');
+    if (subtitle) subtitle.textContent = '— Loadout full —';
+    if (heading)  heading.textContent = 'Replace which artifact?';
+
+    // Replace the current-items bar with a "new artifact" preview card.
+    const bar = this.$('current-items-bar');
+    bar.innerHTML = '';
+    const preview = document.createElement('div');
+    preview.className = 'current-item-slot replacing';
+    preview.style.width = '170px';
+    preview.innerHTML = `
+      <div class="ci-label">New · ${newItem.rarity?.toUpperCase() || 'ARTIFACT'}</div>
+      <div class="ci-name"><span class="ci-icon">${newItem.icon || '✦'}</span>${newItem.name}</div>
+      <div class="ci-replace-tag" style="font-size:9px;line-height:1.3;margin-top:4px;color:var(--ink-bright);">${newItem.description || ''}</div>
+    `;
+    bar.appendChild(preview);
+
+    // Replace the 3-choice grid with current items as click targets.
+    const cont = this.$('item-choices');
+    cont.innerHTML = '';
+    for (let i = 0; i < ps.items.length; i++) {
+      const cur = ps.items[i];
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.tree = 'item';
+      card.style.setProperty('--accent', 'var(--crimson)');
+      const desc = cur ? (cur.description || '') : 'empty slot';
+      card.innerHTML = `
+        <div class="card-tier">SLOT ${i + 1}</div>
+        <div class="card-tag">${cur ? (cur.icon || '✦') + ' Replace' : 'Empty'}</div>
+        <div class="card-name">${cur ? cur.name : '—'}</div>
+        <div class="card-desc">${desc}</div>
+      `;
+      card.addEventListener('click', () => {
+        // Reset the heading so the next item drop reads naturally.
+        if (subtitle) subtitle.textContent = '— A relic stirs —';
+        if (heading)  heading.textContent = 'Choose an Artifact';
+        this.game.applyChoice({ kind: 'item', item: newItem, slotIdx: i });
+      });
+      cont.appendChild(card);
+    }
+
+    // Skip = discard the new artifact, keep current loadout.
+    const skipBtn = this.$('btn-skip-item');
+    skipBtn.textContent = 'Discard new artifact';
+    skipBtn.onclick = () => {
+      if (subtitle) subtitle.textContent = '— A relic stirs —';
+      if (heading)  heading.textContent = 'Choose an Artifact';
+      skipBtn.textContent = 'Keep my current items';
+      this.hideAllOverlays();
+      this.game.afterChoice();
+    };
   },
 
   showGameOver(stats) {
