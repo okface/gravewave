@@ -499,100 +499,7 @@
     100% { opacity: 0; transform: translate(-50%, -10px); }
   }
 
-  /* ============================================================
-     Constellation widget — top-right pinned plate showing the
-     player's path branches with progress dots and the next target.
-     Compact, always visible, never blocks gameplay. */
-  .hud-constellation {
-    position: absolute;
-    top: 14px;
-    right: 18px;
-    width: 200px;
-    background: rgba(237, 225, 194, 0.92);
-    border: 1px solid rgba(29, 21, 12, 0.55);
-    padding: 8px 10px;
-    border-radius: 1px;
-    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.18), inset 0 1px 0 rgba(255, 250, 230, 0.6);
-    backdrop-filter: blur(4px);
-    pointer-events: none;
-    z-index: 14;
-    font-family: 'JetBrains Mono', monospace;
-  }
-  .hud-constellation .hc-header {
-    font-family: 'Cinzel', serif;
-    font-size: 9px;
-    letter-spacing: 0.25em;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    margin-bottom: 6px;
-    text-align: center;
-  }
-  .hud-constellation .hc-branches {
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .hc-branch {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 6px;
-    border-left: 2px solid var(--ink-dim);
-    background: rgba(255, 250, 230, 0.35);
-    transition: border-color 0.2s, background 0.2s;
-  }
-  .hc-branch.active { border-left-color: var(--branch-color, var(--vermilion)); }
-  .hc-branch.full { background: rgba(212, 169, 74, 0.25); border-left-color: var(--gold); }
-  .hc-branch.capstone-taken {
-    background: rgba(170, 130, 50, 0.30);
-    border-left-color: var(--gold);
-  }
-  .hc-branch-icon {
-    font-size: 14px;
-    color: var(--branch-color, var(--ink));
-    line-height: 1;
-    min-width: 16px; text-align: center;
-  }
-  .hc-branch-info { flex: 1; min-width: 0; }
-  .hc-branch-name {
-    font-family: 'Cinzel', serif;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--ink);
-    text-transform: uppercase;
-    line-height: 1.2;
-  }
-  .hc-branch-progress {
-    display: flex; gap: 3px; margin-top: 3px;
-    align-items: center;
-  }
-  .hc-pip {
-    width: 7px; height: 7px;
-    border: 1px solid var(--ink);
-    background: transparent;
-    border-radius: 50%;
-  }
-  .hc-pip.filled { background: var(--branch-color, var(--vermilion)); }
-  .hc-pip.cap {
-    width: 10px; height: 10px;
-    background: transparent;
-    border: 1.5px solid var(--gold);
-    margin-left: 4px;
-    transform: rotate(45deg);
-    border-radius: 0;
-  }
-  .hc-pip.cap.ready { background: var(--gold); animation: capPulse 1.2s ease-in-out infinite; }
-  .hc-pip.cap.taken { background: var(--gold); border-color: var(--vermilion-deep); }
-  @keyframes capPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(212, 169, 74, 0.6); }
-    50%      { box-shadow: 0 0 0 5px rgba(212, 169, 74, 0); }
-  }
-  .hud-constellation .hc-target {
-    font-size: 9px;
-    color: var(--ink-mid);
-    margin-top: 6px;
-    padding-top: 5px;
-    border-top: 1px dashed rgba(29, 21, 12, 0.3);
-    text-align: center;
-    line-height: 1.3;
-    min-height: 22px;
-  }
+  /* (in-HUD constellation widget removed — Path Atlas overlay replaces it) */
 
   /* ============================================================
      Affinity bars — bottom-left strip showing kill counters per
@@ -1645,7 +1552,8 @@
   /* Focus tooltip (Ninja) — same shape as the slot tooltip but a touch
      wider since the explanation is two short lines. Renders below the
      HUD stat instead of above so it doesn't crash into the wave banner. */
-  .hud-stat[data-tooltip]:hover::after {
+  .hud-stat[data-tooltip]:hover::after,
+  .hud-affinity[data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
     top: 100%; left: 50%;
@@ -1654,16 +1562,23 @@
     border: 1px solid var(--ink);
     padding: 8px 12px;
     font-family: 'Spectral', serif;
-    font-size: 12px;
+    font-size: 11px;
+    line-height: 1.4;
     color: var(--ink);
-    white-space: pre;
+    white-space: normal;
+    width: max-content;
+    max-width: 260px;
     pointer-events: none;
     box-shadow: 0 2px 0 rgba(29, 21, 12, 0.2);
     z-index: 50;
   }
-  .hud-stat[data-tooltip] {
+  .hud-stat[data-tooltip], .hud-affinity[data-tooltip] {
     cursor: help;
     position: relative;
+  }
+  .hud-affinity[data-tooltip]:hover::after {
+    top: auto; bottom: 100%; left: 0;
+    transform: translateY(-8px);
   }
   /* Vermilion fill that visualises focus stacks: more stacks = brighter,
      reaches a sharp gold pulse at max so the player feels the cap. */
@@ -1695,6 +1610,235 @@
   #gameover-stats .stat-row .k { color: var(--ink-mid); letter-spacing: 0.08em; }
   #gameover-stats .stat-row .v { color: var(--ink); font-weight: 700; }
 
+  /* ============================================================
+     PATH ATLAS — the build map. Static layout of every card the
+     player can take in their path, plus a universal rail. Click
+     any takeable card to spend the wave's pick on it.
+     ============================================================ */
+  .overlay.overlay-atlas {
+    align-items: stretch;
+    padding: 0;
+    overflow: hidden;
+  }
+  .atlas-shell {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--paper);
+  }
+  .atlas-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--paper-soft);
+  }
+  .atlas-banner .atlas-wave-label {
+    font-family: 'Cinzel', serif;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: 0.10em;
+  }
+  .atlas-banner .atlas-summary {
+    font-family: 'Spectral', serif;
+    font-size: 13px;
+    color: var(--ink-mid);
+    margin-top: 2px;
+  }
+  .atlas-body {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+    gap: 0;
+    overflow: hidden;
+  }
+  .atlas-section {
+    padding: 18px 24px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .atlas-section + .atlas-section {
+    border-left: 1px solid rgba(29, 21, 12, 0.30);
+    background: rgba(232, 220, 192, 0.45);
+  }
+  .atlas-section-h {
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 0.30em;
+    color: var(--ink-mid);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed rgba(29, 21, 12, 0.30);
+  }
+  /* Branches stack as columns side by side (large screens) and as
+     rows (mobile). Each branch is a vertical sequence of card cells. */
+  .atlas-branches {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .atlas-branch {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid rgba(29, 21, 12, 0.40);
+    background: rgba(255, 250, 230, 0.55);
+    border-top: 4px solid var(--branch-color, var(--vermilion));
+  }
+  .atlas-branch-head {
+    margin-bottom: 4px;
+  }
+  .atlas-branch-name {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    letter-spacing: 0.10em;
+    color: var(--ink);
+    text-transform: uppercase;
+    line-height: 1.1;
+  }
+  .atlas-branch-flavor {
+    font-family: 'Spectral', serif;
+    font-size: 11px;
+    color: var(--ink-mid);
+    font-style: italic;
+    margin-top: 3px;
+    line-height: 1.3;
+  }
+  /* The visible "your build" indicator on each branch column */
+  .atlas-branch-progress {
+    display: flex; gap: 4px;
+    margin-top: 8px;
+    align-items: center;
+  }
+  .atlas-prog-pip {
+    width: 10px; height: 10px;
+    border: 1px solid var(--ink);
+    border-radius: 50%;
+  }
+  .atlas-prog-pip.filled { background: var(--branch-color, var(--vermilion)); }
+  .atlas-prog-cap {
+    width: 12px; height: 12px;
+    border: 1.5px solid var(--gold);
+    transform: rotate(45deg);
+    margin-left: 4px;
+  }
+  .atlas-prog-cap.ready  { background: var(--gold); animation: capPulse 1.2s ease-in-out infinite; }
+  .atlas-prog-cap.taken  { background: var(--gold); }
+  @keyframes capPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212, 169, 74, 0.7); }
+    50%      { box-shadow: 0 0 0 6px rgba(212, 169, 74, 0); }
+  }
+  /* ============================================================
+     ATLAS CARD CELL — the clickable unit. Three states:
+       takeable : full color, hoverable, vermilion arrow on hover
+       locked   : dimmed, lock reason text shown
+       taken    : gold checkmark + struck-through
+     A capstone-row card uses a gold border. */
+  .atlas-card {
+    border: 1px solid rgba(29, 21, 12, 0.55);
+    background: rgba(255, 250, 230, 0.65);
+    padding: 8px 10px;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.12s, box-shadow 0.12s, background 0.15s;
+  }
+  .atlas-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 0 rgba(29, 21, 12, 0.22), 0 8px 16px rgba(0,0,0,0.15);
+    background: rgba(255, 250, 230, 0.95);
+  }
+  .atlas-card[data-state="locked"] {
+    cursor: not-allowed;
+    opacity: 0.45;
+    background: rgba(220, 210, 180, 0.40);
+  }
+  .atlas-card[data-state="locked"]:hover {
+    transform: none; box-shadow: none; background: rgba(220, 210, 180, 0.40);
+  }
+  .atlas-card[data-state="taken"] {
+    cursor: default;
+    background: rgba(212, 169, 74, 0.20);
+    border-color: var(--gold);
+  }
+  .atlas-card[data-state="taken"]:hover {
+    transform: none; box-shadow: none;
+  }
+  .atlas-card.is-capstone {
+    border: 1.5px solid var(--gold);
+    background: rgba(212, 169, 74, 0.10);
+  }
+  .atlas-card.is-capstone[data-state="takeable"] {
+    box-shadow: 0 0 0 1px rgba(212, 169, 74, 0.40), 0 2px 0 rgba(29, 21, 12, 0.18);
+  }
+  .atlas-card .ac-tag {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.20em;
+    color: var(--accent, var(--ink-dim));
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .atlas-card .ac-tag .ac-tier {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    letter-spacing: 0.05em;
+  }
+  .atlas-card .ac-name {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .atlas-card[data-state="taken"] .ac-name {
+    color: var(--gold);
+  }
+  .atlas-card[data-state="taken"] .ac-name::after {
+    content: ' ✓';
+    font-size: 14px;
+    color: var(--gold);
+  }
+  .atlas-card .ac-desc {
+    font-family: 'Spectral', serif;
+    font-size: 12px;
+    color: var(--ink-mid);
+    line-height: 1.45;
+  }
+  .atlas-card .ac-lock {
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(120, 30, 30, 0.85);
+    font-style: italic;
+  }
+  /* Universal rail — show as a single column of cards grouped by axis */
+  .atlas-universal {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .atlas-universal-axis {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--accent, var(--ink-mid));
+    text-transform: uppercase;
+    margin-top: 6px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(29, 21, 12, 0.20);
+  }
+  .atlas-universal-axis:first-child { margin-top: 0; }
+
   /* Mobile */
   @media (max-width: 600px) {
     .hud-top { padding: 10px; gap: 6px; }
@@ -1703,6 +1847,29 @@
     .card { padding: 16px 14px; }
     .card .card-name { font-size: 15px; }
     .card .card-desc { font-size: 12px; }
+    /* Atlas: stack branch columns vertically and put universal rail
+       below the path on tight screens. */
+    .atlas-body {
+      grid-template-columns: 1fr;
+      grid-auto-rows: auto;
+    }
+    .atlas-branches {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .atlas-section + .atlas-section {
+      border-left: none;
+      border-top: 1px solid rgba(29, 21, 12, 0.30);
+    }
+    .atlas-header {
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    .atlas-banner .atlas-wave-label { font-size: 18px; }
+    .atlas-section { padding: 14px 16px; }
+    .atlas-card .ac-name { font-size: 13px; }
+    .atlas-card .ac-desc { font-size: 11px; }
   }
 </style>
 </head>
@@ -1744,18 +1911,12 @@
       <div class="wave-num" id="wave-banner-num">1</div>
     </div>
 
-    <!-- Build Constellation — visible build atlas. Shows the 2 branches
-         of your chosen path with progress dots and the next target.
-         Players always know where they're going and what's next. -->
-    <div id="hud-constellation" class="hud-constellation" style="display:none;">
-      <div class="hc-header" id="hc-header">— Path —</div>
-      <div class="hc-branches" id="hc-branches"></div>
-      <div class="hc-target" id="hc-target"></div>
-    </div>
+    <!-- (in-HUD constellation widget removed — see Path Atlas overlay) -->
 
     <!-- Affinity bars — damage type kill counters with milestone markers.
          The Hand-of-Midas ramp visualised so you see the threshold approaching. -->
-    <div id="hud-affinity" class="hud-affinity" style="display:none;">
+    <div id="hud-affinity" class="hud-affinity" style="display:none;"
+         data-tooltip="AFFINITY — kills with each damage type stack toward thresholds. T1 (8 kills) +8% type damage. T2 (20 kills) hits apply a baseline status. T3 (40 kills) +20% crit chance + +30% crit damage of that type.">
       <div class="ha-bar" data-type="physical">
         <span class="ha-label">PHYS</span>
         <div class="ha-track"><div class="ha-fill" id="ha-fill-physical"></div>
@@ -1826,17 +1987,33 @@
     </div>
   </div>
 
-  <!-- Card-pick overlay (post-wave). Renders 3 mutex card choices. -->
-  <div class="overlay" id="overlay-cardpick">
-    <div class="overlay-inner">
-      <div class="subtitle" id="cardpick-subtitle">— Pick one —</div>
-      <h1 id="cardpick-title">Choose</h1>
-      <div class="choices" id="cardpick-choices"></div>
-      <button class="btn-ghost" id="btn-cardpick-skip">Skip — heal 25%</button>
+  <!-- Path Atlas overlay (post-wave). Static map: every card the player
+       can take in their path is laid out, plus a universal pivot rail.
+       1 click = 1 card. Locked cards show their reason. The whole point
+       is the build is BROWSEABLE and DETERMINISTIC. -->
+  <div class="overlay overlay-atlas" id="overlay-atlas">
+    <div class="atlas-shell">
+      <div class="atlas-header">
+        <div class="atlas-banner">
+          <div class="atlas-wave-label" id="atlas-wave-label">Wave Cleared</div>
+          <div class="atlas-summary" id="atlas-summary">Pick one card to advance.</div>
+        </div>
+        <button class="btn-ghost" id="btn-atlas-skip">Skip — heal 25%</button>
+      </div>
+      <div class="atlas-body">
+        <!-- Path branches (left) — your committed direction -->
+        <div class="atlas-section atlas-path">
+          <div class="atlas-section-h" id="atlas-path-h">— Path —</div>
+          <div class="atlas-branches" id="atlas-branches"></div>
+        </div>
+        <!-- Universal pool (right) — pivot any time -->
+        <div class="atlas-section atlas-universal-section">
+          <div class="atlas-section-h">Universal</div>
+          <div class="atlas-universal" id="atlas-universal"></div>
+        </div>
+      </div>
     </div>
   </div>
-
-  <!-- (Old skill-tree atlas overlay was removed; card-pick replaces it.) -->
 
   <!-- Item drop screen — shows what you currently hold so the replace
        isn't surprising, plus an explicit skip button. -->
@@ -3479,7 +3656,7 @@ const CARDS = {
   // GRAVITY (magician)
   // ============================================================
   g_grav_well:      { id: 'g_grav_well',   name: 'Gravity Well',      axis: 'utility', tier: 2,
-    pathTag: 'gravity', classes: ['magician'], bossOnly: true,
+    pathTag: 'gravity', classes: ['magician'],
     desc: 'Unlock Gravity Well — large persistent singularity, 14 dps, 3s, 130u radius, 5s CD.',
     effect: { unlockSpell: 'gravity_well' } },
   g_grav_crush:     { id: 'g_grav_crush',  name: 'Crushing Force',    axis: 'damage', tier: 1,
@@ -3542,11 +3719,11 @@ const CARDS = {
       { spellId: 'static_field',   modAdjust: { dmgMult: 1.5, radiusMult: 1.5 } },
     ] } } },
   e_unlock_cloud:   { id: 'e_unlock_cloud', name: 'Storm Cloud',      axis: 'utility', tier: 2,
-    pathTag: 'electricity', classes: ['magician'], bossOnly: true,
+    pathTag: 'electricity', classes: ['magician'],
     desc: 'Unlock Storm Cloud — hovering shock dispenser, primes targets for storm damage.',
     effect: { unlockSpell: 'storm_cloud' } },
   e_unlock_static:  { id: 'e_unlock_static', name: 'Static Field',    axis: 'damage', tier: 2,
-    pathTag: 'electricity', classes: ['magician'], bossOnly: true,
+    pathTag: 'electricity', classes: ['magician'],
     desc: 'Unlock Static Field — pulsing aura around you, 5 dmg/tick within 100u, 0.5s CD.',
     effect: { unlockSpell: 'static_field' } },
   e_cdr:            { id: 'e_cdr',         name: 'Quick Reflex',      axis: 'utility', tier: 2,
@@ -3584,7 +3761,7 @@ const CARDS = {
     desc: 'Keystone: Fireball hits a single target with ×1.9 dmg, no splash, 1.5× speed.',
     effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 1.9 }, behavior: { noSplash: true, projectileBoost: 1.5 } } } },
   f_unlock_wall:    { id: 'f_unlock_wall', name: 'Wall of Flame',     axis: 'utility', tier: 2,
-    pathTag: 'fire', classes: ['magician'], bossOnly: true,
+    pathTag: 'fire', classes: ['magician'],
     desc: 'Unlock Wall of Flame — sweeping horizontal fire band that chips lanes.',
     effect: { unlockSpell: 'wall_of_flame' } },
   f_unlock_pyro:    { id: 'f_unlock_pyro', name: 'Pyroclasm',         axis: 'damage', tier: 2,
@@ -3660,7 +3837,7 @@ const CARDS = {
     desc: 'Keystone: Crescent Strike +150% damage. Instakills enemies below 15% HP.',
     effect: { spellId: 'crescent_strike', keystone: { modAdjust: { dmgMult: 1.5 }, behavior: { executioner: true } } } },
   st_unlock_reaping:{ id: 'st_unlock_reaping', name: 'Reaping Strike', axis: 'damage', tier: 2,
-    pathTag: 'steel', classes: ['ninja'], bossOnly: true,
+    pathTag: 'steel', classes: ['ninja'],
     desc: 'Unlock Reaping Strike — heavy single-target lunge with bonus crit; heals 25% of damage (50% on crit).',
     effect: { unlockSpell: 'reaping_strike' } },
   st_reap_blood:    { id: 'st_reap_blood', name: 'Bloodthirst',       axis: 'damage', tier: 2,
@@ -4921,6 +5098,48 @@ function cardBlockedReason(card, playerState) {
 }
 
 /*
+ * Atlas-aware eligibility — returns null if card is takeable on the
+ * Path Atlas right now, or a human-readable reason string otherwise.
+ * Different from cardBlockedReason because the atlas needs to surface
+ * tier gates, class filters, spell-gates, and bossOnly with copy
+ * the player can act on ("Tier 2 unlocks at wave 3").
+ *
+ * `capstoneEarned` overrides the bossOnly gate when the player has
+ * filled a branch's advance set — they earned the right to take it.
+ */
+function cardAtlasReason(card, ps, wave, isBoss, capstoneEarned = false) {
+  if (!card) return 'unknown';
+  const taken = ps.takenCards;
+  if (taken.has(card.id)) return 'taken';
+  const charId = ps.charDef?.id;
+  if (card.classes && charId && !card.classes.includes(charId)) {
+    return `${charId} can't take this`;
+  }
+  if (card.pathTag && card.pathTag !== 'universal' && card.pathTag !== 'vigil'
+      && card.pathTag !== ps.pathId) {
+    return `Wrong path (${card.pathTag})`;
+  }
+  const maxTier = wave >= 7 ? 3 : (wave >= 3 ? 2 : 1);
+  if ((card.tier || 1) > maxTier) {
+    const need = (card.tier || 1) === 2 ? 3 : 7;
+    return `Tier ${card.tier} unlocks at wave ${need}`;
+  }
+  if (card.bossOnly && !isBoss && !capstoneEarned) return 'Boss-wave only';
+  if (card.spellGate && !ps.spells.includes(card.spellGate)) {
+    return `Requires spell: ${SPELLS[card.spellGate]?.name || card.spellGate}`;
+  }
+  if (card.lockedBy && card.lockedBy.some(id => taken.has(id))) {
+    const blocker = card.lockedBy.find(id => taken.has(id));
+    return `Locked by ${CARDS[blocker]?.name || blocker}`;
+  }
+  if (card.requires && !card.requires.every(r => taken.has(r))) {
+    const missing = card.requires.find(r => !taken.has(r));
+    return `Requires ${CARDS[missing]?.name || missing}`;
+  }
+  return null;
+}
+
+/*
  * Aggregate defensive / utility player stats from taken cards + items.
  * Single-rank — each card contributes once.
  */
@@ -4970,193 +5189,15 @@ function computePlayerStats(playerState) {
 }
 
 
-/* --- ChoiceEngine: builds upgrade/item choice pools --------------------- */
+/* --- ChoiceEngine: builds item / fusion choice pools -------------------
+ *
+ * Note: card picking is now a STATIC ATLAS (UI.showAtlas) — every card
+ * in the player's path is visible and clickable when eligible. There's
+ * no random card draw anymore, which is why this engine no longer
+ * exposes a buildCardChoices method. cardAtlasReason() is the per-card
+ * eligibility check used by the atlas renderer.
+ * ----------------------------------------------------------------------- */
 const ChoiceEngine = {
-  /*
-   * Build the 3-card pick offer with directed progression.
-   *
-   * Slot composition:
-   *   1. ADVANCE — your most-invested branch's next card (or any branch
-   *      starter if uncommitted). If a branch is FULL (all 3 advance
-   *      cards taken), this slot becomes the capstone — the payoff.
-   *   2. ALTERNATIVE — a card from a different branch, or a powerful
-   *      "floating" card (mutex-partner keystones, focus passives, etc).
-   *   3. UNIVERSAL — a generic axis card (damage/utility/defense/greed)
-   *      so the player can always pivot or shore up weaknesses.
-   *
-   * Boss waves promote slot 1 + 2 to keystone-tier picks: capstones
-   * always offer if available, and pacts can roll in. Tier gates (T2
-   * from wave 4, T3 from wave 8) still apply.
-   *
-   * If a slot can't be filled (e.g. branch maxed but no alt available),
-   * we fall back to filling from the universal pool so all 3 slots
-   * always have content.
-   */
-  buildCardChoices(playerState, wave, opts = {}) {
-    const isBoss = !!opts.isBoss;
-    const count = opts.count || 3;
-    const taken = playerState.takenCards || new Set();
-    const ownedSpells = new Set(playerState.spells);
-    const charId = playerState.charDef?.id;
-    const pathId = playerState.pathId;
-    const maxTier = wave >= 7 ? 3 : (wave >= 3 ? 2 : 1);
-
-    // ---- Eligibility predicate (shared) ----
-    // bossOnlyOverride lets a capstone bypass the boss-wave gate when
-    // the player has earned it by filling its branch's advance set.
-    const eligible = (card, bossOnlyOverride = false) => {
-      if (!card || taken.has(card.id)) return false;
-      if (card.classes && charId && !card.classes.includes(charId)) return false;
-      if (card.pathTag && card.pathTag !== 'universal' && card.pathTag !== 'vigil'
-          && card.pathTag !== pathId) return false;
-      if ((card.tier || 1) > maxTier) return false;
-      if (card.bossOnly && !isBoss && !bossOnlyOverride) return false;
-      if (card.spellGate && !ownedSpells.has(card.spellGate)) return false;
-      if (card.lockedBy && card.lockedBy.some(id => taken.has(id))) return false;
-      if (card.requires && !card.requires.every(r => taken.has(r))) return false;
-      return true;
-    };
-
-    // ---- Pull the constellation for this run ----
-    const constellation = pathId ? CONSTELLATIONS[pathId] : null;
-    const branches = constellation ? Object.values(constellation.branches) : [];
-    // For each branch, count taken cards and find the next eligible card.
-    const branchProgress = branches.map(b => {
-      const takenCount = b.cards.filter(c => taken.has(c)).length;
-      const total = b.cards.length;
-      const fullyAdvanced = takenCount >= total;
-      const capstoneTaken = taken.has(b.capstone);
-      const nextAdvance = b.cards
-        .map(id => CARDS[id])
-        .find(c => c && eligible(c));
-      const capstoneCard = CARDS[b.capstone];
-      // EARNED override: once a branch's advance set is full the player
-      // has paid the cost — let the capstone drop on any wave, not just
-      // bosses. Keeps the payoff close to the commitment.
-      const capstoneAvailable = fullyAdvanced && !capstoneTaken && eligible(capstoneCard, true);
-      return { branch: b, takenCount, total, fullyAdvanced, capstoneTaken,
-               nextAdvance, capstoneCard, capstoneAvailable };
-    });
-    // Sort: most-invested branches first. Player's "active" branch.
-    const branchByInvestment = [...branchProgress]
-      .sort((a, b) => (b.takenCount - a.takenCount) || (Math.random() - 0.5));
-
-    const result = [];
-    const used = new Set();
-    const pickFromList = (list) => {
-      if (!list.length) return null;
-      const c = list[Math.floor(Math.random() * list.length)];
-      if (c && !used.has(c.id)) { used.add(c.id); return c; }
-      return null;
-    };
-
-    // ===== SLOT 1 — ADVANCE =====
-    // Capstone if any branch is ready, else the active branch's next
-    // card. If totally uncommitted, pick a random branch's first card.
-    let slot1 = null;
-    const readyCapstone = branchProgress.find(bp => bp.capstoneAvailable);
-    if (readyCapstone) {
-      slot1 = readyCapstone.capstoneCard;
-    } else {
-      // Most-invested branch with a next card available
-      for (const bp of branchByInvestment) {
-        if (bp.nextAdvance && !used.has(bp.nextAdvance.id)) {
-          slot1 = bp.nextAdvance;
-          break;
-        }
-      }
-    }
-    if (slot1) { result.push(slot1); used.add(slot1.id); }
-
-    // ===== SLOT 2 — ALTERNATIVE =====
-    // Card from a DIFFERENT branch (not slot 1's branch), or a powerful
-    // floating card. On boss waves, prefer the unfilled branch's
-    // capstone-mate (mutex partner) if one exists.
-    let slot2 = null;
-    const slot1Branch = slot1
-      ? branchProgress.find(bp =>
-          bp.branch.cards.includes(slot1.id) || bp.capstone === slot1.id)
-      : null;
-    // Try other branches first
-    const altBranches = branchByInvestment.filter(bp => bp !== slot1Branch);
-    for (const bp of altBranches) {
-      // On boss waves with capstones available, offer the FORK MATE
-      // — players who took Annihilation see Collapse offered, etc.
-      if (isBoss && bp.capstoneAvailable && !used.has(bp.capstoneCard.id)) {
-        slot2 = bp.capstoneCard; break;
-      }
-      if (bp.nextAdvance && !used.has(bp.nextAdvance.id) && eligible(bp.nextAdvance)) {
-        slot2 = bp.nextAdvance; break;
-      }
-    }
-    // If no alt branch had a card, draw a floating path card (cards in
-    // the player's path that aren't in any branch — e.g. focus passives,
-    // mutex-partner keystones, fusion enablers).
-    if (!slot2) {
-      const branchCardIds = new Set();
-      for (const b of branches) {
-        for (const c of b.cards) branchCardIds.add(c);
-        branchCardIds.add(b.capstone);
-      }
-      const floating = Object.values(CARDS).filter(c =>
-        c.pathTag === pathId && !branchCardIds.has(c.id) && !used.has(c.id) && eligible(c)
-      );
-      slot2 = pickFromList(floating);
-    }
-    if (slot2) result.push(slot2);
-
-    // ===== SLOT 3 — UNIVERSAL =====
-    // Damage / Utility / Defense / Greed pivot card. Axis-balanced —
-    // pick an axis the player is LEAST committed to so this slot
-    // genuinely diversifies (and doesn't echo what slot 1 already
-    // offered).
-    let slot3 = null;
-    const universal = Object.values(CARDS).filter(c =>
-      c.pathTag === 'universal' && !used.has(c.id) && eligible(c)
-    );
-    if (universal.length) {
-      // Count my axis distribution (taken cards by axis)
-      const axisCount = { damage: 0, utility: 0, defense: 0, greed: 0 };
-      for (const id of taken) {
-        const a = CARDS[id]?.axis;
-        if (a && axisCount[a] !== undefined) axisCount[a]++;
-      }
-      // Don't double up the slot 1 axis
-      const slot1Axis = slot1?.axis;
-      const slot2Axis = slot2?.axis;
-      // Prefer axes that aren't already in the offer & I have least of.
-      const sorted = [...universal].sort((a, b) => {
-        const aPenalty = (a.axis === slot1Axis ? 5 : 0) + (a.axis === slot2Axis ? 5 : 0);
-        const bPenalty = (b.axis === slot1Axis ? 5 : 0) + (b.axis === slot2Axis ? 5 : 0);
-        return (axisCount[a.axis] + aPenalty) - (axisCount[b.axis] + bPenalty);
-      });
-      // Pick from the top half (cheapest) randomly
-      const top = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2)));
-      slot3 = pickFromList(top);
-    }
-    if (slot3) result.push(slot3);
-
-    // ===== FALLBACK FILL =====
-    // If any slots failed (e.g. wave 1 with nothing in alt branches),
-    // backfill from any eligible card so the player never sees fewer
-    // than 3 picks. Last resort: a heal card.
-    while (result.length < count) {
-      const fallback = Object.values(CARDS).filter(c =>
-        !used.has(c.id) && eligible(c)
-      );
-      const pick = pickFromList(fallback);
-      if (!pick) break;
-      result.push(pick);
-    }
-    if (result.length === 0) {
-      return [{
-        id: '__heal', name: 'Field Bandage', axis: 'defense', tier: 1,
-        desc: 'Heal 25 health.',
-        effect: { __healOnPick: 25 },
-      }];
-    }
-    return result;
-  },
 
   buildItemChoices(playerState, count = 3) {
     // Don't offer items the player already has, and respect class
@@ -6777,7 +6818,7 @@ class Game {
     // 3-card pick. Boss waves draw from the boss pool (spell unlocks,
     // keystones, capstones, pacts). Otherwise from the regular pool.
     const isBoss = wave % CONFIG.waves.bossEvery === 0;
-    UI.showCardChoice(this.playerState, wave, { isBoss, heal });
+    UI.showAtlas(this.playerState, wave, { isBoss, heal });
   }
 
   /*
@@ -9586,94 +9627,161 @@ const UI = {
     return nextEntries.slice(0, 2).join(' · ');
   },
 
-  showCardChoice(ps, wave, opts = {}) {
+  // Shared axis presentation — used by the atlas card cells.
+  ATLAS_AXIS_COLOR: {
+    damage:  '#c14e3a',
+    utility: '#c8941a',
+    defense: '#4a8a64',
+    greed:   '#7a5aa0',
+  },
+  ATLAS_AXIS_TAG: {
+    damage:  '⚔ Damage',
+    utility: '◇ Utility',
+    defense: '🛡 Defense',
+    greed:   '🜚 Greed',
+  },
+
+  /*
+   * The Path Atlas — the build map. Static, browseable layout of every
+   * card the player can take in their chosen path, plus a universal
+   * pivot rail. 1 click = 1 card. Locked cards display their reason
+   * inline. Capstones are gold-bordered and pulse when their advance
+   * set is full.
+   *
+   * This replaces the old random 3-card pick — picks now COMPOUND
+   * because the player can see and plan their next picks ahead of time.
+   */
+  showAtlas(ps, wave, opts = {}) {
     const isBoss = !!opts.isBoss;
-    const cards = ChoiceEngine.buildCardChoices(ps, wave, { isBoss, count: 3 });
-    const cont = this.$('cardpick-choices');
-    cont.innerHTML = '';
-    // Telegraph what's coming next so the player can pick with direction.
-    // Show: wave cleared headline + next wave's notable threats.
     const nextWave = wave + 1;
     const preview = this._waveThreatPreview(nextWave);
-    this.$('cardpick-title').textContent = isBoss
+    const heal = opts.heal ? `+${opts.heal} HP healed.` : '';
+    this.$('atlas-wave-label').textContent = isBoss
       ? `Wave ${wave} — Boss Cleared`
       : `Wave ${wave} Cleared`;
-    this.$('cardpick-subtitle').innerHTML = isBoss
-      ? `— A bigger choice. Wave ${nextWave} brings: <b>${preview}</b> —`
-      : `— Wave ${nextWave} brings: <b>${preview}</b>. Pick one card or skip. —`;
-    const AXIS_COLOR = {
-      damage:  '#c14e3a',
-      utility: '#c8941a',
-      defense: '#4a8a64',
-      greed:   '#7a5aa0',
-    };
-    const AXIS_TAG = {
-      damage:  '⚔ Damage',
-      utility: '◇ Utility',
-      defense: '🛡 Defense',
-      greed:   '🜚 Greed',
-    };
-    // Pre-compute branch context for each card so the UI can label
-    // "Cleaver Branch (2/3)" etc. — gives directional choice signal.
+    this.$('atlas-summary').innerHTML =
+      `${heal} Pick one card to spend on your build. ` +
+      `Wave ${nextWave} brings: <b>${preview}</b>.`;
+
+    // ---- Path branches ----
     const constellation = ps.pathId ? CONSTELLATIONS[ps.pathId] : null;
-    const branchOf = (cardId) => {
-      if (!constellation) return null;
-      for (const b of Object.values(constellation.branches)) {
-        if (b.cards.includes(cardId)) return { ...b, role: 'advance' };
-        if (b.capstone === cardId) return { ...b, role: 'capstone' };
-      }
-      return null;
-    };
-    for (const card of cards) {
-      const cardEl = document.createElement('div');
-      cardEl.className = 'card';
-      cardEl.dataset.tree = card.pathTag || 'generic';
-      cardEl.style.setProperty('--accent', AXIS_COLOR[card.axis] || 'var(--gold)');
-      const tier = card.tier ? `T${card.tier}` : '';
-      const branch = branchOf(card.id);
-      let branchTag = '';
-      if (branch) {
-        const filled = branch.cards.filter(id => ps.takenCards.has(id)).length;
-        if (branch.role === 'capstone') {
-          branchTag = `<div class="card-branch capstone">${branch.icon} ${branch.name} ★ CAPSTONE</div>`;
-        } else {
-          branchTag = `<div class="card-branch" style="color:${branch.color};">${branch.icon} ${branch.name} branch · ${filled + 1}/${branch.cards.length}</div>`;
+    this.$('atlas-path-h').textContent = ps.pathId
+      ? `${PATHS[ps.pathId]?.name || 'Path'} — Constellation`
+      : 'Path';
+    const branchesEl = this.$('atlas-branches');
+    branchesEl.innerHTML = '';
+    if (constellation) {
+      for (const branch of Object.values(constellation.branches)) {
+        const filledCount = branch.cards.filter(id => ps.takenCards.has(id)).length;
+        const allFilled = filledCount >= branch.cards.length;
+        const capstoneTaken = ps.takenCards.has(branch.capstone);
+        const col = document.createElement('div');
+        col.className = 'atlas-branch';
+        col.style.setProperty('--branch-color', branch.color);
+        // Header — name, flavor, progress dots
+        const head = document.createElement('div');
+        head.className = 'atlas-branch-head';
+        const pips = branch.cards.map(id =>
+          `<span class="atlas-prog-pip${ps.takenCards.has(id) ? ' filled' : ''}"></span>`
+        ).join('');
+        const capCls = capstoneTaken ? 'taken' : (allFilled ? 'ready' : '');
+        head.innerHTML = `
+          <div class="atlas-branch-name">${branch.icon} ${branch.name}</div>
+          <div class="atlas-branch-flavor">${branch.flavor}</div>
+          <div class="atlas-branch-progress">${pips}<span class="atlas-prog-cap ${capCls}"></span></div>
+        `;
+        col.appendChild(head);
+        for (const cardId of branch.cards) {
+          col.appendChild(this._renderAtlasCard(CARDS[cardId], ps, wave, isBoss, false));
         }
-      }
-      cardEl.innerHTML = `
-        <div class="card-tier">${tier}</div>
-        <div class="card-tag">${AXIS_TAG[card.axis] || card.axis}</div>
-        ${branchTag}
-        <div class="card-name">${card.name}</div>
-        <div class="card-desc">${card.desc || ''}</div>
-      `;
-      cardEl.addEventListener('click', () => {
-        if (card.id === '__heal') {
-          if (this.game.player) {
-            this.game.player.hp = Math.min(this.game.player.maxHp, this.game.player.hp + 25);
-          }
-        } else {
-          this.game.takeCard(card);
+        const capCard = CARDS[branch.capstone];
+        if (capCard) {
+          col.appendChild(this._renderAtlasCard(capCard, ps, wave, isBoss, true, allFilled));
         }
-        this.hideAllOverlays();
-        this.game.afterChoice();
-      });
-      cont.appendChild(cardEl);
+        branchesEl.appendChild(col);
+      }
+    } else {
+      branchesEl.innerHTML = '<div class="atlas-branch-flavor">No path selected.</div>';
     }
-    const skipBtn = this.$('btn-cardpick-skip');
+
+    // ---- Universal rail (axis-grouped) ----
+    const universalEl = this.$('atlas-universal');
+    universalEl.innerHTML = '';
+    const charId = ps.charDef?.id;
+    const universalByAxis = { damage: [], utility: [], defense: [], greed: [] };
+    for (const c of Object.values(CARDS)) {
+      if (c.pathTag !== 'universal') continue;
+      if (c.classes && !c.classes.includes(charId)) continue;
+      if (universalByAxis[c.axis]) universalByAxis[c.axis].push(c);
+    }
+    const AXIS_ORDER = ['damage', 'utility', 'defense', 'greed'];
+    for (const axis of AXIS_ORDER) {
+      const cards = universalByAxis[axis];
+      if (!cards || !cards.length) continue;
+      const head = document.createElement('div');
+      head.className = 'atlas-universal-axis';
+      head.style.setProperty('--accent', this.ATLAS_AXIS_COLOR[axis]);
+      head.textContent = this.ATLAS_AXIS_TAG[axis] || axis;
+      universalEl.appendChild(head);
+      for (const c of cards) {
+        universalEl.appendChild(this._renderAtlasCard(c, ps, wave, isBoss, false));
+      }
+    }
+
+    // ---- Skip ----
+    const skipBtn = this.$('btn-atlas-skip');
     if (skipBtn) {
       skipBtn.onclick = () => {
-        // Skip heals 25% of max HP — soft fallback when nothing offered
-        // fits the build. Keeps the screen from being a dead end.
         if (this.game.player) {
-          const heal = Math.floor(this.game.player.maxHp * 0.25);
-          this.game.player.hp = Math.min(this.game.player.maxHp, this.game.player.hp + heal);
+          const h = Math.floor(this.game.player.maxHp * 0.25);
+          this.game.player.hp = Math.min(this.game.player.maxHp, this.game.player.hp + h);
         }
         this.hideAllOverlays();
         this.game.afterChoice();
       };
     }
-    this.$('overlay-cardpick').classList.add('active');
+
+    this.hideAllOverlays();
+    this.$('overlay-atlas').classList.add('active');
+  },
+
+  /*
+   * Render a single atlas card cell. State is one of:
+   *   'takeable' — full color, click to take
+   *   'locked'   — dimmed, lock reason text below
+   *   'taken'    — gold check, no interaction
+   * Capstones get a gold border and the ★ CAPSTONE label.
+   */
+  _renderAtlasCard(card, ps, wave, isBoss, isCapstone, capstoneEarned = false) {
+    const el = document.createElement('div');
+    el.className = 'atlas-card' + (isCapstone ? ' is-capstone' : '');
+    if (!card) {
+      el.dataset.state = 'locked';
+      el.innerHTML = `<div class="ac-name">—</div>`;
+      return el;
+    }
+    const reason = cardAtlasReason(card, ps, wave, isBoss, capstoneEarned);
+    let state = 'takeable';
+    if (ps.takenCards.has(card.id)) state = 'taken';
+    else if (reason) state = 'locked';
+    el.dataset.state = state;
+    el.style.setProperty('--accent', this.ATLAS_AXIS_COLOR[card.axis] || 'var(--gold)');
+    const tier = card.tier ? `T${card.tier}` : '';
+    const tag = (this.ATLAS_AXIS_TAG[card.axis] || card.axis) + (isCapstone ? '  ★ CAPSTONE' : '');
+    el.innerHTML = `
+      <div class="ac-tag"><span>${tag}</span><span class="ac-tier">${tier}</span></div>
+      <div class="ac-name">${card.name}</div>
+      <div class="ac-desc">${card.desc || ''}</div>
+      ${state === 'locked' ? `<div class="ac-lock">⚿ ${reason}</div>` : ''}
+    `;
+    if (state === 'takeable') {
+      el.addEventListener('click', () => {
+        this.game.takeCard(card);
+        this.hideAllOverlays();
+        this.game.afterChoice();
+      });
+    }
+    return el;
   },
 
   showItemChoices(ps) {
@@ -9893,82 +10001,8 @@ const UI = {
       }
     }
 
-    // ---- Constellation widget ----
-    this.updateConstellationHud(game);
     // ---- Affinity bars ----
     this.updateAffinityHud(game);
-  },
-
-  /*
-   * Render the constellation panel — branches, dots, capstone status,
-   * next-target hint. Always visible during a run so the player can
-   * read their build at a glance and see what's coming next.
-   */
-  updateConstellationHud(game) {
-    const wrap = this.$('hud-constellation');
-    if (!wrap) return;
-    const ps = game.playerState;
-    const path = ps?.pathId;
-    const constellation = path ? CONSTELLATIONS[path] : null;
-    if (!constellation) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    const taken = ps.takenCards;
-    const branches = Object.values(constellation.branches);
-    // Find player's most-invested branch for the "active" highlight + target.
-    let activeBranch = null;
-    let activeCount = -1;
-    for (const b of branches) {
-      const c = b.cards.filter(id => taken.has(id)).length;
-      if (c > activeCount) { activeCount = c; activeBranch = b; }
-    }
-    this.$('hc-header').textContent = `${PATHS[path]?.name || path} — Constellation`;
-    const cont = this.$('hc-branches');
-    cont.innerHTML = '';
-    let nextTargetHtml = '';
-    for (const b of branches) {
-      const filled = b.cards.filter(id => taken.has(id)).length;
-      const total = b.cards.length;
-      const capstoneTaken = taken.has(b.capstone);
-      const fullyAdvanced = filled >= total;
-      const capstoneReady = fullyAdvanced && !capstoneTaken;
-      const isActive = b === activeBranch && filled > 0;
-      const div = document.createElement('div');
-      div.className = 'hc-branch'
-        + (isActive ? ' active' : '')
-        + (capstoneTaken ? ' capstone-taken' : (fullyAdvanced ? ' full' : ''));
-      div.style.setProperty('--branch-color', b.color);
-      const pips = b.cards.map(id =>
-        `<span class="hc-pip${taken.has(id) ? ' filled' : ''}"></span>`
-      ).join('');
-      const capStateClass = capstoneTaken ? ' taken' : (capstoneReady ? ' ready' : '');
-      div.innerHTML = `
-        <span class="hc-branch-icon">${b.icon}</span>
-        <div class="hc-branch-info">
-          <div class="hc-branch-name">${b.name}</div>
-          <div class="hc-branch-progress">
-            ${pips}
-            <span class="hc-pip cap${capStateClass}" title="${CARDS[b.capstone]?.name || 'Capstone'}"></span>
-          </div>
-        </div>
-      `;
-      cont.appendChild(div);
-      // Build next-target text from the active branch.
-      if (b === activeBranch && activeCount > 0) {
-        if (capstoneTaken) {
-          nextTargetHtml = `${b.icon} ${b.name} fully ascended`;
-        } else if (capstoneReady) {
-          const cap = CARDS[b.capstone];
-          const where = cap?.bossOnly ? ' (next boss wave)' : ' (next pick)';
-          nextTargetHtml = `Capstone ready: <b>${cap?.name || ''}</b>${where}`;
-        } else {
-          nextTargetHtml = `${b.cards.length - filled} more → <b>${CARDS[b.capstone]?.name || 'Capstone'}</b>`;
-        }
-      }
-    }
-    if (!nextTargetHtml && activeCount === 0) {
-      nextTargetHtml = 'Pick any branch card to begin';
-    }
-    this.$('hc-target').innerHTML = nextTargetHtml;
   },
 
   /*
