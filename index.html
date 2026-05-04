@@ -15,33 +15,49 @@
 
 <style>
   :root {
-    --bg-void:        #0a0805;
-    --bg-deep:        #0c0a1c;
-    --bg-mid:         #14122a;
-    --ink-bright:     #e8e3ff;
-    --ink-mid:        #b8b1d8;
-    --ink-dim:        #6e6890;
-    --grav:           #a07cff;     /* gravity purple */
-    --grav-deep:      #5a2dff;
-    --elec:           #5ae5ff;     /* electricity cyan */
-    --elec-deep:      #1ba8d4;
-    --fire:           #ff7a3a;     /* fire orange */
-    --fire-deep:      #cc3a10;
-    --frost:          #9af0e6;     /* frost mint */
-    --frost-deep:     #4ab6c8;
-    --gold:           #f0c674;
-    --crimson:        #ff5b6e;
-    --rare:           #4dd0e1;
-    --epic:           #ba68c8;
-    --legendary:      #ffb74d;
+    /* Ink & Vellum palette — warm aged paper, ink-black, vermilion, gold.
+       The canvas scene uses these same hues so the DOM chrome reads as
+       part of the same world (not a neon UI bolted onto a woodcut game). */
+    --paper:          #ede1c2;   /* primary vellum (light page) */
+    --paper-deep:     #d9c79e;   /* shadowed vellum (cards on cards) */
+    --paper-soft:     #f4e9cb;   /* faintly brighter highlight tone */
+    --paper-edge:     #b39d72;   /* darker stained edge */
+    --ink:            #1d150c;   /* darkest ink — body text & strokes */
+    --ink-bright:     #1d150c;   /* alias kept for legacy rules */
+    --ink-mid:        #5b4a35;   /* secondary text — sepia */
+    --ink-dim:        #8a7553;   /* tertiary / faded annotation */
+    --ink-faint:      rgba(29, 21, 12, 0.18); /* hairline rule color */
+    --vermilion:      #b6332a;   /* primary brand red — heraldic */
+    --vermilion-deep: #7a1d18;
+    --gold:           #b6913a;   /* aged gold-leaf */
+    --gold-bright:    #d4a94a;
+    --crimson:        #8a1f1a;   /* warning / replace */
+    /* Tree accents — used as ink wash colors on cards & pills.
+       Tuned slightly darker than canvas use so they read on paper. */
+    --grav:           #5a3aa0;   /* gravity — purple ink */
+    --grav-deep:      #38226a;
+    --elec:           #1f7aa8;   /* electricity — peacock blue */
+    --elec-deep:      #134a6a;
+    --fire:           #b6332a;   /* fire — vermilion (matches brand) */
+    --fire-deep:      #7a1d18;
+    --frost:          #2f6e7a;   /* frost — slate teal */
+    --frost-deep:     #1f4a52;
+    /* Rarities — drawn-illumination tones */
+    --rare:           #1f7aa8;
+    --epic:           #6a3a8a;
+    --legendary:      #b6913a;
+    /* Legacy bg tokens — pointed at paper so any stray rule still reads. */
+    --bg-void:        #2a1f10;
+    --bg-deep:        #ede1c2;
+    --bg-mid:         #d9c79e;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
     width: 100%; height: 100%; overflow: hidden;
-    background: #000;
-    color: var(--ink-bright);
+    background: #1a120a;
+    color: var(--ink);
     font-family: 'Spectral', Georgia, serif;
     user-select: none; -webkit-user-select: none;
     touch-action: manipulation;
@@ -49,11 +65,12 @@
   body {
     /* Center the game on desktop. Phone-shaped vertical frame regardless
        of viewport — the game is designed for mobile portrait, so on big
-       screens we present it as a centered phone-shaped panel. */
+       screens we present it as a centered phone-shaped panel. The
+       backdrop is a warm desk-shadow rather than cold black. */
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at center, #0d0817 0%, #000 60%);
+    background: radial-gradient(ellipse at center, #2a1d10 0%, #0e0805 70%);
   }
 
   #game-container {
@@ -64,7 +81,12 @@
     height: 100dvh;
     max-height: 900px;
     overflow: hidden;
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    /* Warm vignette around the game pane — like the page sits in a
+       leather frame on the desk. */
+    box-shadow:
+      0 0 0 1px rgba(60, 40, 20, 0.6),
+      0 30px 80px rgba(0, 0, 0, 0.7),
+      0 0 60px rgba(120, 70, 30, 0.15);
   }
 
   #game-canvas {
@@ -87,15 +109,19 @@
     gap: 12px;
   }
 
+  /* HUD plates — bone-white vellum chits pinned to the page corners,
+     thin ink stroke + a single hairline shadow. They're translucent so
+     the canvas page underneath still shows through faintly. */
   .hud-stat {
-    background: rgba(12, 10, 28, 0.72);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(160, 124, 255, 0.18);
+    background: rgba(237, 225, 194, 0.88);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(29, 21, 12, 0.55);
     padding: 8px 14px;
-    border-radius: 2px;
+    border-radius: 1px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     letter-spacing: 0.05em;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.18), inset 0 1px 0 rgba(255, 250, 230, 0.6);
   }
 
   .hud-stat .label {
@@ -109,7 +135,7 @@
   }
 
   .hud-stat .value {
-    color: var(--ink-bright);
+    color: var(--ink);
     font-weight: 600;
   }
 
@@ -120,12 +146,13 @@
     gap: 8px;
   }
 
-  /* Equipment slots */
+  /* Equipment slots — vellum tiles, hard ink frame, wax-stamp gold when
+     filled. Empty slots read as bare paper with a faint label. */
   .slot {
     width: 56px; height: 56px;
-    background: rgba(12, 10, 28, 0.7);
-    border: 1px solid rgba(160, 124, 255, 0.25);
-    border-radius: 2px;
+    background: rgba(237, 225, 194, 0.86);
+    border: 1px solid rgba(29, 21, 12, 0.55);
+    border-radius: 1px;
     display: flex; align-items: center; justify-content: center;
     flex-direction: column;
     font-family: 'Cinzel', serif;
@@ -133,16 +160,20 @@
     color: var(--ink-dim);
     text-transform: uppercase;
     position: relative;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.18), inset 0 1px 0 rgba(255, 250, 230, 0.6);
   }
   .slot.filled {
-    border-color: var(--gold);
-    background: linear-gradient(180deg, rgba(240, 198, 116, 0.08), rgba(12, 10, 28, 0.7));
+    border-color: var(--ink);
+    background:
+      linear-gradient(180deg, rgba(212, 169, 74, 0.18), rgba(237, 225, 194, 0.92));
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.25), inset 0 0 0 1px rgba(182, 145, 58, 0.6);
   }
   .slot .slot-icon {
     font-size: 22px;
-    color: var(--gold);
+    color: var(--vermilion);
     line-height: 1;
     margin-bottom: 2px;
+    text-shadow: 0 1px 0 rgba(255, 250, 230, 0.5);
   }
   .slot .slot-name {
     font-size: 7px;
@@ -150,10 +181,14 @@
   }
 
   /* ------- OVERLAY (modal screens) ------- */
+  /* Warm sepia shroud over the canvas — like ink-soaked vellum laid on
+     the page — instead of a cold blue darken. The subtle paper-grain
+     image is drawn by a faint linear-gradient so it doesn't feel flat. */
   .overlay {
     position: absolute; inset: 0;
-    background: rgba(6, 6, 15, 0.86);
-    backdrop-filter: blur(8px);
+    background:
+      linear-gradient(180deg, rgba(237, 225, 194, 0.96), rgba(217, 199, 158, 0.96)),
+      repeating-linear-gradient(0deg, rgba(29,21,12,0.025) 0 1px, transparent 1px 3px);
     z-index: 20;
     display: none;
     /* When content fits, center it. When content is too tall (phone in
@@ -180,9 +215,10 @@
     font-weight: 700;
     font-size: clamp(28px, 5vw, 48px);
     letter-spacing: 0.18em;
-    color: var(--ink-bright);
+    color: var(--ink);
     text-transform: uppercase;
     margin-bottom: 8px;
+    text-shadow: 0 1px 0 rgba(255, 250, 230, 0.4);
   }
   .overlay .subtitle {
     font-family: 'Spectral', serif;
@@ -200,26 +236,31 @@
     margin-bottom: 16px;
   }
 
+  /* Choice card — a single sheet of vellum tacked to the page. Hard ink
+     border, accent stripe along the top (the spell's tree color used as
+     a wax seal), drop-shadow that suggests a paper layer. */
   .card {
-    background: linear-gradient(180deg, rgba(20, 18, 42, 0.95), rgba(12, 10, 28, 0.95));
-    border: 1px solid rgba(160, 124, 255, 0.2);
+    background:
+      linear-gradient(180deg, rgba(244, 233, 203, 0.98), rgba(225, 210, 174, 0.98));
+    border: 1px solid rgba(29, 21, 12, 0.55);
     padding: 22px 18px;
-    border-radius: 2px;
+    border-radius: 1px;
     cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
     text-align: left;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 3px 0 rgba(29, 21, 12, 0.18), 0 8px 18px rgba(0,0,0,0.18);
   }
   .card::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0;
-    height: 2px; background: var(--accent, var(--ink-dim));
-    opacity: 0.6;
+    height: 3px; background: var(--accent, var(--ink-dim));
+    opacity: 0.85;
   }
   .card:hover, .card:active {
     transform: translateY(-3px);
-    border-color: var(--accent, var(--gold));
-    box-shadow: 0 12px 32px rgba(0,0,0,0.4), 0 0 0 1px var(--accent, var(--gold)) inset;
+    border-color: var(--ink);
+    box-shadow: 0 6px 0 rgba(29, 21, 12, 0.22), 0 14px 26px rgba(0,0,0,0.25), 0 0 0 1px var(--accent, var(--gold)) inset;
   }
   .card[data-tree="gravity"]      { --accent: var(--grav); }
   .card[data-tree="electricity"]  { --accent: var(--elec); }
@@ -229,12 +270,14 @@
   .card[data-tree="generic"]      { --accent: var(--ink-mid); }
   .card[data-tree="fusion"]       { --accent: var(--gold); }
 
+  /* Fusion card — illuminated manuscript page: gold leaf border tone,
+     paper still visible but with a warm gilt wash. */
   .card.fusion-card {
-    border-color: rgba(240, 198, 116, 0.55);
+    border-color: var(--gold);
     background:
-      linear-gradient(180deg, rgba(240, 198, 116, 0.10), rgba(20, 18, 42, 0.95)),
-      radial-gradient(circle at 50% 0%, rgba(240, 198, 116, 0.18), transparent 60%);
-    box-shadow: 0 0 28px rgba(240, 198, 116, 0.18), 0 4px 18px rgba(0,0,0,0.4);
+      linear-gradient(180deg, rgba(212, 169, 74, 0.22), rgba(244, 233, 203, 0.98) 40%, rgba(225, 210, 174, 0.98)),
+      radial-gradient(circle at 50% 0%, rgba(212, 169, 74, 0.30), transparent 60%);
+    box-shadow: 0 3px 0 rgba(122, 90, 30, 0.4), 0 0 28px rgba(212, 169, 74, 0.35), 0 8px 22px rgba(0,0,0,0.22);
   }
   .card.fusion-card::before {
     background: linear-gradient(90deg, transparent, var(--gold), transparent);
@@ -255,7 +298,7 @@
     letter-spacing: 0.05em;
     margin-bottom: 8px;
     padding: 6px 8px;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(29, 21, 12, 0.06);
     border-left: 2px solid var(--gold);
   }
   .card.fusion-card .card-recipe .arrow {
@@ -287,18 +330,18 @@
     opacity: 0.5;
   }
 
-  /* Keystone cards: dramatic, lopsided, identity-defining */
+  /* Keystone cards — a wax-sealed proclamation, vermilion ink rule. */
   .card.keystone-card {
-    border-color: var(--crimson);
+    border-color: var(--vermilion);
     background:
-      linear-gradient(180deg, rgba(255, 91, 110, 0.08), rgba(20, 12, 28, 0.97));
-    box-shadow: 0 0 24px rgba(255, 91, 110, 0.18), 0 4px 18px rgba(0,0,0,0.5);
+      linear-gradient(180deg, rgba(182, 51, 42, 0.10), rgba(244, 233, 203, 0.98) 35%, rgba(225, 210, 174, 0.98));
+    box-shadow: 0 3px 0 rgba(122, 29, 24, 0.35), 0 0 24px rgba(182, 51, 42, 0.18), 0 6px 18px rgba(0,0,0,0.22);
     position: relative;
   }
   .card.keystone-card::before {
-    background: var(--crimson);
-    height: 3px;
-    opacity: 0.9;
+    background: var(--vermilion);
+    height: 4px;
+    opacity: 0.95;
   }
   .card.keystone-card::after {
     content: 'KEYSTONE';
@@ -307,24 +350,24 @@
     font-family: 'Cinzel', serif;
     font-size: 9px;
     letter-spacing: 0.3em;
-    color: var(--crimson);
+    color: var(--vermilion);
     font-weight: 700;
   }
   .card.keystone-card .card-tier { display: none; }
   .card.keystone-card .card-tag {
-    color: var(--crimson);
+    color: var(--vermilion);
     margin-top: 14px;
   }
   .card.keystone-card .card-name {
     font-size: 19px;
-    color: #ffe4c4;
+    color: var(--vermilion-deep);
   }
   .card.keystone-card .card-desc strong {
-    color: var(--gold);
+    color: var(--vermilion);
   }
   .card.keystone-card:hover, .card.keystone-card:active {
-    border-color: #ffb4ba;
-    box-shadow: 0 0 36px rgba(255, 91, 110, 0.3), 0 12px 32px rgba(0,0,0,0.5);
+    border-color: var(--vermilion-deep);
+    box-shadow: 0 6px 0 rgba(122, 29, 24, 0.4), 0 0 36px rgba(182, 51, 42, 0.25), 0 12px 32px rgba(0,0,0,0.25);
   }
 
   .card .card-tag {
@@ -339,7 +382,7 @@
     font-family: 'Cinzel', serif;
     font-size: 17px;
     font-weight: 700;
-    color: var(--ink-bright);
+    color: var(--ink);
     margin-bottom: 8px;
     letter-spacing: 0.05em;
   }
@@ -357,42 +400,42 @@
     letter-spacing: 0.1em;
   }
 
-  /* Skip / minor button */
+  /* Buttons on vellum: ghost is a thin-ink outline; primary is a wax
+     stamp in vermilion + gold rim. */
   .btn-ghost {
     background: transparent;
-    color: var(--ink-dim);
-    border: 1px solid rgba(110, 104, 144, 0.3);
+    color: var(--ink-mid);
+    border: 1px solid rgba(29, 21, 12, 0.45);
     padding: 10px 22px;
     font-family: 'Cinzel', serif;
     font-size: 11px;
     letter-spacing: 0.25em;
     text-transform: uppercase;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: 1px;
     transition: all 0.15s ease;
   }
-  .btn-ghost:hover { color: var(--ink-bright); border-color: var(--ink-mid); }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink); background: rgba(29,21,12,0.05); }
 
   .btn-primary {
-    background: linear-gradient(180deg, var(--gold), #c89858);
-    color: var(--bg-void);
-    border: none;
+    background: linear-gradient(180deg, var(--vermilion), var(--vermilion-deep));
+    color: var(--paper-soft);
+    border: 1px solid var(--ink);
     padding: 14px 36px;
     font-family: 'Cinzel', serif;
     font-size: 13px;
     letter-spacing: 0.3em;
     text-transform: uppercase;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: 1px;
     font-weight: 700;
-    transition: transform 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 3px 0 rgba(29, 21, 12, 0.35), inset 0 1px 0 rgba(255, 220, 200, 0.25);
   }
-  .btn-primary:hover { transform: translateY(-2px); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 0 rgba(29, 21, 12, 0.4), inset 0 1px 0 rgba(255, 220, 200, 0.3); }
 
-  /* Fusion-ready toast — fires the moment a recipe becomes craftable.
-     z-index sits ABOVE the skill tree modal (which is 100) so spending
-     a point that unlocks a fusion immediately announces it on top of
-     whatever overlay is open. */
+  /* Fusion-ready toast — a gilt notice slid down from the top of the
+     vellum. Vermilion seal-ribbon along the top edge, gold border. */
   #fusion-toast {
     position: fixed;
     top: 14%;
@@ -401,11 +444,12 @@
     pointer-events: none;
     z-index: 200;
     opacity: 0;
-    background: linear-gradient(180deg, rgba(232, 184, 64, 0.18), rgba(20, 18, 42, 0.88));
-    border: 1px solid rgba(232, 184, 64, 0.7);
-    box-shadow: 0 0 28px rgba(232, 184, 64, 0.25);
+    background: linear-gradient(180deg, rgba(244, 233, 203, 0.98), rgba(225, 210, 174, 0.98));
+    border: 1px solid var(--ink);
+    border-top: 3px solid var(--gold);
+    box-shadow: 0 4px 0 rgba(29, 21, 12, 0.25), 0 0 28px rgba(212, 169, 74, 0.35);
     padding: 10px 22px;
-    border-radius: 2px;
+    border-radius: 1px;
     text-align: center;
     min-width: 240px;
   }
@@ -422,8 +466,7 @@
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.18em;
-    color: var(--ink-bright);
-    text-shadow: 0 0 18px rgba(232, 184, 64, 0.5);
+    color: var(--ink);
     margin-top: 4px;
   }
   #fusion-toast .ft-recipe {
@@ -452,20 +495,28 @@
   #wave-banner.show {
     animation: bannerShow 2.4s ease-out forwards;
   }
+  /* Wave banner — a chiseled woodcut numeral; the canvas painted scene
+     shows through behind it (overlay shroud is paper, but for in-flight
+     wave banner we want the gameplay still visible). */
   #wave-banner .wave-num {
     font-family: 'Cinzel', serif;
     font-size: clamp(40px, 9vw, 88px);
     font-weight: 700;
     letter-spacing: 0.3em;
-    color: var(--ink-bright);
-    text-shadow: 0 0 32px rgba(160, 124, 255, 0.5);
+    color: var(--paper-soft);
+    text-shadow:
+      0 0 0 var(--ink),
+      2px 2px 0 var(--vermilion-deep),
+      4px 4px 12px rgba(0, 0, 0, 0.6);
+    -webkit-text-stroke: 1px var(--ink);
   }
   #wave-banner .wave-label {
     font-family: 'Cinzel', serif;
     font-size: 11px;
     letter-spacing: 0.5em;
-    color: var(--ink-mid);
+    color: var(--paper-soft);
     text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.7);
   }
 
   @keyframes bannerShow {
@@ -481,40 +532,40 @@
     margin-bottom: 22px;
     flex-wrap: wrap;
   }
+  /* Tree state pills — thin ink badges on vellum. Each tree's accent
+     color tints the border + label; text stays ink for legibility. */
   .tree-pill {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     padding: 5px 10px;
-    border: 1px solid;
-    border-radius: 2px;
+    border: 1px solid var(--ink);
+    border-radius: 1px;
     letter-spacing: 0.1em;
+    background: rgba(244, 233, 203, 0.7);
+    color: var(--ink);
   }
-  .tree-pill.gravity { color: var(--grav); border-color: rgba(160, 124, 255, 0.4); }
-  .tree-pill.electricity { color: var(--elec); border-color: rgba(90, 229, 255, 0.4); }
-  .tree-pill.fire { color: var(--fire); border-color: rgba(255, 122, 58, 0.45); }
-  .tree-pill.frost { color: var(--frost); border-color: rgba(154, 240, 230, 0.4); }
-  .tree-pill.vigil { color: var(--gold); border-color: rgba(240, 198, 116, 0.45); }
+  .tree-pill.gravity { box-shadow: inset 4px 0 0 var(--grav); }
+  .tree-pill.electricity { box-shadow: inset 4px 0 0 var(--elec); }
+  .tree-pill.fire { box-shadow: inset 4px 0 0 var(--fire); }
+  .tree-pill.frost { box-shadow: inset 4px 0 0 var(--frost); }
+  .tree-pill.vigil { box-shadow: inset 4px 0 0 var(--gold); }
 
-  /* Current-items bar: shows what's in your inventory on the item drop
-     screen so picking a new one isn't a surprise replacement. */
-  .current-items-bar {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 18px;
-  }
+  /* Current-items bar: a row of small parchment chits showing what's
+     equipped. Empty slots are dashed-edge blank parchment. */
   .current-item-slot {
     width: 110px;
     padding: 8px 10px;
-    background: rgba(20, 18, 42, 0.85);
-    border: 1px solid rgba(160, 124, 255, 0.25);
-    border-radius: 2px;
+    background: rgba(237, 225, 194, 0.85);
+    border: 1px solid var(--ink);
+    border-radius: 1px;
     text-align: left;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.18);
   }
   .current-item-slot.empty {
-    opacity: 0.4;
+    opacity: 0.55;
     border-style: dashed;
     text-align: center;
+    box-shadow: none;
   }
   .current-item-slot .ci-label {
     font-family: 'Cinzel', serif;
@@ -527,13 +578,13 @@
   .current-item-slot .ci-name {
     font-family: 'Cinzel', serif;
     font-size: 11px;
-    color: var(--ink-bright);
+    color: var(--ink);
     font-weight: 700;
     line-height: 1.2;
   }
   .current-item-slot .ci-icon {
     font-size: 16px;
-    color: var(--gold);
+    color: var(--vermilion);
     margin-right: 4px;
   }
   .current-item-slot.empty .ci-name {
@@ -542,18 +593,18 @@
     font-weight: 400;
   }
   .current-item-slot.replacing {
-    border-color: var(--crimson);
-    box-shadow: 0 0 10px rgba(180, 60, 90, 0.3);
+    border-color: var(--vermilion);
+    box-shadow: 0 2px 0 rgba(122, 29, 24, 0.35), 0 0 10px rgba(182, 51, 42, 0.25);
     animation: pulseReplacing 1.4s ease-in-out infinite;
   }
   @keyframes pulseReplacing {
-    0%, 100% { box-shadow: 0 0 10px rgba(180, 60, 90, 0.3); }
-    50%      { box-shadow: 0 0 14px rgba(180, 60, 90, 0.6); }
+    0%, 100% { box-shadow: 0 2px 0 rgba(122, 29, 24, 0.35), 0 0 10px rgba(182, 51, 42, 0.25); }
+    50%      { box-shadow: 0 2px 0 rgba(122, 29, 24, 0.4), 0 0 14px rgba(182, 51, 42, 0.5); }
   }
   .current-item-slot .ci-replace-tag {
     font-family: 'Cinzel', serif;
     font-size: 8px;
-    color: var(--crimson);
+    color: var(--vermilion);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     margin-top: 4px;
@@ -580,21 +631,25 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    background: linear-gradient(180deg, rgba(20, 18, 42, 0.96), rgba(10, 8, 5, 0.98));
+    /* Vellum codex page — with a faint horizontal rule pattern that
+       suggests written lines underneath. */
+    background:
+      linear-gradient(180deg, rgba(244, 233, 203, 0.99), rgba(225, 210, 174, 0.99)),
+      repeating-linear-gradient(0deg, rgba(29,21,12,0.03) 0 1px, transparent 1px 4px);
   }
 
   /* Top header — wave + points pill, tight */
   .tree-shell-header {
     padding: 10px 14px 8px;
     display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid rgba(160, 124, 255, 0.12);
+    border-bottom: 1px solid rgba(29, 21, 12, 0.35);
     flex-shrink: 0;
   }
   .tree-banner .tree-wave-label {
     font-family: 'Cinzel', serif;
     font-size: 10px;
     letter-spacing: 0.25em;
-    color: var(--gold);
+    color: var(--vermilion);
     text-transform: uppercase;
   }
   .tree-banner .tree-summary-line {
@@ -607,22 +662,22 @@
     display: flex;
     gap: 6px;
   }
+  /* Currency pills — inset wax-stamp on the codex header. */
   .tree-currency-pill {
-    border: 1px solid;
-    border-radius: 2px;
+    border: 1px solid var(--ink);
+    border-radius: 1px;
     padding: 4px 10px;
     text-align: center;
     min-width: 44px;
     display: flex; align-items: baseline; gap: 4px;
     line-height: 1.1;
+    background: rgba(255, 250, 230, 0.6);
   }
   .tree-currency-pill[data-currency="tp"] {
-    border-color: rgba(154, 240, 230, 0.5);
-    background: linear-gradient(180deg, rgba(154, 240, 230, 0.08), rgba(154, 240, 230, 0.02));
+    border-left: 4px solid var(--frost);
   }
   .tree-currency-pill[data-currency="sp"] {
-    border-color: rgba(240, 198, 116, 0.5);
-    background: linear-gradient(180deg, rgba(240, 198, 116, 0.12), rgba(240, 198, 116, 0.03));
+    border-left: 4px solid var(--gold);
   }
   .cp-label {
     font-family: 'Cinzel', serif;
@@ -631,27 +686,27 @@
     text-transform: uppercase;
     color: var(--ink-dim);
   }
-  .tree-currency-pill[data-currency="tp"] .cp-label { color: var(--frost); }
+  .tree-currency-pill[data-currency="tp"] .cp-label { color: var(--frost-deep); }
   .tree-currency-pill[data-currency="sp"] .cp-label { color: var(--gold); }
   .cp-value {
     font-family: 'JetBrains Mono', monospace;
     font-size: 16px;
     font-weight: 700;
+    color: var(--ink);
   }
-  .tree-currency-pill[data-currency="tp"] .cp-value { color: var(--frost); }
+  .tree-currency-pill[data-currency="tp"] .cp-value { color: var(--frost-deep); }
   .tree-currency-pill[data-currency="sp"] .cp-value { color: var(--gold); }
 
-  /* Icon tabs — 5 fit comfortably in any phone width.
-     Each tab shows the tree's accent color, a short label, and a
-     small count of points spent in that tree. */
+  /* Tree tabs — ink-on-vellum tabs with a colored seal underline. */
   .tree-tabs {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid rgba(160, 124, 255, 0.18);
+    border-bottom: 1px solid var(--ink);
     flex-shrink: 0;
+    background: rgba(229, 215, 178, 0.5);
   }
   .tree-tab {
-    flex: 1 1 0;        /* equal-width, no scroll, all 5 visible */
+    flex: 1 1 0;
     min-width: 0;
     background: transparent;
     border: none;
@@ -667,18 +722,18 @@
     transition: color 0.15s, border-color 0.15s, background 0.15s;
     text-align: center;
   }
-  .tree-tab:hover { color: var(--ink-mid); }
+  .tree-tab:hover { color: var(--ink-mid); background: rgba(255, 250, 230, 0.4); }
   .tree-tab.active {
-    color: var(--ink-bright);
-    border-bottom-color: var(--accent, var(--gold));
-    background: rgba(255, 255, 255, 0.03);
+    color: var(--ink);
+    border-bottom-color: var(--accent, var(--vermilion));
+    background: rgba(255, 250, 230, 0.85);
   }
   .tree-tab[data-tab="gravity"]      { --accent: var(--grav); }
   .tree-tab[data-tab="electricity"]  { --accent: var(--elec); }
-  .tree-tab[data-tab="fire"]         { --accent: var(--fire); }
+  .tree-tab[data-tab="fire"]         { --accent: var(--vermilion); }
   .tree-tab[data-tab="frost"]        { --accent: var(--frost); }
   .tree-tab[data-tab="vigil"]        { --accent: var(--gold); }
-  .tree-tab[data-tab="steel"]        { --accent: var(--crimson); }
+  .tree-tab[data-tab="steel"]        { --accent: var(--vermilion); }
   .tree-tab[data-tab="shadow"]       { --accent: var(--grav); }
   .tree-tab .tab-icon {
     display: block;
@@ -686,7 +741,7 @@
     margin-bottom: 2px;
     color: var(--accent, var(--ink-mid));
   }
-  .tree-tab.active .tab-icon { filter: drop-shadow(0 0 4px var(--accent, var(--gold))); }
+  .tree-tab.active .tab-icon { filter: none; text-shadow: 0 1px 0 rgba(255, 250, 230, 0.5); }
   .tree-tab .tab-name {
     display: block;
     font-size: 9px;
@@ -697,8 +752,8 @@
     top: 4px; right: 6px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
-    color: var(--accent, var(--gold));
-    background: rgba(0, 0, 0, 0.6);
+    color: var(--paper-soft);
+    background: var(--ink);
     border-radius: 8px;
     padding: 0 4px;
     line-height: 1.4;
@@ -721,17 +776,17 @@
   .atlas-intro {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--ink-dim);
+    color: var(--ink-mid);
     line-height: 1.45;
     padding: 6px 8px 12px;
     text-align: center;
-    border-bottom: 1px dashed rgba(110, 104, 144, 0.18);
+    border-bottom: 1px dashed rgba(29, 21, 12, 0.25);
     margin-bottom: 10px;
   }
   .atlas-section {
     margin-bottom: 18px;
     padding-bottom: 12px;
-    border-bottom: 1px dashed rgba(110, 104, 144, 0.18);
+    border-bottom: 1px dashed rgba(29, 21, 12, 0.25);
   }
   .atlas-section:last-child { border-bottom: none; }
   .atlas-section-header {
@@ -743,29 +798,30 @@
   }
   .atlas-section[data-tree-id="gravity"]     { --node-accent: var(--grav); }
   .atlas-section[data-tree-id="electricity"] { --node-accent: var(--elec); }
-  .atlas-section[data-tree-id="fire"]        { --node-accent: var(--fire); }
+  .atlas-section[data-tree-id="fire"]        { --node-accent: var(--vermilion); }
   .atlas-section[data-tree-id="frost"]       { --node-accent: var(--frost); }
   .atlas-section[data-tree-id="vigil"]       { --node-accent: var(--gold); }
-  .atlas-section[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .atlas-section[data-tree-id="steel"]       { --node-accent: var(--vermilion); }
   .atlas-section[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .atlas-tree-icon {
     font-size: 18px;
-    color: var(--node-accent, var(--gold));
-    filter: drop-shadow(0 0 6px var(--node-accent, var(--gold)));
+    color: var(--node-accent, var(--vermilion));
+    text-shadow: 0 1px 0 rgba(255, 250, 230, 0.4);
   }
   .atlas-tree-name {
     font-family: 'Cinzel', serif;
     font-size: 12px;
     letter-spacing: 0.2em;
-    color: var(--ink-bright);
+    color: var(--ink);
     text-transform: uppercase;
     flex: 1 1 auto;
   }
   .atlas-tree-points {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--node-accent, var(--gold));
+    color: var(--node-accent, var(--vermilion));
     letter-spacing: 0.06em;
+    font-weight: 700;
   }
   /* SVG container — wrapped in a horizontal scroller so wide trees stay
      readable on phones instead of cramming all nodes into 320px. */
@@ -803,78 +859,79 @@
   .atlas-node.eligible .atlas-node-name-html,
   .atlas-node.taken .atlas-node-name-html,
   .atlas-node.taken-full .atlas-node-name-html {
-    color: var(--ink-bright);
+    color: var(--ink);
   }
-  .atlas-node.locked .atlas-node-name-html { color: var(--ink-dim); }
-  /* Prereq lines — dim by default, lit when the prereq is taken. */
+  .atlas-node.locked .atlas-node-name-html { color: var(--ink-dim); opacity: 0.6; }
+  /* Prereq lines — dim ink hatching by default, lit accent when taken. */
   .atlas-line {
-    stroke: rgba(110, 104, 144, 0.30);
+    stroke: rgba(29, 21, 12, 0.30);
     stroke-width: 1.2;
     fill: none;
   }
   .atlas-line.lit {
-    stroke: var(--node-accent, var(--gold));
-    stroke-opacity: 0.7;
-    stroke-width: 1.6;
+    stroke: var(--node-accent, var(--vermilion));
+    stroke-opacity: 0.85;
+    stroke-width: 1.8;
   }
-  /* Mutex line — bright dashed crimson between locked-keystone pairs. */
+  /* Mutex line — vermilion dashed between locked-keystone pairs. */
   .atlas-mutex-line {
-    stroke: var(--crimson);
+    stroke: var(--vermilion);
     stroke-width: 1.4;
     stroke-dasharray: 3 3;
     fill: none;
     opacity: 0.85;
   }
-  /* Node base. Tap target slightly larger via stroke. */
+  /* Atlas nodes — vellum chits with ink stroke. Tree accent fills when
+     fully taken (a wax-stamp). */
   .atlas-node circle,
   .atlas-node rect {
-    fill: rgba(20, 18, 42, 0.92);
-    stroke: rgba(110, 104, 144, 0.5);
-    stroke-width: 1.5;
+    fill: rgba(255, 250, 230, 0.92);
+    stroke: var(--ink);
+    stroke-width: 1.2;
     cursor: pointer;
     transition: stroke 0.12s, stroke-width 0.12s, fill 0.12s;
   }
   .atlas-node.locked circle,
   .atlas-node.locked rect {
-    opacity: 0.55;
+    opacity: 0.45;
   }
   .atlas-node.eligible circle,
   .atlas-node.eligible rect {
-    stroke: var(--node-accent, var(--gold));
-    stroke-width: 2;
+    stroke: var(--node-accent, var(--vermilion));
+    stroke-width: 2.2;
+    fill: rgba(255, 250, 230, 0.98);
   }
   .atlas-node.taken circle,
   .atlas-node.taken rect {
-    fill: rgba(50, 38, 80, 0.92);
-    stroke: var(--node-accent, var(--gold));
-    stroke-width: 2.4;
+    fill: rgba(225, 210, 174, 0.95);
+    stroke: var(--node-accent, var(--vermilion));
+    stroke-width: 2.2;
   }
   .atlas-node.taken-full circle,
   .atlas-node.taken-full rect {
-    fill: var(--node-accent, var(--gold));
-    stroke: var(--gold);
-    stroke-width: 2.4;
+    fill: var(--node-accent, var(--vermilion));
+    stroke: var(--ink);
+    stroke-width: 1.8;
   }
   .atlas-node.mutex-locked circle,
   .atlas-node.mutex-locked rect {
-    stroke: var(--crimson);
-    stroke-width: 1.8;
-    opacity: 0.75;
+    stroke: var(--vermilion);
+    stroke-width: 1.6;
+    opacity: 0.7;
   }
   .atlas-node.unlock circle {
-    /* Spell unlocks slightly larger via inverse fill */
-    fill: rgba(20, 18, 42, 0.95);
+    fill: rgba(244, 233, 203, 0.95);
   }
   .atlas-node-label {
     text-anchor: middle;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    fill: var(--ink-bright);
+    fill: var(--ink);
     pointer-events: none;
     font-weight: 700;
   }
   .atlas-node.locked .atlas-node-label { fill: var(--ink-dim); }
-  .atlas-node.taken-full .atlas-node-label { fill: #1a1410; }
+  .atlas-node.taken-full .atlas-node-label { fill: var(--paper-soft); }
   .atlas-node-name {
     text-anchor: middle;
     font-family: 'Cinzel', serif;
@@ -886,26 +943,27 @@
   .atlas-node.eligible .atlas-node-name,
   .atlas-node.taken .atlas-node-name,
   .atlas-node.taken-full .atlas-node-name {
-    fill: var(--ink-bright);
+    fill: var(--ink);
   }
   /* Atlas tab gets a distinct icon color treatment */
-  .tree-tab.atlas-tab .tab-icon { color: var(--gold); }
-  .tree-tab.atlas-tab.active .tab-icon { filter: drop-shadow(0 0 4px var(--gold)); }
+  .tree-tab.atlas-tab .tab-icon { color: var(--vermilion); }
+  .tree-tab.atlas-tab.active .tab-icon { text-shadow: 0 1px 0 rgba(255, 250, 230, 0.5); }
 
   /* Spell groups — each spell + its talents. The unlock card is the
      header (full-width, prominent). Talents below are small chips. */
   .spell-group {
     margin-bottom: 14px;
     padding-bottom: 10px;
-    border-bottom: 1px dashed rgba(110, 104, 144, 0.15);
+    border-bottom: 1px dashed rgba(29, 21, 12, 0.18);
   }
   .spell-group:last-child { border-bottom: none; }
 
-  /* The spell unlock card — the "header" of each group */
+  /* The spell unlock card — a vellum strip with the spell's tree color
+     as a left-edge wax stripe. */
   .spell-unlock-card {
-    background: rgba(12, 10, 28, 0.7);
-    border: 1px solid rgba(110, 104, 144, 0.3);
-    border-left-width: 3px;
+    background: rgba(255, 250, 230, 0.85);
+    border: 1px solid var(--ink);
+    border-left-width: 4px;
     padding: 10px 12px;
     cursor: pointer;
     margin-bottom: 8px;
@@ -913,26 +971,26 @@
     justify-content: space-between;
     align-items: center;
     transition: background 0.12s, border-color 0.12s;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.18);
   }
   .spell-unlock-card:active { transform: translateY(1px); }
   .spell-unlock-card[data-tree-id="gravity"]     { --node-accent: var(--grav); }
   .spell-unlock-card[data-tree-id="electricity"] { --node-accent: var(--elec); }
-  .spell-unlock-card[data-tree-id="fire"]        { --node-accent: var(--fire); }
+  .spell-unlock-card[data-tree-id="fire"]        { --node-accent: var(--vermilion); }
   .spell-unlock-card[data-tree-id="frost"]       { --node-accent: var(--frost); }
-  .spell-unlock-card[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .spell-unlock-card[data-tree-id="steel"]       { --node-accent: var(--vermilion); }
   .spell-unlock-card[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .spell-unlock-card[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .spell-unlock-card.eligible,
   .spell-unlock-card.taken {
-    border-color: var(--node-accent);
     border-left-color: var(--node-accent);
   }
   .spell-unlock-card.taken {
-    background: linear-gradient(90deg, rgba(160, 124, 255, 0.14), rgba(8, 6, 16, 0.95));
+    background: linear-gradient(90deg, rgba(212, 169, 74, 0.18), rgba(255, 250, 230, 0.92));
   }
   .spell-unlock-card.unaffordable {
     border-style: dashed;
-    opacity: 0.65;
+    opacity: 0.6;
   }
   .spell-unlock-card.locked { opacity: 0.4; }
   .spell-unlock-card .spell-info {
@@ -950,7 +1008,7 @@
     font-family: 'Cinzel', serif;
     font-size: 14px;
     font-weight: 700;
-    color: var(--ink-bright);
+    color: var(--ink);
     letter-spacing: 0.04em;
   }
   .spell-unlock-card .spell-state {
@@ -959,24 +1017,25 @@
     color: var(--ink-dim);
     margin-top: 2px;
   }
-  .spell-unlock-card.eligible .spell-state { color: var(--gold); }
-  .spell-unlock-card.taken .spell-state    { color: var(--node-accent); }
+  .spell-unlock-card.eligible .spell-state { color: var(--vermilion); font-weight: 700; }
+  .spell-unlock-card.taken .spell-state    { color: var(--node-accent); font-weight: 700; }
   .spell-unlock-card .spell-cost-badge {
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
     font-weight: 700;
-    color: var(--node-accent);
-    border: 1px solid var(--node-accent);
-    border-radius: 2px;
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 1px;
     padding: 4px 8px;
     flex-shrink: 0;
     min-width: 36px;
     text-align: center;
+    background: rgba(244, 233, 203, 0.7);
   }
   .spell-unlock-card.taken .spell-cost-badge {
-    border-color: transparent;
     background: var(--node-accent);
-    color: var(--ink-bg);
+    color: var(--paper-soft);
+    border-color: var(--ink);
   }
   .spell-unlock-card.taken .spell-cost-badge::before { content: '✓'; }
   .spell-unlock-card.taken .spell-cost-badge .cost-num { display: none; }
@@ -991,10 +1050,11 @@
   .talents-locked-hint {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--ink-dim);
+    color: var(--ink-mid);
     padding: 6px 10px;
-    border-left: 2px solid rgba(110, 104, 144, 0.15);
+    border-left: 2px solid rgba(29, 21, 12, 0.25);
     margin-left: 4px;
+    font-style: italic;
   }
   /* Each tier row centers its chips horizontally so connectors line up. */
   .talent-tier-row {
@@ -1015,66 +1075,67 @@
     width: 2px;
     height: 12px;
     background: linear-gradient(180deg,
-      var(--node-accent, rgba(110, 104, 144, 0.5)),
-      rgba(110, 104, 144, 0.2));
+      var(--node-accent, rgba(29, 21, 12, 0.5)),
+      rgba(29, 21, 12, 0.15));
     margin: 0 auto;
-    opacity: 0.6;
+    opacity: 0.7;
   }
-  /* Inherit color from spell group container */
+  /* Connector inheriting tree color */
   .spell-talents .talent-tier-connector {
     background: linear-gradient(180deg,
-      rgba(160, 124, 255, 0.5),
-      rgba(110, 104, 144, 0.15));
+      rgba(29, 21, 12, 0.45),
+      rgba(29, 21, 12, 0.10));
   }
+  /* Talent chip — small ink-bordered tile on vellum. Taken chips fill
+     with the tree accent (a wax stamp); partial chips show a half-fill. */
   .talent-chip {
-    background: rgba(12, 10, 28, 0.7);
-    border: 1px solid rgba(110, 104, 144, 0.3);
+    background: rgba(255, 250, 230, 0.78);
+    border: 1px solid var(--ink);
     padding: 6px 10px;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: 1px;
     font-family: 'Cinzel', serif;
     font-size: 11px;
-    color: var(--ink-mid);
+    color: var(--ink);
     letter-spacing: 0.04em;
     display: flex; align-items: center; gap: 6px;
     transition: background 0.12s, border-color 0.12s, transform 0.12s;
     min-height: 32px;
+    box-shadow: 0 1px 0 rgba(29, 21, 12, 0.15);
   }
-  .talent-chip:active { transform: translateY(1px); }
+  .talent-chip:active { transform: translateY(1px); box-shadow: none; }
   .talent-chip[data-tree-id="gravity"]     { --node-accent: var(--grav); }
   .talent-chip[data-tree-id="electricity"] { --node-accent: var(--elec); }
-  .talent-chip[data-tree-id="fire"]        { --node-accent: var(--fire); }
+  .talent-chip[data-tree-id="fire"]        { --node-accent: var(--vermilion); }
   .talent-chip[data-tree-id="frost"]       { --node-accent: var(--frost); }
-  .talent-chip[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .talent-chip[data-tree-id="steel"]       { --node-accent: var(--vermilion); }
   .talent-chip[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .talent-chip[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .talent-chip.eligible {
     border-color: var(--node-accent);
-    color: var(--ink-bright);
-    box-shadow: 0 0 6px rgba(240, 198, 116, 0.15);
+    border-width: 2px;
+    color: var(--ink);
+    box-shadow: 0 1px 0 rgba(29, 21, 12, 0.2), inset 0 0 0 1px rgba(255, 250, 230, 0.5);
   }
-  /* Partial: at least one rank taken, more available — looks like a
-     mix of taken and eligible to signal "you've started this, can deepen" */
   .talent-chip.partial {
     border-color: var(--node-accent);
-    color: var(--ink-bright);
+    color: var(--ink);
     background: linear-gradient(90deg,
-      rgba(160, 124, 255, 0.20) 0%,
-      rgba(12, 10, 28, 0.7) 100%);
-    box-shadow: 0 0 6px rgba(240, 198, 116, 0.15);
+      color-mix(in srgb, var(--node-accent) 28%, var(--paper)) 0%,
+      rgba(255, 250, 230, 0.85) 100%);
   }
   .talent-chip.taken {
     background: var(--node-accent);
-    color: var(--ink-bg);
-    border-color: var(--node-accent);
+    color: var(--paper-soft);
+    border-color: var(--ink);
     font-weight: 700;
   }
   .talent-chip.taken::before { content: '✓ '; font-size: 11px; }
   .talent-chip.unaffordable {
     border-style: dashed;
-    opacity: 0.6;
+    opacity: 0.55;
   }
-  .talent-chip.locked { opacity: 0.35; }
+  .talent-chip.locked { opacity: 0.32; }
   .talent-chip.keystone {
     border-width: 2px;
     font-weight: 700;
@@ -1093,31 +1154,33 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     font-weight: 700;
-    color: var(--node-accent);
-    background: rgba(0, 0, 0, 0.4);
-    padding: 1px 5px;
+    color: var(--ink);
+    background: rgba(255, 250, 230, 0.85);
+    border: 1px solid var(--ink);
+    padding: 0 5px;
     border-radius: 8px;
     margin-left: 4px;
     line-height: 1.4;
   }
   .talent-chip.taken .chip-rank {
-    color: var(--ink-bg);
-    background: rgba(0, 0, 0, 0.2);
+    color: var(--paper-soft);
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 250, 230, 0.4);
   }
   .talent-chip.partial .chip-rank,
-  .talent-chip.eligible .chip-rank { color: var(--gold); }
+  .talent-chip.eligible .chip-rank { color: var(--ink); border-color: var(--ink); }
 
   /* "Passives" section at the bottom (Vigil tree, CDR nodes) */
   .tree-passives-section {
     margin-top: 8px;
     padding-top: 10px;
-    border-top: 1px solid rgba(110, 104, 144, 0.2);
+    border-top: 1px solid rgba(29, 21, 12, 0.25);
   }
   .tree-section-label {
     font-family: 'Cinzel', serif;
     font-size: 10px;
     letter-spacing: 0.3em;
-    color: var(--ink-dim);
+    color: var(--ink-mid);
     text-transform: uppercase;
     margin-bottom: 8px;
   }
@@ -1127,8 +1190,9 @@
   .tree-footer {
     flex-shrink: 0;
     padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(160, 124, 255, 0.12);
-    background: rgba(6, 4, 8, 0.92);
+    border-top: 1px solid var(--ink);
+    background: rgba(225, 210, 174, 0.95);
+    box-shadow: 0 -2px 0 rgba(29, 21, 12, 0.06);
   }
   .tree-footer .btn-primary {
     width: 100%;
@@ -1141,19 +1205,20 @@
     gap: 6px;
     margin-bottom: 8px;
   }
+  /* Tree fusion-ready card — illuminated manuscript flourish. */
   .tree-fusion-card {
-    background: linear-gradient(180deg, rgba(240, 198, 116, 0.20), rgba(20, 18, 42, 0.95));
-    border: 1.5px solid rgba(240, 198, 116, 0.85);
+    background: linear-gradient(180deg, rgba(212, 169, 74, 0.28), rgba(244, 233, 203, 0.98));
+    border: 1.5px solid var(--gold);
     padding: 12px 14px;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: 1px;
     position: relative;
-    box-shadow: 0 0 18px rgba(240, 198, 116, 0.18);
+    box-shadow: 0 2px 0 rgba(122, 90, 30, 0.4), 0 0 18px rgba(212, 169, 74, 0.32);
     animation: treeFusionPulse 2.4s ease-in-out infinite;
   }
   @keyframes treeFusionPulse {
-    0%, 100% { box-shadow: 0 0 14px rgba(240, 198, 116, 0.18); }
-    50%      { box-shadow: 0 0 26px rgba(240, 198, 116, 0.45); }
+    0%, 100% { box-shadow: 0 2px 0 rgba(122, 90, 30, 0.4), 0 0 14px rgba(212, 169, 74, 0.28); }
+    50%      { box-shadow: 0 2px 0 rgba(122, 90, 30, 0.5), 0 0 26px rgba(212, 169, 74, 0.6); }
   }
   .tree-fusion-card:hover { transform: translateY(-1px); }
   .tree-fusion-card .fusion-tag {
@@ -1167,7 +1232,7 @@
   .tree-fusion-card .fusion-card-name {
     font-family: 'Cinzel', serif;
     font-size: 15px;
-    color: var(--ink-bright);
+    color: var(--ink);
     font-weight: 700;
     margin-top: 3px;
     letter-spacing: 0.06em;
@@ -1186,15 +1251,16 @@
     font-family: 'Cinzel', serif;
     font-size: 9px;
     letter-spacing: 0.3em;
-    color: var(--gold);
+    color: var(--vermilion);
     text-transform: uppercase;
     margin-top: 6px;
     text-align: right;
+    font-weight: 700;
   }
   .tree-fusion-card .fusion-card-effect {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--ink-bright);
+    color: var(--ink);
     margin-top: 6px;
     line-height: 1.4;
     opacity: 0.85;
@@ -1219,9 +1285,9 @@
     letter-spacing: 0.05em;
   }
   .tree-fusion-card.locked {
-    background: linear-gradient(180deg, rgba(110, 104, 144, 0.10), rgba(20, 18, 42, 0.95));
-    border-color: rgba(110, 104, 144, 0.55);
-    box-shadow: none;
+    background: linear-gradient(180deg, rgba(29, 21, 12, 0.05), rgba(244, 233, 203, 0.85));
+    border-color: rgba(29, 21, 12, 0.45);
+    box-shadow: 0 1px 0 rgba(29, 21, 12, 0.1);
     cursor: not-allowed;
     animation: none;
     opacity: 0.86;
@@ -1247,82 +1313,89 @@
   .node-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(29, 21, 12, 0.5);
     backdrop-filter: blur(2px);
     cursor: pointer;
   }
   .node-modal-card {
     position: relative;
-    background: linear-gradient(180deg, rgba(20, 18, 42, 0.98), rgba(10, 8, 5, 0.99));
-    border: 1px solid var(--node-accent, var(--gold));
-    border-left-width: 3px;
+    background: var(--paper);
+    background-image:
+      radial-gradient(1px 1px at 18% 32%, rgba(122, 90, 30, 0.07) 1px, transparent 1px),
+      radial-gradient(1px 1px at 78% 68%, rgba(122, 90, 30, 0.05) 1px, transparent 1px);
+    border: 1.5px solid var(--ink);
+    border-left: 4px solid var(--node-accent, var(--ink));
     padding: 18px 18px 14px;
     max-width: 360px;
     width: 100%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(240, 198, 116, 0.12);
-    border-radius: 2px;
+    box-shadow: 0 8px 0 rgba(29, 21, 12, 0.18), 0 12px 32px rgba(29, 21, 12, 0.4);
+    border-radius: 1px;
   }
   .node-modal-card[data-tree-id="gravity"]     { --node-accent: var(--grav); }
   .node-modal-card[data-tree-id="electricity"] { --node-accent: var(--elec); }
-  .node-modal-card[data-tree-id="fire"]        { --node-accent: var(--fire); }
+  .node-modal-card[data-tree-id="fire"]        { --node-accent: var(--vermilion); }
   .node-modal-card[data-tree-id="frost"]       { --node-accent: var(--frost); }
-  .node-modal-card[data-tree-id="steel"]       { --node-accent: var(--crimson); }
+  .node-modal-card[data-tree-id="steel"]       { --node-accent: var(--vermilion); }
   .node-modal-card[data-tree-id="shadow"]      { --node-accent: var(--grav); }
   .node-modal-card[data-tree-id="vigil"]       { --node-accent: var(--gold); }
   .modal-tag {
     font-family: 'Cinzel', serif;
     font-size: 9px;
     letter-spacing: 0.3em;
-    color: var(--node-accent, var(--gold));
+    color: var(--node-accent, var(--ink-mid));
     text-transform: uppercase;
     margin-bottom: 4px;
+    font-weight: 700;
   }
   .modal-name {
     font-family: 'Cinzel', serif;
     font-size: 18px;
     font-weight: 700;
-    color: var(--ink-bright);
+    color: var(--ink);
     letter-spacing: 0.04em;
     margin-bottom: 8px;
   }
   .modal-desc {
     font-family: 'Spectral', serif;
     font-size: 13px;
-    color: var(--ink-mid);
+    color: var(--ink);
     line-height: 1.5;
     margin-bottom: 12px;
   }
-  .modal-desc-base { margin-bottom: 6px; }
+  .modal-desc-base { margin-bottom: 6px; color: var(--ink-mid); }
   .modal-effect-line {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    padding: 3px 8px;
+    padding: 4px 8px;
     margin-top: 4px;
     border-left: 2px solid transparent;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(244, 233, 203, 0.6);
+    color: var(--ink);
   }
   .modal-effect-line.current {
-    color: var(--node-accent, var(--gold));
-    border-left-color: var(--node-accent, var(--gold));
-    opacity: 0.85;
+    border-left-color: var(--node-accent, var(--ink));
+    color: var(--ink-mid);
   }
   .modal-effect-line.next {
-    color: var(--gold);
-    border-left-color: rgba(240, 198, 116, 0.6);
+    color: var(--ink);
+    font-weight: 700;
+    border-left-color: var(--gold);
+    background: rgba(212, 169, 74, 0.18);
   }
   .modal-state {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     padding: 6px 10px;
-    border-radius: 2px;
+    border-radius: 1px;
     margin-bottom: 12px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(244, 233, 203, 0.7);
     color: var(--ink-mid);
+    border-left: 2px solid rgba(29, 21, 12, 0.3);
   }
-  .modal-state.eligible    { color: var(--gold); border-left: 2px solid var(--gold); }
-  .modal-state.unaffordable { color: var(--ink-mid); border-left: 2px solid rgba(110, 104, 144, 0.5); }
-  .modal-state.locked      { color: var(--crimson); border-left: 2px solid var(--crimson); }
-  .modal-state.taken       { color: var(--node-accent, var(--gold)); border-left: 2px solid var(--node-accent, var(--gold)); }
+  .modal-state.eligible    { color: var(--vermilion); border-left-color: var(--vermilion); font-weight: 700; }
+  .modal-state.unaffordable { color: var(--ink-mid); border-left-color: rgba(29, 21, 12, 0.4); }
+  .modal-state.locked      { color: var(--vermilion); border-left-color: var(--vermilion); opacity: 0.7; }
+  .modal-state.taken       { color: var(--node-accent, var(--ink)); border-left-color: var(--node-accent, var(--ink)); font-weight: 700; }
   .modal-actions {
     display: flex; gap: 8px;
   }
@@ -1343,14 +1416,15 @@
     position: absolute;
     bottom: 100%; left: 50%;
     transform: translateX(-50%) translateY(-8px);
-    background: var(--bg-deep);
-    border: 1px solid rgba(160, 124, 255, 0.3);
+    background: var(--paper);
+    border: 1px solid var(--ink);
     padding: 8px 12px;
     font-family: 'Spectral', serif;
     font-size: 12px;
-    color: var(--ink-bright);
+    color: var(--ink);
     white-space: nowrap;
     pointer-events: none;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.2);
   }
 
   /* Game-over flourishes */
@@ -1367,10 +1441,10 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     padding: 6px 12px;
-    border-bottom: 1px solid rgba(110, 104, 144, 0.18);
+    border-bottom: 1px solid rgba(29, 21, 12, 0.2);
   }
-  #gameover-stats .stat-row .k { color: var(--ink-dim); letter-spacing: 0.08em; }
-  #gameover-stats .stat-row .v { color: var(--ink-bright); }
+  #gameover-stats .stat-row .k { color: var(--ink-mid); letter-spacing: 0.08em; }
+  #gameover-stats .stat-row .v { color: var(--ink); font-weight: 700; }
 
   /* Mobile */
   @media (max-width: 600px) {
@@ -7126,45 +7200,102 @@ const UI = {
     // Anything still unresolved (cyclic / orphan) gets parked at tier 0.
     for (const n of nodes) if (tier[n.id] === undefined) tier[n.id] = 0;
 
-    // 2. Group by tier and sort each tier deterministically.
-    const byTier = {};
-    let maxTier = 0;
+    // 2. Tidy-tree layout — each node's structural parent is the FIRST
+    //    of its `requires`. Children sit directly under their parent so
+    //    siblings don't get scattered alphabetically across the screen
+    //    with crossing lines. Secondary requires still draw lines but
+    //    they're rare; at least the spine of each path is clean.
+    const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+    const primaryParent = {};
+    const childrenOf = {};
     for (const n of nodes) {
-      const t = tier[n.id];
-      (byTier[t] ||= []).push(n);
-      if (t > maxTier) maxTier = t;
+      const reqs = n.requires || [];
+      // Pick the first known requirement as the structural parent.
+      const parent = reqs.find(r => nodeMap[r]);
+      primaryParent[n.id] = parent || null;
+      if (parent) (childrenOf[parent] ||= []).push(n);
     }
-    for (const t of Object.keys(byTier)) {
-      byTier[t].sort((a, b) => {
-        // Keystones cluster to the right; otherwise alphabetical.
+
+    // Sort children consistently: keystones flank to the right, then
+    // group by type so unlocks come before talents come before passives.
+    const orderKey = (n) =>
+      n.type === 'unlock_spell' ? 0 :
+      n.type === 'keystone'     ? 3 :
+      n.type === 'global_mod'   ? 2 : 1;
+    for (const p in childrenOf) {
+      childrenOf[p].sort((a, b) => {
         if (!!a.keystone !== !!b.keystone) return a.keystone ? 1 : -1;
+        if (orderKey(a) !== orderKey(b)) return orderKey(a) - orderKey(b);
         return a.id.localeCompare(b.id);
       });
     }
 
-    // 3. Layout: fixed pixel coordinates by tier-row × index-in-tier.
-    // Each row's width adapts to node count so labels never overflow.
+    // Roots = nodes with no primary parent. These start the canopy.
+    const roots = nodes.filter(n => !primaryParent[n.id]).sort((a, b) => {
+      // Unlocks anchor each tree's section, then global passives, then
+      // anything else. Matches the reading order the player expects.
+      if (orderKey(a) !== orderKey(b)) return orderKey(a) - orderKey(b);
+      return a.id.localeCompare(b.id);
+    });
+
+    // Recursively assign cell x positions. Each subtree claims a width
+    // equal to max(1, sum of its children's widths), parent centered.
     const NODE_R = 14;
-    const NAME_H = 26;            // height reserved under each circle for names
+    const NAME_H = 26;
     const ROW_H = NODE_R * 2 + NAME_H + 18;
     const PAD_Y = 14;
-    // Cell width — minimum room each node gets so its name doesn't overlap
-    // the next node's name. Stretch SVG width to hold the widest tier.
-    const CELL_W = 70;
-    const widestTier = Math.max(...Object.values(byTier).map(r => r.length));
-    const W = Math.max(320, widestTier * CELL_W + 24);
-    const PAD_X = 12;
-    const positions = {};
-    for (let t = 0; t <= maxTier; t++) {
-      const row = byTier[t] || [];
-      const totalRowW = row.length * CELL_W;
-      const startX = (W - totalRowW) / 2 + CELL_W / 2;
-      for (let i = 0; i < row.length; i++) {
-        const cx = startX + i * CELL_W;
-        const cy = PAD_Y + t * ROW_H + NODE_R;
-        positions[row[i].id] = { cx, cy };
+    const CELL_W = 80;          // a touch wider so names breathe
+    const PAD_X = 14;
+    const xCell = {};
+    const visited = new Set();
+    function place(nodeId, leftCell) {
+      if (visited.has(nodeId)) return 0;
+      visited.add(nodeId);
+      const kids = childrenOf[nodeId] || [];
+      if (kids.length === 0) {
+        xCell[nodeId] = leftCell + 0.5;
+        return 1;
+      }
+      let cursor = leftCell;
+      let totalW = 0;
+      for (const k of kids) {
+        const w = place(k.id, cursor);
+        cursor += w; totalW += w;
+      }
+      // Center parent above its children's span. Fall back to 1-wide
+      // if all kids ended up cyclic / unvisited.
+      if (totalW === 0) {
+        xCell[nodeId] = leftCell + 0.5;
+        return 1;
+      }
+      const firstX = xCell[kids[0].id];
+      const lastX  = xCell[kids[kids.length - 1].id];
+      xCell[nodeId] = (firstX + lastX) / 2;
+      return totalW;
+    }
+    let cursor = 0;
+    for (const root of roots) {
+      const w = place(root.id, cursor);
+      cursor += w + 0.5;        // small gutter between top-level subtrees
+    }
+    // Anything still unplaced (cycles) gets parked at the right edge.
+    for (const n of nodes) {
+      if (xCell[n.id] === undefined) {
+        xCell[n.id] = cursor + 0.5;
+        cursor += 1;
       }
     }
+    const totalCells = Math.max(1, cursor);
+
+    const W = Math.max(320, totalCells * CELL_W + PAD_X * 2);
+    const positions = {};
+    for (const n of nodes) {
+      const cx = PAD_X + xCell[n.id] * CELL_W;
+      const cy = PAD_Y + tier[n.id] * ROW_H + NODE_R;
+      positions[n.id] = { cx, cy };
+    }
+    let maxTier = 0;
+    for (const n of nodes) if (tier[n.id] > maxTier) maxTier = tier[n.id];
     const H = PAD_Y * 2 + (maxTier + 1) * ROW_H;
 
     // 4. Build SVG.
