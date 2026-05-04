@@ -2341,7 +2341,7 @@ const SPELLS = {
           game.totalDamageDealt += dmg;
         }
       }
-      game.spawnExplosion(target.x, target.y, radius, '#ff3311');
+      game.spawnExplosion(target.x, target.y, radius, '#ff3311', 'pyroclasm');
       game.spawnHitParticles(target.x, target.y, '#ff5511', 30);
       game.addShake(0.6);
     },
@@ -2431,7 +2431,7 @@ const SPELLS = {
           applyStatus: mods.applyStatus,
           behavior: b,
           spellBaseDmg: baseDmg,
-          trail: 'frost',         // visual reuse — silvery streak
+          trail: 'steel',         // spinning shuriken w/ ink-streak afterimage
           spell: 'shuriken_toss',
         });
       }
@@ -2466,10 +2466,12 @@ const SPELLS = {
           if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
         }
       }
-      // Visual: an explosion at the target — colored as a dark slash arc.
-      game.spawnExplosion(target.x, target.y, radius, '#3a1a78');
+      // Visual: smoke puff at the caster's old position + slash at the
+      // target. Reads as "the ninja phased there and cut."
+      game.spawnExplosion(caster.x, caster.y, radius * 0.7, '#1a1612', 'smoke');
+      game.spawnExplosion(target.x, target.y, radius, '#1a1612', 'flicker');
       game.spawnHitParticles(target.x, target.y, '#c8c8d0', 14);
-      game.addShake(0.10);
+      game.addShake(0.14);
       // Phase Step: refunds Shuriken Toss CD on cast.
       if (b.refundShuriken) {
         for (const s of game.activeSpells) {
@@ -4544,6 +4546,7 @@ class Game {
   startRun(charId, pathTreeId = null, starterItemId = null) {
     const charDef = CHARACTERS[charId];
     this.player = new Player(charDef, this.cx, this.cy);
+    this.player.charId = charDef.id;
     this.playerState = {
       charDef,
       spells: [...charDef.startingSpells],
@@ -5603,34 +5606,153 @@ const Renderer = {
       oct.stroke();
     }
 
-    // Faint inscribed battle ring at world center (gilded ink)
+    // ===== INSCRIBED COMBAT ARENA =====
+    // A formal duelling ring drawn into the vellum. Concentric ink/red
+    // rings with cardinal gold sigils + corner cartouches frame the
+    // battlefield so the eye reads "this is the arena." Background only
+    // — purely decorative; no gameplay reads from it.
     const cxw = worldW / 2, cyw = worldH / 2;
-    oct.strokeStyle = 'rgba(168,58,44,0.18)';
+    const arenaR = Math.min(worldW, worldH) * 0.42;
+
+    // Outer parchment wash ring — pale ochre flooding behind the arena
+    const wash = oct.createRadialGradient(cxw, cyw, arenaR * 0.2, cxw, cyw, arenaR * 1.05);
+    wash.addColorStop(0, 'rgba(232,220,192,0.55)');
+    wash.addColorStop(0.7, 'rgba(232,220,192,0.18)');
+    wash.addColorStop(1, 'rgba(232,220,192,0)');
+    oct.fillStyle = wash;
+    oct.beginPath();
+    oct.arc(cxw, cyw, arenaR * 1.05, 0, TAU);
+    oct.fill();
+
+    // Outermost double ring — heavy ink stroke
+    oct.strokeStyle = 'rgba(26,22,18,0.55)';
+    oct.lineWidth = 1.6;
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR, 0, TAU); oct.stroke();
+    oct.lineWidth = 0.8;
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR - 6, 0, TAU); oct.stroke();
+
+    // Hatch the rim band between the two outer rings
+    oct.save();
+    oct.beginPath();
+    oct.arc(cxw, cyw, arenaR, 0, TAU);
+    oct.arc(cxw, cyw, arenaR - 6, 0, TAU);
+    oct.clip('evenodd');
+    hatch(oct, cxw, cyw, arenaR * 2.2, arenaR * 2.2, 4, Math.PI / 3.4, 'rgba(26,22,18,0.18)', 0.45);
+    oct.restore();
+
+    // Inner vermilion ring (the duelling line)
+    oct.strokeStyle = 'rgba(168,58,44,0.42)';
     oct.lineWidth = 1.2;
-    oct.beginPath();
-    oct.arc(cxw, cyw, 110, 0, TAU);
-    oct.stroke();
-    oct.strokeStyle = 'rgba(168,58,44,0.10)';
-    oct.setLineDash([6, 8]);
-    oct.beginPath();
-    oct.arc(cxw, cyw, 150, 0, TAU);
-    oct.stroke();
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR * 0.78, 0, TAU); oct.stroke();
+    oct.strokeStyle = 'rgba(168,58,44,0.18)';
+    oct.setLineDash([8, 10]);
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR * 0.78 + 8, 0, TAU); oct.stroke();
     oct.setLineDash([]);
 
-    // Corner hatching — light cross-hatch in each corner adds the manuscript feel.
-    const cornerR = Math.min(worldW, worldH) * 0.18;
+    // Innermost meditation ring — small gold circle at center
+    oct.strokeStyle = 'rgba(200,148,26,0.45)';
+    oct.lineWidth = 1.0;
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR * 0.20, 0, TAU); oct.stroke();
+    oct.strokeStyle = 'rgba(26,22,18,0.40)';
+    oct.lineWidth = 0.6;
+    oct.beginPath(); oct.arc(cxw, cyw, arenaR * 0.20 + 3, 0, TAU); oct.stroke();
+
+    // Center crosshair — fine ink ticks indicating cardinal directions
+    oct.strokeStyle = 'rgba(26,22,18,0.30)';
+    oct.lineWidth = 0.8;
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * TAU;
+      oct.beginPath();
+      oct.moveTo(cxw + Math.cos(a) * (arenaR * 0.12), cyw + Math.sin(a) * (arenaR * 0.12));
+      oct.lineTo(cxw + Math.cos(a) * (arenaR * 0.20), cyw + Math.sin(a) * (arenaR * 0.20));
+      oct.stroke();
+    }
+
+    // Cardinal gold sigils — rosette on the inner vermilion ring at N/E/S/W
+    const sigilR = arenaR * 0.78;
+    for (let i = 0; i < 4; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 2;
+      const sx = cxw + Math.cos(a) * sigilR;
+      const sy = cyw + Math.sin(a) * sigilR;
+      // Paper disc base
+      oct.fillStyle = PAL.paper;
+      oct.beginPath(); oct.arc(sx, sy, 8, 0, TAU); oct.fill();
+      oct.strokeStyle = 'rgba(26,22,18,0.65)';
+      oct.lineWidth = 1.0;
+      oct.stroke();
+      // Gold star sigil
+      oct.fillStyle = 'rgba(200,148,26,0.9)';
+      drawStarPath(oct, sx, sy, 4, 1.8, 8);
+      oct.fill();
+      oct.strokeStyle = 'rgba(26,22,18,0.55)';
+      oct.lineWidth = 0.6;
+      oct.stroke();
+    }
+
+    // Mid-ring chevron tick marks — eight gilt notches on the rim
+    for (let i = 0; i < 16; i++) {
+      const a = i / 16 * TAU;
+      const r1 = arenaR - 1, r2 = arenaR + 4;
+      oct.strokeStyle = i % 4 === 0 ? 'rgba(200,148,26,0.55)' : 'rgba(26,22,18,0.40)';
+      oct.lineWidth = i % 4 === 0 ? 1.2 : 0.7;
+      oct.beginPath();
+      oct.moveTo(cxw + Math.cos(a) * r1, cyw + Math.sin(a) * r1);
+      oct.lineTo(cxw + Math.cos(a) * r2, cyw + Math.sin(a) * r2);
+      oct.stroke();
+    }
+
+    // Corner cartouches — hatched triangular blocks framing the page
+    const cornerSize = Math.min(worldW, worldH) * 0.22;
     const corners = [
-      { x: 0, y: 0 }, { x: worldW, y: 0 },
-      { x: 0, y: worldH }, { x: worldW, y: worldH },
+      { x: 0, y: 0,           ax: 1,  ay: 1  },
+      { x: worldW, y: 0,      ax: -1, ay: 1  },
+      { x: 0, y: worldH,      ax: 1,  ay: -1 },
+      { x: worldW, y: worldH, ax: -1, ay: -1 },
     ];
     for (const c of corners) {
       oct.save();
+      // Hatched triangle in the corner
       oct.beginPath();
-      oct.arc(c.x, c.y, cornerR, 0, TAU);
+      oct.moveTo(c.x, c.y);
+      oct.lineTo(c.x + c.ax * cornerSize, c.y);
+      oct.lineTo(c.x, c.y + c.ay * cornerSize);
+      oct.closePath();
       oct.clip();
-      hatch(oct, c.x, c.y, cornerR * 2, cornerR * 2, 6, Math.PI / 3.4, 'rgba(60,40,20,0.05)', 0.4);
+      // Soft ochre wash inside
+      oct.fillStyle = 'rgba(212,180,120,0.18)';
+      oct.fillRect(c.x - cornerSize, c.y - cornerSize, cornerSize * 2, cornerSize * 2);
+      hatch(oct, c.x + c.ax * cornerSize * 0.4, c.y + c.ay * cornerSize * 0.4,
+            cornerSize * 1.4, cornerSize * 1.4, 5, Math.PI / 3.4,
+            'rgba(60,40,20,0.10)', 0.45);
       oct.restore();
+      // Gold hairline edge
+      oct.strokeStyle = 'rgba(200,148,26,0.55)';
+      oct.lineWidth = 0.9;
+      oct.beginPath();
+      oct.moveTo(c.x + c.ax * cornerSize, c.y);
+      oct.lineTo(c.x, c.y + c.ay * cornerSize);
+      oct.stroke();
+      // Ink hairline just inside the gold
+      oct.strokeStyle = 'rgba(26,22,18,0.40)';
+      oct.lineWidth = 0.5;
+      oct.beginPath();
+      oct.moveTo(c.x + c.ax * (cornerSize - 5), c.y);
+      oct.lineTo(c.x, c.y + c.ay * (cornerSize - 5));
+      oct.stroke();
+      // Tiny gold cartouche dot at the inner cap
+      oct.fillStyle = 'rgba(200,148,26,0.85)';
+      oct.beginPath();
+      oct.arc(c.x + c.ax * cornerSize * 0.5, c.y + c.ay * cornerSize * 0.5, 1.6, 0, TAU);
+      oct.fill();
     }
+
+    // Page border — single thin ink frame inset 8px from the canvas edge
+    oct.strokeStyle = 'rgba(26,22,18,0.35)';
+    oct.lineWidth = 0.8;
+    oct.strokeRect(8, 8, worldW - 16, worldH - 16);
+    oct.strokeStyle = 'rgba(26,22,18,0.18)';
+    oct.lineWidth = 0.5;
+    oct.strokeRect(14, 14, worldW - 28, worldH - 28);
 
     this.bgCache = oc;
   },
@@ -5803,6 +5925,7 @@ const Renderer = {
     const x = p.x, y = p.y + Math.sin(t * 1.5) * 1.5; // gentle bob
     const cast = p.castFlash > 0;
     const blink = p.iframes > 0 && Math.floor(t * 12) % 2 === 0;
+    const charId = p.charId || 'magician';
 
     // Cast sigil ring (replacement for the old soft-glow flash)
     if (cast) {
@@ -5824,6 +5947,11 @@ const Renderer = {
         ctx.fill();
       }
       ctx.restore();
+    }
+
+    if (charId === 'ninja') {
+      this.drawNinja(ctx, p, t, x, y, cast, blink);
+      return;
     }
 
     ctx.save();
@@ -5910,6 +6038,206 @@ const Renderer = {
     ctx.stroke();
     ctx.fillStyle = PAL.gold;
     ctx.beginPath(); ctx.arc(13.5, -17, 1.4, 0, TAU); ctx.fill();
+
+    ctx.restore();
+  },
+
+  /* ---- Player (Ninja) — hooded silhouette with mempo mask ----
+     Compact, low to the ground, twin sashes flowing behind. Focus stacks
+     orbit as wireframe shuriken. Cast pose = throwing arm extended with
+     vermilion ink-flick. */
+  drawNinja(ctx, p, t, x, y, cast, blink) {
+    // Focus stacks (Ninja signature) — wireframe shuriken orbiting the
+    // figure. Drawn UNDER the body so the silhouette stays readable.
+    const focus = p.focusStacks || 0;
+    const cap = p._focusCap || 5;
+    if (focus > 0) {
+      const baseR = 32;
+      for (let i = 0; i < focus; i++) {
+        const ang = (i / cap) * TAU + t * 1.6;
+        const ox = x + Math.cos(ang) * baseR;
+        const oy = y + Math.sin(ang) * baseR;
+        const spin = t * 6 + i * 1.2;
+        // Tiny shuriken silhouette — ink + vermilion accent
+        ctx.save();
+        ctx.translate(ox, oy);
+        ctx.rotate(spin);
+        ctx.fillStyle = PAL.ink;
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2;
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(a) * 4, Math.sin(a) * 4);
+          ctx.lineTo(Math.cos(a + 0.4) * 1.6, Math.sin(a + 0.4) * 1.6);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = PAL.red;
+        ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      // Faint indigo orbit trail
+      ctx.strokeStyle = `rgba(44,74,140,${0.18 + 0.10 * Math.sin(t * 3)})`;
+      ctx.lineWidth = 0.6;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.arc(x, y, 32, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Hatched shadow pad
+    ctx.save();
+    ctx.translate(0, 22);
+    ctx.scale(1, 0.32);
+    hatch(ctx, 0, 0, 26, 12, 1.4, 0, 'rgba(26,22,18,0.55)', 0.5);
+    ctx.restore();
+
+    // Twin trailing sashes — flowing ribbons behind the figure (animated)
+    const sashSway = Math.sin(t * 3) * 4;
+    const sashFill = blink ? 'rgba(168,58,44,0.30)' : PAL.red;
+    ctx.fillStyle = sashFill;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.8;
+    // Left sash
+    ctx.beginPath();
+    ctx.moveTo(-6, 6);
+    ctx.bezierCurveTo(-12, 10, -16 + sashSway * 0.3, 16, -14 + sashSway, 26);
+    ctx.bezierCurveTo(-10 + sashSway, 22, -8, 18, -4, 14);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Right sash (mirrored, opposite phase)
+    ctx.beginPath();
+    ctx.moveTo(6, 6);
+    ctx.bezierCurveTo(12, 10, 16 - sashSway * 0.3, 16, 14 - sashSway, 26);
+    ctx.bezierCurveTo(10 - sashSway, 22, 8, 18, 4, 14);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Body — compact crouched torso (trapezoid silhouette)
+    const bodyFill = blink ? PAL.paper2 : PAL.ink;
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-10, -6);
+    ctx.lineTo(10, -6);
+    ctx.lineTo(14, 18);
+    ctx.lineTo(-14, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Hatched volume on the right side of the body
+    if (!blink) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(10, -6);
+      ctx.lineTo(14, 18);
+      ctx.lineTo(0, 18);
+      ctx.closePath();
+      ctx.clip();
+      hatch(ctx, 6, 6, 24, 24, 2, Math.PI / 3.4, 'rgba(232,220,192,0.18)', 0.5);
+      ctx.restore();
+    }
+
+    // Vermilion belt sash across the waist
+    ctx.fillStyle = PAL.red;
+    ctx.fillRect(-12, 6, 24, 4);
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 0.6;
+    ctx.strokeRect(-12, 6, 24, 4);
+    // Belt knot — small ink square dead-center
+    ctx.fillStyle = PAL.ink;
+    ctx.fillRect(-1.5, 5, 3, 6);
+
+    // Two kunai stowed on the belt — small vermilion handles + ink blades
+    ctx.fillStyle = PAL.ink;
+    ctx.beginPath();
+    ctx.moveTo(-9, 10); ctx.lineTo(-7, 16); ctx.lineTo(-5, 16); ctx.lineTo(-7, 10); ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(9, 10); ctx.lineTo(7, 16); ctx.lineTo(5, 16); ctx.lineTo(7, 10); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = PAL.red;
+    ctx.fillRect(-8.5, 9, 2.5, 1.5);
+    ctx.fillRect(6, 9, 2.5, 1.5);
+
+    // Throwing arm — slightly extended when casting
+    const armExt = cast ? 1 : 0;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(8, -2);
+    ctx.lineTo(14 + armExt * 6, -8 - armExt * 4);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // Hand wrap (paper) at the end
+    ctx.fillStyle = PAL.paper;
+    ctx.beginPath();
+    ctx.arc(14 + armExt * 6, -8 - armExt * 4, 1.8, 0, TAU);
+    ctx.fill();
+
+    // Hood — pointed cowl over the head
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-12, -6);
+    ctx.bezierCurveTo(-12, -22, -2, -28, 0, -30);
+    ctx.bezierCurveTo(2, -28, 12, -22, 12, -6);
+    ctx.lineTo(8, -4);
+    ctx.bezierCurveTo(8, -18, -8, -18, -8, -4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Hatched shading on hood right side
+    if (!blink) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, -28);
+      ctx.bezierCurveTo(2, -28, 12, -22, 12, -6);
+      ctx.lineTo(8, -4);
+      ctx.bezierCurveTo(8, -18, 0, -18, 0, -4);
+      ctx.closePath();
+      ctx.clip();
+      hatch(ctx, 4, -16, 18, 24, 2, Math.PI / 3.4, 'rgba(232,220,192,0.16)', 0.5);
+      ctx.restore();
+    }
+
+    // Mempo mask — pale paper face inside the hood
+    ctx.fillStyle = PAL.paper;
+    ctx.beginPath();
+    ctx.ellipse(0, -14, 5.5, 6.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+
+    // Vermilion eye-band across the mask — the ninja's "stare"
+    ctx.fillStyle = cast ? PAL.redLight : PAL.red;
+    ctx.fillRect(-5, -15, 10, 2.5);
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(-5, -15, 10, 2.5);
+    // Two ink slit eyes inside the band
+    ctx.fillStyle = PAL.ink;
+    ctx.fillRect(-3, -14.4, 1.4, 1.0);
+    ctx.fillRect(1.6, -14.4, 1.4, 1.0);
+
+    // Cast spark — vermilion fleck off the throwing hand
+    if (cast) {
+      ctx.fillStyle = PAL.red;
+      const sx = 14 + armExt * 6;
+      const sy = -8 - armExt * 4;
+      drawStarPath(ctx, sx + 3, sy - 2, 2.4, 1.0, 5);
+      ctx.fill();
+      ctx.fillStyle = PAL.gold;
+      ctx.beginPath(); ctx.arc(sx + 3, sy - 2, 0.8, 0, TAU); ctx.fill();
+    }
 
     ctx.restore();
   },
@@ -6422,15 +6750,17 @@ const Renderer = {
         const isFrost = trailKind === 'frost';
         const isGrav  = trailKind === 'gravity' || trailKind === 'void';
         const isTidal = trailKind === 'tidal';
+        const isSteel = trailKind === 'steel';
         let trailColor = '26,22,18'; // ink default
         if (isFire) trailColor = '168,58,44';
         else if (isFrost) trailColor = '44,74,140';
         else if (isGrav) trailColor = '60,40,32';
         else if (isTidal) trailColor = '76,108,172';
+        else if (isSteel) trailColor = '168,58,44';
         for (let i = 1; i < p.trailPts.length; i++) {
           const a = i / p.trailPts.length;
           ctx.strokeStyle = `rgba(${trailColor},${a * 0.55})`;
-          ctx.lineWidth = p.radius * 1.1 * a;
+          ctx.lineWidth = (isSteel ? p.radius * 0.5 : p.radius * 1.1) * a;
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(p.trailPts[i - 1].x, p.trailPts[i - 1].y);
@@ -6462,8 +6792,49 @@ const Renderer = {
         ctx.beginPath();
         ctx.arc(r * 0.2 + Math.sin(performance.now() * 0.015) * 0.6, 0, r * 0.18, 0, TAU);
         ctx.fill();
+      } else if (trailKind === 'steel') {
+        // Spinning four-point shuriken — vermilion ink, gold center pip.
+        // Rotates fast in flight; outer trail handled by trail block.
+        const spin = performance.now() * 0.025;
+        ctx.rotate(spin);
+        const rr = Math.max(5, r * 1.6);
+        ctx.fillStyle = PAL.ink;
+        ctx.strokeStyle = PAL.ink;
+        ctx.lineWidth = 0.8;
+        // Build a 4-bladed shuriken silhouette
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2;
+          const tipX = Math.cos(a) * rr;
+          const tipY = Math.sin(a) * rr;
+          const sideX = Math.cos(a + Math.PI / 4) * rr * 0.32;
+          const sideY = Math.sin(a + Math.PI / 4) * rr * 0.32;
+          if (k === 0) ctx.moveTo(tipX, tipY); else ctx.lineTo(tipX, tipY);
+          ctx.lineTo(sideX, sideY);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Vermilion accent stripe along each blade
+        ctx.strokeStyle = PAL.red;
+        ctx.lineWidth = 0.7;
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(a) * rr * 0.85, Math.sin(a) * rr * 0.85);
+          ctx.stroke();
+        }
+        // Center hole — paper highlight
+        ctx.fillStyle = PAL.paper;
+        ctx.beginPath(); ctx.arc(0, 0, rr * 0.18, 0, TAU); ctx.fill();
+        ctx.strokeStyle = PAL.ink;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+        // Gold pip at the very center
+        ctx.fillStyle = PAL.gold;
+        ctx.beginPath(); ctx.arc(0, 0, rr * 0.06, 0, TAU); ctx.fill();
       } else if (trailKind === 'frost') {
-        // Indigo crystal shard with paper inner gleam (Frost Spike)
         const len = Math.max(14, r * 2.4);
         ctx.fillStyle = PAL.blue;
         ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.2;
@@ -6850,7 +7221,165 @@ const Renderer = {
         continue;
       }
 
-      // ----- DEFAULT BURST (Fireball / Pyroclasm / explosion) -----
+      // ----- SMOKE PUFF (Ninja Flicker Step departure) — bloom of ink
+      // smoke at the caster's old position. No shockwave, no slash. -----
+      if (kind === 'smoke') {
+        const puffs = 7;
+        for (let i = 0; i < puffs; i++) {
+          const seed = (ex._smokeSeed ??= Math.random() * 1000);
+          const ang = (i / puffs) * TAU + seed;
+          const dist = lifeT * r * 0.6 + Math.sin(seed + i) * 3;
+          const px = cx + Math.cos(ang) * dist;
+          const py = cy + Math.sin(ang) * dist - lifeT * 8; // rises slightly
+          const pr = r * (0.18 + 0.12 * Math.sin(seed + i * 1.7)) * (0.6 + lifeT * 0.5);
+          ctx.fillStyle = `rgba(60,52,42,${a * 0.55})`;
+          ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
+          ctx.fillStyle = `rgba(26,22,18,${a * 0.35})`;
+          ctx.beginPath(); ctx.arc(px - pr * 0.3, py - pr * 0.2, pr * 0.5, 0, TAU); ctx.fill();
+        }
+        // Tiny ink dots scattering outward
+        const sparks = 5;
+        for (let i = 0; i < sparks; i++) {
+          const seed = (ex._smokeSeed ??= Math.random() * 1000);
+          const ang = (i / sparks) * TAU + seed * 1.7;
+          const sd = r * 0.2 + lifeT * r * 0.8;
+          ctx.fillStyle = `rgba(26,22,18,${a})`;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(ang) * sd, cy + Math.sin(ang) * sd, 1, 0, TAU);
+          ctx.fill();
+        }
+        continue;
+      }
+
+      // ----- FLICKER STEP arrival — ink-streak afterimage of a ninja
+      // silhouette + a tight crescent slash. Reads as "blink + cut." -----
+      if (kind === 'flicker') {
+        // Afterimage silhouette behind a fast-expanding slash
+        const ghostA = a * 0.9;
+        ctx.save();
+        ctx.translate(cx, cy);
+        const baseAng = (ex._flickAng ??= Math.random() * TAU);
+        ctx.rotate(baseAng);
+        // Fading "ghost" silhouette — small crouched figure
+        ctx.fillStyle = `rgba(26,22,18,${ghostA * 0.7})`;
+        ctx.beginPath();
+        ctx.moveTo(-6, -10);
+        ctx.lineTo(6, -10);
+        ctx.lineTo(8, 10);
+        ctx.lineTo(-8, 10);
+        ctx.closePath();
+        ctx.fill();
+        // Hood
+        ctx.beginPath();
+        ctx.arc(0, -12, 6, 0, Math.PI, true);
+        ctx.fill();
+        ctx.restore();
+
+        // Sharp single slash cutting across the target
+        const slashLen = r * (0.7 + lifeT * 0.6);
+        const slashAng = (ex._flickAng ?? 0) + Math.PI * 0.25;
+        const sx = cx + Math.cos(slashAng) * slashLen * 0.6;
+        const sy = cy + Math.sin(slashAng) * slashLen * 0.6;
+        const ex2 = cx - Math.cos(slashAng) * slashLen * 0.6;
+        const ey2 = cy - Math.sin(slashAng) * slashLen * 0.6;
+        ctx.lineCap = 'round';
+        // Ink underlay
+        ctx.strokeStyle = `rgba(26,22,18,${a})`;
+        ctx.lineWidth = 4 * (1 - lifeT * 0.5);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
+        // Vermilion edge highlight
+        ctx.strokeStyle = `rgba(168,58,44,${a * 0.9})`;
+        ctx.lineWidth = 1.6 * (1 - lifeT * 0.5);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
+        ctx.lineCap = 'butt';
+
+        // Spinning shuriken at the impact point — telegraphs the strike
+        if (a > 0.3) {
+          const sa = (a - 0.3) / 0.7;
+          const sr = 6 + (1 - sa) * 4;
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(lifeT * 12);
+          ctx.fillStyle = `rgba(26,22,18,${sa})`;
+          ctx.beginPath();
+          for (let k = 0; k < 4; k++) {
+            const ka = k * Math.PI / 2;
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(ka) * sr, Math.sin(ka) * sr);
+            ctx.lineTo(Math.cos(ka + 0.4) * sr * 0.32, Math.sin(ka + 0.4) * sr * 0.32);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        continue;
+      }
+
+      // ----- PYROCLASM — full-frame fire eruption with magma core,
+      // soot ring, and arcing ember sprays. The boss-level fire spell. -----
+      if (kind === 'pyroclasm') {
+        // Soot ground — dark stained disc
+        const soot = Math.min(1, lifeT * 2.2) * r * 0.85;
+        ctx.fillStyle = `rgba(26,22,18,${0.18 * a})`;
+        ctx.beginPath(); ctx.arc(cx, cy, soot, 0, TAU); ctx.fill();
+        ctx.save();
+        ctx.beginPath(); ctx.arc(cx, cy, soot, 0, TAU); ctx.clip();
+        hatch(ctx, cx, cy, soot * 2, soot * 2, 2.6, Math.PI / 3.2, `rgba(26,22,18,${0.32 * a})`, 0.45);
+        ctx.restore();
+
+        // Outer shockwave — vermilion ring expanding past the damage edge
+        const shockR = lifeT * r * 1.05;
+        ctx.strokeStyle = `rgba(168,58,44,${a * 0.85})`;
+        ctx.lineWidth = 2.4 * a;
+        ctx.beginPath(); ctx.arc(cx, cy, shockR, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = `rgba(26,22,18,${a * 0.55})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, shockR + 2, 0, TAU); ctx.stroke();
+
+        // Magma core — irregular blooming star
+        const coreA = Math.max(0, 1 - lifeT / 0.55);
+        if (coreA > 0) {
+          const R = r * (0.28 + lifeT * 0.18);
+          // Outer flame petals
+          ctx.fillStyle = `rgba(168,58,44,${coreA * 0.85})`;
+          ctx.strokeStyle = `rgba(26,22,18,${coreA * 0.7})`;
+          ctx.lineWidth = 1.0;
+          drawStarPath(ctx, cx, cy, R, R * 0.5, 9, lifeT * 1.2);
+          ctx.fill(); ctx.stroke();
+          // Mid — gold-ochre
+          ctx.fillStyle = `rgba(200,148,26,${coreA * 0.85})`;
+          drawStarPath(ctx, cx, cy, R * 0.62, R * 0.32, 9, -lifeT * 1.6);
+          ctx.fill();
+          // Center — pale paper white-hot
+          ctx.fillStyle = `rgba(248,232,196,${coreA * 0.95})`;
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.28, 0, TAU); ctx.fill();
+        }
+
+        // Ember spray — gold flecks shooting outward radially
+        const sprays = 14;
+        for (let i = 0; i < sprays; i++) {
+          const seed = (ex._pyroSeed ??= Math.random() * 1000);
+          const ang = (i / sprays) * TAU + seed * 0.2;
+          const reach = r * (0.6 + 0.5 * Math.sin(seed + i * 1.7));
+          const sd = lifeT * reach;
+          const fadeI = Math.max(0, 1 - lifeT * 1.2);
+          const px = cx + Math.cos(ang) * sd;
+          const py = cy + Math.sin(ang) * sd;
+          // Trailing ink streak
+          ctx.strokeStyle = `rgba(26,22,18,${fadeI * 0.6})`;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(px - Math.cos(ang) * 6, py - Math.sin(ang) * 6);
+          ctx.lineTo(px, py);
+          ctx.stroke();
+          // Gold ember head
+          ctx.fillStyle = `rgba(232,184,64,${fadeI})`;
+          ctx.beginPath(); ctx.arc(px, py, 1.6, 0, TAU); ctx.fill();
+        }
+        continue;
+      }
+
+      // ----- DEFAULT BURST (Fireball / explosion) -----
       // Scorched ground spreading
       const burnR = Math.min(1, lifeT * 3) * r * 0.6;
       if (burnR > 0) {
