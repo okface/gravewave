@@ -266,6 +266,10 @@
   .card[data-tree="electricity"]  { --accent: var(--elec); }
   .card[data-tree="fire"]         { --accent: var(--fire); }
   .card[data-tree="frost"]        { --accent: var(--frost); }
+  .card[data-tree="steel"]        { --accent: #c14e3a; }
+  .card[data-tree="shadow"]       { --accent: #5a4a78; }
+  .card[data-tree="arsenal"]      { --accent: #b9933a; }
+  .card[data-tree="vigil"]        { --accent: #4a8a64; }
   .card[data-tree="item"]         { --accent: var(--gold); }
   .card[data-tree="generic"]      { --accent: var(--ink-mid); }
   .card[data-tree="fusion"]       { --accent: var(--gold); }
@@ -1428,6 +1432,40 @@
     box-shadow: 0 2px 0 rgba(29, 21, 12, 0.2);
   }
 
+  /* Focus tooltip (Ninja) — same shape as the slot tooltip but a touch
+     wider since the explanation is two short lines. Renders below the
+     HUD stat instead of above so it doesn't crash into the wave banner. */
+  .hud-stat[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    padding: 8px 12px;
+    font-family: 'Spectral', serif;
+    font-size: 12px;
+    color: var(--ink);
+    white-space: pre;
+    pointer-events: none;
+    box-shadow: 0 2px 0 rgba(29, 21, 12, 0.2);
+    z-index: 50;
+  }
+  .hud-stat[data-tooltip] {
+    cursor: help;
+    position: relative;
+  }
+  /* Vermilion fill that visualises focus stacks: more stacks = brighter,
+     reaches a sharp gold pulse at max so the player feels the cap. */
+  .hud-focus .value {
+    color: var(--vermilion, #c14e3a);
+    font-weight: 700;
+  }
+  .hud-focus.is-max .value {
+    color: var(--gold, #c8941a);
+    text-shadow: 0 0 6px rgba(200, 148, 26, 0.55);
+  }
+
   /* Game-over flourishes */
   #gameover-stats {
     display: grid;
@@ -1832,12 +1870,12 @@ const CHARACTERS = {
     id: 'ninja',
     name: 'The Ninja',
     title: 'Whisper of steel and shadow',
-    description: 'A glass scalpel. Where the Magician metronomes through long cooldowns, the Ninja accelerates with every kill — short cycles compounding into a blender of shuriken and flickering blade-arts. Lower HP, but every kill shaves cooldowns until the wave is dust.',
+    description: 'A glass scalpel that snowballs through Focus — every kill stacks +1 Focus, and each stack shaves 8% off all cooldowns AND adds 4% damage to your next cast. Three distinct paths: Steel cleaves and drinks blood with crit-fueled life-steal, Shadow misdirects with clones and smoke, Arsenal pre-places death with crossbow shots and traps.',
     color: '#e94560',
     accent: '#1a1a2e',
-    startingSpells: ['shuriken_toss'],       // baseline thrown
-    skillTrees: ['shadow', 'steel', 'vigil'],
-    stats: { maxHp: 70, moveSpeed: 0 /* AFK as well — ninja "moves" via spell flicker */ },
+    startingSpells: [],                      // Path selection injects starting spell (matches Magician)
+    skillTrees: ['steel', 'shadow', 'arsenal', 'vigil'],
+    stats: { maxHp: 80, moveSpeed: 0 /* AFK as well — ninja "moves" via spell flicker */ },
     available: true,
   },
   // === FUTURE CHARACTERS (add here, set available: true when ready) ===
@@ -2389,18 +2427,384 @@ const SPELLS = {
     },
   },
 
-  /* ===== NINJA SPELLS — short-cycle melee + thrown =====
-   * The Ninja's identity is *tempo*. Every kill drops a Focus stack on
-   * the player which compounds onto cooldowns — so a packed wave is
-   * exponentially faster to clear than a sparse one. Spell numbers are
-   * intentionally lower per-cast than Magician's; the speed of the
-   * cycle is where the damage lives.
+  /* ===== NINJA SPELLS — three distinct combat philosophies =====
+   *
+   * The Ninja's universal identity is *Focus*: every kill stacks +1 Focus
+   * (cap 5, raised by talents). Each stack does TWO things:
+   *   - shaves 8% off all spell cooldowns (multiplicative, floor at 0.45×)
+   *   - adds 4% damage to the next cast (clamped at +28% at 7 stacks)
+   * Stacks decay after 4s of no kills. Sparse fights = standard tempo;
+   * packed waves = an exponential blender that rewards good positioning
+   * and trap placement. Path defines HOW you spend that tempo:
+   *
+   *   STEEL   — close-range crit cleave with vampiric life-steal.
+   *             Crescent / Reaping Strike. Heal on crit. Glass cannon
+   *             that survives by drinking blood faster than it bleeds.
+   *
+   *   SHADOW  — misdirection. Shadow Clone decoys enemies and throws
+   *             shuriken; Flicker Step grants iframes; Smoke Bomb hides
+   *             you and slows the wave. You don't tank — you vanish.
+   *
+   *   ARSENAL — set-and-forget battlefield control. Crossbow Bolt is
+   *             precision sniping; Caltrops bleed clusters that pile in;
+   *             Spring Trap is a proximity mine. Trades reflex for IQ.
+   *
+   * Spell numbers are intentionally lower per-cast than Magician's; the
+   * speed of the cycle is where the damage lives.
    */
+
+  // ===== STEEL TREE =====
+
+  crescent_strike: {
+    id: 'crescent_strike',
+    name: 'Crescent Strike',
+    tree: 'steel',
+    color: '#e94560',
+    cooldown: 1.3,
+    cast(game, caster, mods) {
+      // Auto-aims the densest cluster within reach and damages all
+      // enemies in a generous disc — represents a sweeping arc that
+      // catches everything bunched up on the player.
+      const range = 95 * (mods.radiusMult || 1);
+      const dmg = 22 * mods.dmgMult;
+      const b = mods.behavior || {};
+      const center = b.targetCluster
+        ? (game.findEnemyCluster(caster) || game.findNearestEnemy(caster))
+        : caster;
+      if (!center) return;
+      const isWhirlwind = b.whirlwind;
+      const isExecutioner = b.executioner;
+      const arcDmg = isWhirlwind ? dmg * 0.75 : (isExecutioner ? dmg * 2.0 : dmg);
+      // Lifesteal pool: each crit on this cast banks healing applied at end.
+      const lifestealPct = b.lifesteal || 0;
+      let healDebt = 0;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(center, e) < range + e.radius) {
+          const isCrit = Math.random() < (mods.critChance || 0);
+          let final = isCrit ? arcDmg * mods.critMult : arcDmg;
+          // Executioner: instakill below 15% HP.
+          if (isExecutioner && e.hp <= e.maxHp * 0.15) final = e.hp + 1;
+          final *= computeConditionalDamageMult(game.playerState, e);
+          const a = e.takeDamage(final, { spell: 'crescent_strike' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
+          if (isCrit && lifestealPct > 0) healDebt += a * lifestealPct;
+          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
+        }
+      }
+      // Whirlwind hits a second time after a beat (brief tween simulated
+      // by an immediate re-pass — gameplay reads as "two hits").
+      if (isWhirlwind) {
+        for (const e of game.enemies) {
+          if (!e.alive) continue;
+          if (Vec.dist(center, e) < range + e.radius) {
+            const a = e.takeDamage(arcDmg * 0.6, { spell: 'crescent_strike' });
+            game.totalDamageDealt += a;
+          }
+        }
+      }
+      // Vermilion thirst: refund a chunk of health proportional to crit damage.
+      if (healDebt > 0) game.healPlayer(healDebt);
+      game.spawnExplosion(center.x, center.y, range, '#b6332a', 'slash');
+      game.addShake(0.12);
+    },
+  },
+
+  reaping_strike: {
+    id: 'reaping_strike',
+    name: 'Reaping Strike',
+    tree: 'steel',
+    color: '#a8332c',
+    cooldown: 2.6,
+    cast(game, caster, mods) {
+      // Single-target heavy lunge at the nearest enemy — the high-crit
+      // executor companion to Crescent Strike's cleave. Heals 30% of the
+      // damage dealt back to the player when this hit crits, regardless
+      // of the lifesteal keystone (the spell IS the lifesteal source).
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const b = mods.behavior || {};
+      const baseDmg = 38 * mods.dmgMult;
+      // Bonus crit baked into the spell — Reaping Strike is "the crit one".
+      const critChance = Math.min(0.95, (mods.critChance || 0) + 0.18);
+      const isCrit = Math.random() < critChance;
+      let dmg = isCrit ? baseDmg * mods.critMult : baseDmg;
+      // Bloodthirst: deals +60% damage to enemies under 40% HP.
+      if (b.bloodthirst && target.hp < target.maxHp * 0.4) dmg *= 1.6;
+      dmg *= computeConditionalDamageMult(game.playerState, target);
+      const a = target.takeDamage(dmg, { spell: 'reaping_strike' });
+      game.totalDamageDealt += a;
+      game.spawnDamageNumber(target.x, target.y - target.radius - 6, a, isCrit);
+      if (mods.applyStatus) game.applyStatusesToEnemy(target, mods.applyStatus, baseDmg);
+      // Lifesteal — base 25%, +25% on crit. Crit lands feel like vampire bite.
+      const heal = a * (0.25 + (isCrit ? 0.25 : 0));
+      if (heal > 0) game.healPlayer(heal);
+      // Visual: deep red slash at the target + small ink ring at caster.
+      game.spawnExplosion(target.x, target.y, 50, '#a8332c', 'flicker');
+      game.spawnHitParticles(target.x, target.y, '#a8332c', isCrit ? 16 : 8);
+      game.addShake(isCrit ? 0.22 : 0.14);
+    },
+  },
+
+  // ===== SHADOW TREE =====
+
+  shadow_clone: {
+    id: 'shadow_clone',
+    name: 'Shadow Clone',
+    tree: 'shadow',
+    color: '#3a3450',
+    cooldown: 5.2,
+    cast(game, caster, mods) {
+      // Spawns a stationary mirror image at the densest enemy cluster.
+      // The clone is a "sentry" — it auto-throws shuriken at nearby
+      // enemies for its lifetime, and absorbs a few enemy hits before
+      // dispersing. Counts as an entity enemies can target (Misdirection
+      // — they walk toward whichever is nearer of you OR the clone).
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      // Spawn even if no enemies — drops a clone at the player's offset position
+      const placeX = target ? target.x : caster.x + (Math.random() - 0.5) * 120;
+      const placeY = target ? target.y : caster.y + (Math.random() - 0.5) * 120;
+      const b = mods.behavior || {};
+      const life = (b.legion ? 4.5 : 5.5) * (mods.cloneDurationMult || 1);
+      const hp = 2 + (mods.cloneHpBonus || 0);
+      // Nudge spawn off the cluster centre so the clone doesn't immediately
+      // eat a contact-detonation.
+      const spawnX = placeX + (Math.random() - 0.5) * 36;
+      const spawnY = placeY + (Math.random() - 0.5) * 36;
+      game.spawnShadowClone({
+        x: spawnX, y: spawnY,
+        life,
+        hp,
+        attackInterval: 0.55 / (mods.cloneAttackRateMult || 1),
+        attackDamage: 11 * mods.dmgMult,
+        attackRange: 220,
+        radius: 11,
+        legion: !!b.legion,                // Legion: spawn 1 mini-clone on death
+        crit: { chance: mods.critChance, mult: mods.critMult },
+        spell: 'shadow_clone',
+      });
+      // Twin Spirit: spawn 2 clones at slight offsets.
+      if (b.twinSpirit) {
+        const off = 50;
+        game.spawnShadowClone({
+          x: spawnX + off, y: spawnY,
+          life, hp,
+          attackInterval: 0.55 / (mods.cloneAttackRateMult || 1),
+          attackDamage: 11 * mods.dmgMult,
+          attackRange: 220, radius: 11,
+          legion: !!b.legion,
+          crit: { chance: mods.critChance, mult: mods.critMult },
+          spell: 'shadow_clone',
+        });
+      }
+      // Visual ink-puff at spawn.
+      game.spawnExplosion(spawnX, spawnY, 38, '#1a1612', 'smoke');
+    },
+  },
+
+  flicker_step: {
+    id: 'flicker_step',
+    name: 'Flicker Step',
+    tree: 'shadow',
+    color: '#2a2438',
+    cooldown: 4.0,
+    cast(game, caster, mods) {
+      // Visually "dashes" by spawning a slash AOE at the nearest enemy
+      // (the player is AFK — the spell is the movement). Awards short
+      // iframes for survivability cycle.
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const radius = 70 * (mods.radiusMult || 1);
+      const dmg = 18 * mods.dmgMult;
+      const b = mods.behavior || {};
+      // Damage every enemy in a small disc at the target's position.
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(target, e) < radius + e.radius) {
+          const isCrit = Math.random() < (mods.critChance || 0);
+          const final = isCrit ? dmg * mods.critMult : dmg;
+          const final2 = final * computeConditionalDamageMult(game.playerState, e);
+          const a = e.takeDamage(final2, { spell: 'flicker_step' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
+          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
+        }
+      }
+      // Visual: smoke puff at the caster's old position + slash at the
+      // target. Reads as "the ninja phased there and cut."
+      game.spawnExplosion(caster.x, caster.y, radius * 0.7, '#1a1612', 'smoke');
+      game.spawnExplosion(target.x, target.y, radius, '#1a1612', 'flicker');
+      game.spawnHitParticles(target.x, target.y, '#c8c8d0', 14);
+      game.addShake(0.14);
+      // War Step: extra iframes & damage already baked in via modAdjust.
+      // Phase Step: refunds Shadow Clone's CD on cast (was Shuriken Toss).
+      if (b.refundClone) {
+        for (const s of game.activeSpells) {
+          if (s.spellId === 'shadow_clone') s.cdAcc = s.cd;   // ready
+        }
+      }
+      // Brief iframes: the ninja was "elsewhere".
+      const iframeBoost = b.longIframes ? 1.0 : 0.5;
+      caster.iframes = Math.max(caster.iframes, iframeBoost);
+    },
+  },
+
+  smoke_bomb: {
+    id: 'smoke_bomb',
+    name: 'Smoke Bomb',
+    tree: 'shadow',
+    color: '#3c352a',
+    cooldown: 7.0,
+    cast(game, caster, mods) {
+      // Drops a smoke cloud centred on the player. While it persists:
+      //   - the player is harder to hit (long iframe window)
+      //   - enemies inside the cloud are slowed 60%
+      //   - small DoT (chokes / blinds) ticks on enemies in the cloud
+      // The whole spell is about *buying time* — the ninja isn't a tank,
+      // they're a vanish artist.
+      const radius = 130 * (mods.radiusMult || 1);
+      const life = 2.4;
+      const dps = 14 * mods.dmgMult;
+      const b = mods.behavior || {};
+      game.spawnSmokeBomb({
+        x: caster.x, y: caster.y,
+        radius, life, dps,
+        slowFactor: 0.4,             // 60% slow inside the cloud
+        slowDuration: 1.6,
+        applyStatus: mods.applyStatus,
+        // Veil keystone: stronger slow + freeze a moment on entry.
+        veilFreeze: !!b.veilFreeze,
+        spell: 'smoke_bomb',
+      });
+      // Long iframes — the entire cloud is your getaway window.
+      caster.iframes = Math.max(caster.iframes, 1.6);
+      game.addShake(0.10);
+    },
+  },
+
+  // ===== ARSENAL TREE =====
+
+  crossbow_bolt: {
+    id: 'crossbow_bolt',
+    name: 'Crossbow Bolt',
+    tree: 'arsenal',
+    color: '#d4b56a',
+    cooldown: 1.6,
+    cast(game, caster, mods) {
+      // Long-range piercing precision shot. Baseline is the Magician's
+      // Lightning Bolt analogue for ninja: reliable single-target dps.
+      // Pierces deep, travels fast, +crit chance baked in (the marksman's
+      // calling card). Targets the FARTHEST enemy so it sweeps the field
+      // rather than dogpiling whatever is already in your face.
+      const target = game.findFarthestEnemy(caster);
+      if (!target) return;
+      const dir = Vec.norm(Vec.sub(target, caster));
+      const b = mods.behavior || {};
+      const baseDmg = 26 * mods.dmgMult;
+      // Marksman keystone: +20% crit chance, executes <12% HP.
+      // Volley keystone: 3 bolts in a tight fan, each at 65% damage.
+      const critChance = Math.min(0.95, (mods.critChance || 0) + (b.marksman ? 0.20 : 0.06));
+      const count = b.volley ? 3 : 1;
+      const dmgScale = b.volley ? 0.65 : 1.0;
+      const spread = b.volley ? 0.10 : 0;
+      for (let i = 0; i < count; i++) {
+        const off = count > 1 ? (i - (count - 1) / 2) * spread : 0;
+        const cos = Math.cos(off), sin = Math.sin(off);
+        const vx = (dir.x * cos - dir.y * sin) * 720;
+        const vy = (dir.x * sin + dir.y * cos) * 720;
+        game.spawnProjectile({
+          x: caster.x, y: caster.y, vx, vy,
+          radius: 4 * (mods.sizeMult || 1),
+          damage: baseDmg * dmgScale,
+          color: '#d4b56a',
+          life: 1.6,
+          pierce: 4 + (mods.pierceBonus || 0),
+          crit: { chance: critChance, mult: mods.critMult + (b.marksman ? 0.4 : 0) },
+          execBelow: b.marksman ? 0.12 : 0,
+          applyStatus: mods.applyStatus,
+          behavior: b,
+          spellBaseDmg: baseDmg * dmgScale,
+          trail: 'crossbow',
+          spell: 'crossbow_bolt',
+        });
+      }
+    },
+  },
+
+  caltrops: {
+    id: 'caltrops',
+    name: 'Caltrops',
+    tree: 'arsenal',
+    color: '#a08a4a',
+    cooldown: 4.5,
+    cast(game, caster, mods) {
+      // Scatters spiked traps in a wide ring around the densest cluster
+      // (or around the player if no cluster). The patch slows enemies
+      // and ticks bleed damage — meant to punish enemies that pile in.
+      // Distinct from Smoke Bomb (which protects you) — Caltrops is
+      // dropped *forward* to make a kill zone.
+      const target = game.findEnemyCluster(caster) || caster;
+      const radius = 110 * (mods.radiusMult || 1);
+      const life = 5.0 * (mods.trapDurationMult || 1);
+      const dps = 22 * mods.dmgMult;
+      const b = mods.behavior || {};
+      game.spawnCaltrops({
+        x: target.x, y: target.y,
+        radius, life, dps,
+        slowFactor: 0.5,
+        slowDuration: 1.2,
+        bleedDpsRatio: b.deepBleed ? 0.6 : 0.35,
+        bleedDuration: 3.0,
+        spell: 'caltrops',
+      });
+      game.spawnExplosion(target.x, target.y, radius * 0.4, '#7a6a3a', 'smoke');
+    },
+  },
+
+  spring_trap: {
+    id: 'spring_trap',
+    name: 'Spring Trap',
+    tree: 'arsenal',
+    color: '#c14e3a',
+    cooldown: 6.5,
+    cast(game, caster, mods) {
+      // Places an armed proximity mine at the densest cluster (or near
+      // the player). Detonates the moment any enemy enters its trigger
+      // radius — big AOE, big damage, briefly stuns survivors. Meant
+      // to be the trapper's "boss eraser" cooldown.
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster) || caster;
+      const b = mods.behavior || {};
+      // Trapper keystone: bigger blast + 2 traps per cast.
+      const blastR = (b.trapper ? 130 : 100) * (mods.radiusMult || 1);
+      const dmg = (b.trapper ? 80 : 60) * mods.dmgMult;
+      const armTime = 0.4;             // brief arm delay so it doesn't insta-pop
+      const life = 8.0 * (mods.trapDurationMult || 1);
+      const placements = b.trapper ? 2 : 1;
+      for (let i = 0; i < placements; i++) {
+        const ox = (Math.random() - 0.5) * 70;
+        const oy = (Math.random() - 0.5) * 70;
+        game.spawnSpringTrap({
+          x: target.x + ox,
+          y: target.y + oy,
+          triggerRadius: 38,
+          blastRadius: blastR,
+          damage: dmg,
+          armTime, life,
+          stunDuration: b.trapper ? 1.2 : 0.6,
+          crit: { chance: mods.critChance, mult: mods.critMult },
+          spell: 'spring_trap',
+        });
+      }
+    },
+  },
+
+  // ===== UNIVERSAL =====
 
   shuriken_toss: {
     id: 'shuriken_toss',
     name: 'Shuriken Toss',
-    tree: 'steel',
+    tree: 'arsenal',
     color: '#c8c8d0',
     cooldown: 0.85,
     cast(game, caster, mods) {
@@ -2438,102 +2842,6 @@ const SPELLS = {
     },
   },
 
-  flicker_step: {
-    id: 'flicker_step',
-    name: 'Flicker Step',
-    tree: 'shadow',
-    color: '#2a2438',
-    cooldown: 4.0,
-    cast(game, caster, mods) {
-      // Visually "dashes" by spawning a slash AOE at the nearest enemy
-      // (the player is AFK — the spell is the movement). Awards short
-      // iframes for survivability cycle.
-      const target = game.findNearestEnemy(caster);
-      if (!target) return;
-      const radius = 70 * (mods.radiusMult || 1);
-      const dmg = 16 * mods.dmgMult;
-      const b = mods.behavior || {};
-      // Damage every enemy in a small disc at the target's position.
-      for (const e of game.enemies) {
-        if (!e.alive) continue;
-        if (Vec.dist(target, e) < radius + e.radius) {
-          const isCrit = Math.random() < (mods.critChance || 0);
-          const final = isCrit ? dmg * mods.critMult : dmg;
-          const final2 = final * computeConditionalDamageMult(game.playerState, e);
-          const a = e.takeDamage(final2, { spell: 'flicker_step' });
-          game.totalDamageDealt += a;
-          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
-          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
-        }
-      }
-      // Visual: smoke puff at the caster's old position + slash at the
-      // target. Reads as "the ninja phased there and cut."
-      game.spawnExplosion(caster.x, caster.y, radius * 0.7, '#1a1612', 'smoke');
-      game.spawnExplosion(target.x, target.y, radius, '#1a1612', 'flicker');
-      game.spawnHitParticles(target.x, target.y, '#c8c8d0', 14);
-      game.addShake(0.14);
-      // Phase Step: refunds Shuriken Toss CD on cast.
-      if (b.refundShuriken) {
-        for (const s of game.activeSpells) {
-          if (s.spellId === 'shuriken_toss') s.cdAcc = s.cd;   // ready
-        }
-      }
-      // Brief iframes: the ninja was "elsewhere".
-      caster.iframes = Math.max(caster.iframes, 0.5);
-    },
-  },
-
-  crescent_strike: {
-    id: 'crescent_strike',
-    name: 'Crescent Strike',
-    tree: 'steel',
-    color: '#e94560',
-    cooldown: 1.4,
-    cast(game, caster, mods) {
-      // Auto-aims the densest cluster within reach and damages all
-      // enemies in a generous disc — represents a sweeping arc that
-      // catches everything bunched up on the player.
-      const range = 90 * (mods.radiusMult || 1);
-      const dmg = 20 * mods.dmgMult;
-      const b = mods.behavior || {};
-      const center = b.targetCluster
-        ? (game.findEnemyCluster(caster) || game.findNearestEnemy(caster))
-        : caster;
-      if (!center) return;
-      const isWhirlwind = b.whirlwind;
-      const isExecutioner = b.executioner;
-      const arcDmg = isWhirlwind ? dmg * 0.75 : (isExecutioner ? dmg * 2.0 : dmg);
-      let killCount = 0;
-      for (const e of game.enemies) {
-        if (!e.alive) continue;
-        if (Vec.dist(center, e) < range + e.radius) {
-          const isCrit = Math.random() < (mods.critChance || 0);
-          let final = isCrit ? arcDmg * mods.critMult : arcDmg;
-          // Executioner: instakill below 15% HP.
-          if (isExecutioner && e.hp <= e.maxHp * 0.15) final = e.hp + 1;
-          final *= computeConditionalDamageMult(game.playerState, e);
-          const a = e.takeDamage(final, { spell: 'crescent_strike' });
-          game.totalDamageDealt += a;
-          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
-          if (!e.alive) killCount++;
-          if (mods.applyStatus) game.applyStatusesToEnemy(e, mods.applyStatus, dmg);
-        }
-      }
-      // Whirlwind hits a second time after a beat (brief tween simulated
-      // by an immediate re-pass — gameplay reads as "two hits").
-      if (isWhirlwind) {
-        for (const e of game.enemies) {
-          if (!e.alive) continue;
-          if (Vec.dist(center, e) < range + e.radius) {
-            const a = e.takeDamage(arcDmg * 0.6, { spell: 'crescent_strike' });
-            game.totalDamageDealt += a;
-          }
-        }
-      }
-      game.spawnExplosion(center.x, center.y, range, '#b6332a', 'slash');
-      game.addShake(0.12);
-    },
-  },
 };
 
 
@@ -3050,86 +3358,122 @@ const SKILL_TREES = {
     ],
   },
 
-  // ===== STEEL — Ninja's offensive tree (shuriken + crescent) =====
+  // ===== STEEL — Blade path: cleave + crit + life-steal =====
+  // Identity: close-range glass scalpel that survives by drinking blood.
+  // Crescent Strike is the bread-and-butter cleave; Reaping Strike is the
+  // single-target executor companion. Keystones lean cleave-vs-crit,
+  // Vermilion Thirst lets either keystone heal you back to full.
   steel: {
     id: 'steel', name: 'Steel', color: 'crimson',
     nodes: [
-      // Shuriken Toss already in starter loadout — entry talents.
-      { id: 'st_shuriken_dmg', name: 'Honed Edge', requires: [],
-        type: 'spell_mod', spellId: 'shuriken_toss', mods: { dmgMult: 0.18 },
-        maxRank: 3, desc: '+18% Shuriken damage per rank.' },
-
-      { id: 'st_shuriken_twin', name: 'Twin Fang', requires: [],
-        type: 'spell_mod', spellId: 'shuriken_toss',
-        behaviorOverride: { twinFang: true },
-        desc: 'Throws 2 shuriken in a tight spread (each at 85% damage).' },
-
-      { id: 'st_shuriken_bleed', name: 'Bleeding Cuts', requires: ['st_shuriken_dmg'],
-        type: 'spell_mod', spellId: 'shuriken_toss',
-        mods: { applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.4, critOnHit: false } } },
-        desc: 'Shuriken open bleeding wounds — DoT for 40% of impact damage over 3s.' },
-
-      // Shuriken keystone fork (Storm fan vs Spear pierce)
-      { id: 'st_shuriken_storm', name: 'Storm Path', requires: ['st_shuriken_twin'],
-        type: 'keystone', affects: 'shuriken_toss',
-        behavior: { spreadFan: true },
-        lockedBy: ['st_shuriken_spear'], keystone: true,
-        desc: 'Shuriken Toss fans 5 blades at 50% damage each. Wave-clear specialist.' },
-
-      { id: 'st_shuriken_spear', name: 'Spear Path', requires: ['st_shuriken_dmg'],
-        type: 'keystone', affects: 'shuriken_toss',
-        behavior: { piercingShot: true },
-        lockedBy: ['st_shuriken_storm'], keystone: true,
-        desc: 'A single shuriken pierces every enemy in a line at 140% damage.' },
-
-      // Crescent Strike — tier 2 unlock
-      { id: 'st_unlock_crescent', name: 'Crescent Strike', tier: 2, cost: 2, requires: [],
+      // ===== CRESCENT STRIKE — tier 1 unlock (path starter) =====
+      { id: 'st_unlock_crescent', name: 'Crescent Strike', tier: 1, cost: 1, requires: [],
         type: 'unlock_spell', spellId: 'crescent_strike',
-        desc: 'A wide arc that catches every enemy in a 90u disc — 20 damage, 1.4s CD.' },
+        desc: 'Sweeping arc around you. 22 damage in a 95u disc, 1.3s CD. Hits everything bunched up against you.' },
 
       { id: 'st_crescent_dmg', name: 'Heavy Steel', requires: ['st_unlock_crescent'],
         type: 'spell_mod', spellId: 'crescent_strike', mods: { dmgMult: 0.20 },
         maxRank: 3, desc: '+20% Crescent damage per rank.' },
 
-      { id: 'st_crescent_cluster', name: 'Cluster Strike', requires: ['st_unlock_crescent'],
+      { id: 'st_crescent_radius', name: 'Long Reach', requires: ['st_unlock_crescent'],
+        type: 'spell_mod', spellId: 'crescent_strike', mods: { radiusMult: 0.12 },
+        maxRank: 3, desc: '+12% Crescent radius per rank.' },
+
+      { id: 'st_crescent_cluster', name: 'Cluster Strike', requires: ['st_crescent_dmg'],
         type: 'spell_mod', spellId: 'crescent_strike',
         behaviorOverride: { targetCluster: true },
-        desc: 'Crescent Strike auto-aims the densest enemy cluster instead of staying centered on you.' },
+        desc: 'Crescent Strike re-centres on the densest enemy cluster instead of staying on you.' },
 
-      // Crescent keystone fork
+      { id: 'st_crescent_thirst', name: 'Vermilion Thirst', requires: ['st_crescent_dmg'],
+        treePointsRequired: 3,
+        type: 'spell_mod', spellId: 'crescent_strike',
+        behaviorOverride: { lifesteal: 0.30 },
+        desc: 'Crescent Strike crits return 30% of damage dealt as healing. The blade drinks.' },
+
+      // Crescent keystone fork — wave clear vs single-target finisher
       { id: 'st_crescent_whirl', name: 'Whirlwind', requires: ['st_crescent_dmg'],
         type: 'keystone', affects: 'crescent_strike',
         behavior: { whirlwind: true },
         modAdjust: { radiusMult: 1.30 },
         lockedBy: ['st_crescent_exec'], keystone: true,
-        desc: 'Wider, hits twice (75% + 60% of damage). +30% radius.' },
+        desc: 'Wider, hits twice (75% + 60% of damage). +30% radius. Wave clear specialist.' },
 
       { id: 'st_crescent_exec', name: 'Executioner', requires: ['st_crescent_dmg'],
         type: 'keystone', affects: 'crescent_strike',
         behavior: { executioner: true },
         modAdjust: { dmgMult: 1.5 },
         lockedBy: ['st_crescent_whirl'], keystone: true,
-        desc: '+150% damage. Instakills enemies below 15% HP.' },
+        desc: '+150% Crescent damage. Instakills enemies below 15% HP.' },
+
+      // ===== REAPING STRIKE — tier 2 unlock =====
+      { id: 'st_unlock_reaping', name: 'Reaping Strike', tier: 2, cost: 2, requires: ['st_unlock_crescent'],
+        type: 'unlock_spell', spellId: 'reaping_strike',
+        desc: 'A single heavy lunge at the nearest foe. 38 damage, +18% crit baked in, 2.6s CD. Heals you for 25% of damage dealt (50% on crit).' },
+
+      { id: 'st_reaping_dmg', name: 'Killing Will', requires: ['st_unlock_reaping'],
+        type: 'spell_mod', spellId: 'reaping_strike', mods: { dmgMult: 0.18 },
+        maxRank: 3, desc: '+18% Reaping Strike damage per rank.' },
+
+      { id: 'st_reaping_blood', name: 'Bloodthirst', requires: ['st_unlock_reaping'],
+        type: 'spell_mod', spellId: 'reaping_strike',
+        behaviorOverride: { bloodthirst: true },
+        desc: 'Reaping Strike deals +60% damage to enemies under 40% HP.' },
+
+      { id: 'st_reaping_bleed', name: 'Open Vein', requires: ['st_unlock_reaping'],
+        type: 'spell_mod', spellId: 'reaping_strike',
+        mods: { applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.5, critOnHit: false } } },
+        desc: 'Reaping Strike opens a deep bleed — DoT for 50% of impact damage over 3s.' },
+
+      // ===== PASSIVES =====
+      { id: 'st_global_crit', name: 'Steady Hand', requires: [],
+        type: 'global_mod', mods: { critChanceBonus: 0.05 },
+        maxRank: 3, desc: '+5% global crit chance per rank.' },
     ],
   },
 
-  // ===== SHADOW — Ninja's mobility/utility tree (flicker + focus) =====
+  // ===== SHADOW — Mirror path: clones, smoke, evasion =====
+  // Identity: misdirection. The ninja doesn't tank — they vanish, let
+  // clones eat the hits, and slip out behind a smoke screen. Focus
+  // talents live here because Shadow IS the "tempo identity" tree.
   shadow: {
     id: 'shadow', name: 'Shadow', color: 'grav',
     nodes: [
-      // Focus stack passives — make the combo feel deeper before unlocks.
-      { id: 'sh_focus_cap', name: 'Deeper Reserves', requires: [],
-        type: 'global_mod', mods: { focusCapBonus: 1 },
-        maxRank: 2, desc: '+1 maximum Focus stack per rank (base 5 → 6 → 7).' },
+      // ===== SHADOW CLONE — tier 1 unlock (path starter) =====
+      { id: 'sh_unlock_clone', name: 'Shadow Clone', tier: 1, cost: 1, requires: [],
+        type: 'unlock_spell', spellId: 'shadow_clone',
+        desc: 'Spawn a stationary mirror image at the densest cluster. Throws shuriken at nearby enemies (11 dmg, ~0.55s) for 5.5s. Enemies steer toward whichever of you/clone is closer — soft taunt that buys you time.' },
 
-      { id: 'sh_focus_grace', name: 'Lingering Edge', requires: [],
-        type: 'global_mod', mods: { focusGraceBonus: 1.0 },
-        desc: 'Focus stacks decay 1.0s slower (4s → 5s window).' },
+      { id: 'sh_clone_dmg', name: 'Sharper Mirror', requires: ['sh_unlock_clone'],
+        type: 'spell_mod', spellId: 'shadow_clone', mods: { dmgMult: 0.20 },
+        maxRank: 3, desc: '+20% clone shuriken damage per rank.' },
 
-      // Flicker Step — tier 2 unlock
-      { id: 'sh_unlock_flicker', name: 'Flicker Step', tier: 2, cost: 2, requires: [],
+      { id: 'sh_clone_rate', name: 'Phantom Rhythm', requires: ['sh_unlock_clone'],
+        type: 'spell_mod', spellId: 'shadow_clone',
+        mods: { cloneAttackRateMult: 0.20 },
+        maxRank: 2, desc: '+20% clone attack speed per rank.' },
+
+      { id: 'sh_clone_hp', name: 'Persistent Form', requires: ['sh_unlock_clone'],
+        type: 'spell_mod', spellId: 'shadow_clone',
+        mods: { cloneHpBonus: 1 },
+        maxRank: 2, desc: 'Clones can absorb +1 enemy contact per rank before dispersing.' },
+
+      // Clone keystone fork — twin clones vs death-procs
+      { id: 'sh_clone_twin', name: 'Twin Spirit', requires: ['sh_clone_dmg'],
+        type: 'keystone', affects: 'shadow_clone',
+        behavior: { twinSpirit: true },
+        lockedBy: ['sh_clone_legion'], keystone: true,
+        desc: 'Each cast spawns 2 clones at slight offsets. Drown the field in mirrors.' },
+
+      { id: 'sh_clone_legion', name: 'Legion', requires: ['sh_clone_hp'],
+        type: 'keystone', affects: 'shadow_clone',
+        behavior: { legion: true },
+        lockedBy: ['sh_clone_twin'], keystone: true,
+        desc: 'When a clone dies it spawns one short-lived mini-clone. Death is just an echo.' },
+
+      // ===== FLICKER STEP — tier 2 unlock =====
+      { id: 'sh_unlock_flicker', name: 'Flicker Step', tier: 2, cost: 2, requires: ['sh_unlock_clone'],
         type: 'unlock_spell', spellId: 'flicker_step',
-        desc: 'Vanish to the nearest foe and slash everyone in a 70u disc. 16 damage, 4s CD, 0.5s iframes on cast.' },
+        desc: 'Vanish to the nearest foe and slash a 70u disc. 18 damage, 4s CD, 0.5s iframes on cast.' },
 
       { id: 'sh_flicker_dmg', name: 'Killing Edge', requires: ['sh_unlock_flicker'],
         type: 'spell_mod', spellId: 'flicker_step', mods: { dmgMult: 0.20 },
@@ -3142,20 +3486,173 @@ const SKILL_TREES = {
       { id: 'sh_flicker_cold', name: 'Cold Trail', requires: ['sh_unlock_flicker'],
         type: 'spell_mod', spellId: 'flicker_step',
         mods: { applyStatus: { slow: { duration: 2.0, factor: 0.55 } } },
-        desc: 'Enemies caught in the slash are slowed 45% for 2s — lines up with Glacial frost.' },
+        desc: 'Enemies caught in the slash are slowed 45% for 2s.' },
+
+      { id: 'sh_flicker_long', name: 'Long Vanish', requires: ['sh_flicker_cdr'],
+        type: 'spell_mod', spellId: 'flicker_step',
+        behaviorOverride: { longIframes: true },
+        desc: 'Flicker Step iframes extend from 0.5s → 1.0s. You really were elsewhere.' },
 
       // Flicker keystone fork
       { id: 'sh_flicker_phase', name: 'Phase Step', requires: ['sh_flicker_cdr'],
         type: 'keystone', affects: 'flicker_step',
-        behavior: { refundShuriken: true },
+        behavior: { refundClone: true },
         lockedBy: ['sh_flicker_war'], keystone: true,
-        desc: 'Casting Flicker instantly refunds Shuriken Toss\'s cooldown. Endless rotation.' },
+        desc: 'Casting Flicker instantly refunds Shadow Clone\'s cooldown. Mirror loop.' },
 
       { id: 'sh_flicker_war', name: 'War Step', requires: ['sh_flicker_dmg'],
         type: 'keystone', affects: 'flicker_step',
         modAdjust: { dmgMult: 1.6, radiusMult: 1.20 },
         lockedBy: ['sh_flicker_phase'], keystone: true,
         desc: '+60% Flicker damage and +20% radius.' },
+
+      // ===== SMOKE BOMB — tier 3 unlock =====
+      { id: 'sh_unlock_smoke', name: 'Smoke Bomb', tier: 3, cost: 3,
+        treePointsRequired: 5,
+        requires: ['sh_unlock_flicker'],
+        type: 'unlock_spell', spellId: 'smoke_bomb',
+        desc: 'Drop an ink cloud at your feet (130u, 2.4s). Slows enemies inside by 60%, ticks DoT (14 dps), and refreshes your iframes while you stand in it. 7s CD.' },
+
+      { id: 'sh_smoke_dmg', name: 'Choke', requires: ['sh_unlock_smoke'],
+        type: 'spell_mod', spellId: 'smoke_bomb', mods: { dmgMult: 0.25 },
+        maxRank: 3, desc: '+25% Smoke Bomb DoT damage per rank.' },
+
+      { id: 'sh_smoke_radius', name: 'Billowing', requires: ['sh_unlock_smoke'],
+        type: 'spell_mod', spellId: 'smoke_bomb', mods: { radiusMult: 0.15 },
+        maxRank: 2, desc: '+15% Smoke Bomb radius per rank.' },
+
+      { id: 'sh_smoke_veil', name: 'Twilight Veil', requires: ['sh_unlock_smoke'],
+        type: 'spell_mod', spellId: 'smoke_bomb',
+        behaviorOverride: { veilFreeze: true },
+        desc: 'Enemies that enter the cloud are frozen for 0.6s. Total area denial.' },
+
+      // ===== FOCUS PASSIVES (the universal Ninja mechanic lives here) =====
+      { id: 'sh_focus_cap', name: 'Deeper Reserves', requires: [],
+        type: 'global_mod', mods: { focusCapBonus: 1 },
+        maxRank: 2, desc: '+1 maximum Focus stack per rank (base 5 → 6 → 7).' },
+
+      { id: 'sh_focus_grace', name: 'Lingering Edge', requires: [],
+        type: 'global_mod', mods: { focusGraceBonus: 1.0 },
+        desc: 'Focus stacks decay 1.0s slower (4s → 5s grace window between kills).' },
+    ],
+  },
+
+  // ===== ARSENAL — Trap & bow path: pre-place death, kite enemies into it =====
+  // Identity: trades twitch reflex for IQ. You don't react, you predict —
+  // setting Caltrops and Spring Traps in chokepoints, then sniping the
+  // stragglers with Crossbow Bolts. Plays well from a stationary AFK
+  // posture and SCALES with Focus's CDR (more traps per second).
+  arsenal: {
+    id: 'arsenal', name: 'Arsenal', color: 'crimson',
+    nodes: [
+      // ===== CROSSBOW BOLT — tier 1 unlock (path starter) =====
+      { id: 'ar_unlock_crossbow', name: 'Crossbow Bolt', tier: 1, cost: 1, requires: [],
+        type: 'unlock_spell', spellId: 'crossbow_bolt',
+        desc: 'Long-range piercing precision shot at the farthest enemy. 26 damage, pierces 4 foes, +6% baked crit, 1.6s CD. Travels fast.' },
+
+      { id: 'ar_crossbow_dmg', name: 'Tempered Bolts', requires: ['ar_unlock_crossbow'],
+        type: 'spell_mod', spellId: 'crossbow_bolt', mods: { dmgMult: 0.18 },
+        maxRank: 3, desc: '+18% Crossbow Bolt damage per rank.' },
+
+      { id: 'ar_crossbow_pierce', name: 'Penetration', requires: ['ar_unlock_crossbow'],
+        type: 'spell_mod', spellId: 'crossbow_bolt', mods: { pierceBonus: 2 },
+        maxRank: 2, desc: '+2 pierce per rank.' },
+
+      { id: 'ar_crossbow_cdr', name: 'Quickdraw', requires: ['ar_unlock_crossbow'],
+        type: 'spell_mod', spellId: 'crossbow_bolt', mods: { cdMult: -0.10 },
+        maxRank: 3, desc: '−10% Crossbow Bolt cooldown per rank.' },
+
+      // Crossbow keystone fork — single-shot precision vs volley
+      { id: 'ar_crossbow_marks', name: 'Marksman', requires: ['ar_crossbow_dmg'],
+        type: 'keystone', affects: 'crossbow_bolt',
+        behavior: { marksman: true },
+        lockedBy: ['ar_crossbow_volley'], keystone: true,
+        desc: '+20% crit chance, +40% crit damage on Crossbow Bolt. Executes targets below 12% HP.' },
+
+      { id: 'ar_crossbow_volley', name: 'Volley', requires: ['ar_crossbow_cdr'],
+        type: 'keystone', affects: 'crossbow_bolt',
+        behavior: { volley: true },
+        lockedBy: ['ar_crossbow_marks'], keystone: true,
+        desc: 'Crossbow Bolt fires 3 bolts in a tight fan at 65% damage each. Wave-clear ranger.' },
+
+      // ===== CALTROPS — tier 2 unlock =====
+      { id: 'ar_unlock_caltrops', name: 'Caltrops', tier: 2, cost: 2, requires: ['ar_unlock_crossbow'],
+        type: 'unlock_spell', spellId: 'caltrops',
+        desc: 'Scatter spiked traps in a 110u radius around the densest cluster. 22 dps + 50% slow + bleed (35% of damage over 3s). 5s duration, 4.5s CD.' },
+
+      { id: 'ar_caltrops_dmg', name: 'Razor Spikes', requires: ['ar_unlock_caltrops'],
+        type: 'spell_mod', spellId: 'caltrops', mods: { dmgMult: 0.20 },
+        maxRank: 3, desc: '+20% Caltrops damage per rank.' },
+
+      { id: 'ar_caltrops_radius', name: 'Wide Field', requires: ['ar_unlock_caltrops'],
+        type: 'spell_mod', spellId: 'caltrops', mods: { radiusMult: 0.15 },
+        maxRank: 2, desc: '+15% Caltrops radius per rank.' },
+
+      { id: 'ar_caltrops_bleed', name: 'Deep Bleed', requires: ['ar_unlock_caltrops'],
+        type: 'spell_mod', spellId: 'caltrops',
+        behaviorOverride: { deepBleed: true },
+        desc: 'Caltrops bleed for 60% of damage over 3s (was 35%). The wounds stack with anything.' },
+
+      // ===== SHURIKEN TOSS — tier 2 alternative =====
+      // Kept as an Arsenal-tree side unlock for players who want the
+      // classic ninja fantasy without committing to traps.
+      { id: 'ar_unlock_shuriken', name: 'Shuriken Toss', tier: 2, cost: 2, requires: ['ar_unlock_crossbow'],
+        type: 'unlock_spell', spellId: 'shuriken_toss',
+        desc: 'Hurl a spinning blade at the farthest enemy. 9 damage, 0.85s CD. The fastest-cycling spell in the game — Focus snowballs hard.' },
+
+      { id: 'ar_shuriken_dmg', name: 'Honed Edge', requires: ['ar_unlock_shuriken'],
+        type: 'spell_mod', spellId: 'shuriken_toss', mods: { dmgMult: 0.18 },
+        maxRank: 3, desc: '+18% Shuriken damage per rank.' },
+
+      { id: 'ar_shuriken_twin', name: 'Twin Fang', requires: ['ar_unlock_shuriken'],
+        type: 'spell_mod', spellId: 'shuriken_toss',
+        behaviorOverride: { twinFang: true },
+        desc: 'Throws 2 shuriken in a tight spread (each at 85% damage).' },
+
+      { id: 'ar_shuriken_storm', name: 'Storm Path', requires: ['ar_shuriken_twin'],
+        type: 'keystone', affects: 'shuriken_toss',
+        behavior: { spreadFan: true },
+        lockedBy: ['ar_shuriken_spear'], keystone: true,
+        desc: 'Shuriken Toss fans 5 blades at 50% damage each. Wave clear specialist.' },
+
+      { id: 'ar_shuriken_spear', name: 'Spear Path', requires: ['ar_shuriken_dmg'],
+        type: 'keystone', affects: 'shuriken_toss',
+        behavior: { piercingShot: true },
+        lockedBy: ['ar_shuriken_storm'], keystone: true,
+        desc: 'A single shuriken pierces every enemy in a line at 140% damage.' },
+
+      // ===== SPRING TRAP — tier 3 unlock =====
+      { id: 'ar_unlock_spring', name: 'Spring Trap', tier: 3, cost: 3,
+        treePointsRequired: 5,
+        requires: ['ar_unlock_caltrops'],
+        type: 'unlock_spell', spellId: 'spring_trap',
+        desc: 'Plant an armed mine at the densest cluster (38u trigger, 100u blast). Detonates on enemy contact for 60 damage and 0.6s stun. 6.5s CD, 8s armed life.' },
+
+      { id: 'ar_spring_dmg', name: 'Heavy Charge', requires: ['ar_unlock_spring'],
+        type: 'spell_mod', spellId: 'spring_trap', mods: { dmgMult: 0.20 },
+        maxRank: 3, desc: '+20% Spring Trap detonation damage per rank.' },
+
+      { id: 'ar_spring_duration', name: 'Patient Wire', requires: ['ar_unlock_spring'],
+        type: 'global_mod', mods: { trapDurationMult: 0.30 },
+        maxRank: 2, desc: '+30% trap duration per rank (Caltrops + Spring Trap stay armed longer).' },
+
+      // Spring Trap keystone fork
+      { id: 'ar_spring_trapper', name: 'Trapper', requires: ['ar_spring_dmg'],
+        type: 'keystone', affects: 'spring_trap',
+        behavior: { trapper: true },
+        lockedBy: ['ar_spring_chain'], keystone: true,
+        desc: 'Spring Trap places 2 mines per cast, +33% blast radius, +33% damage, 1.2s stun.' },
+
+      { id: 'ar_spring_chain', name: 'Chain Reaction', requires: ['ar_spring_dmg'],
+        type: 'keystone', affects: 'spring_trap',
+        modAdjust: { radiusMult: 1.4, dmgMult: 1.3 },
+        lockedBy: ['ar_spring_trapper'], keystone: true,
+        desc: 'Spring Trap detonations are +30% damage and +40% radius. The blast is what matters.' },
+
+      // ===== PASSIVES =====
+      { id: 'ar_global_range', name: 'Hawk Eye', requires: [],
+        type: 'global_mod', mods: { critChanceBonus: 0.04 },
+        maxRank: 3, desc: '+4% global crit chance per rank.' },
     ],
   },
 
@@ -3755,6 +4252,62 @@ class StormCloud {
   }
 }
 
+class ShadowClone {
+  /*
+   * Ninja Shadow path — a stationary mirror image that auto-throws
+   * shuriken at nearby enemies. Has its own (small) HP pool so contact
+   * detonations from enemies dissipate it instead of dropping the player.
+   * Acts as a soft "taunt" — enemy AI in tickEnemies will steer toward
+   * the nearest of player vs clone, so the clone draws aggro briefly.
+   */
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.attackAcc = 0;
+    this.dead = false;
+    // Subtle bob so it feels alive instead of a billboard
+    this.bob = Math.random() * Math.PI * 2;
+  }
+}
+
+class SmokeBomb {
+  // Lingering smoke cloud — slows and chokes enemies, masks the player.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    this.dead = false;
+    this.seed = Math.random() * 1000;
+  }
+}
+
+class Caltrops {
+  // Spiked ground patch — slows + bleeds anything walking through it.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    this.dead = false;
+    this.seed = Math.random() * 1000;
+  }
+}
+
+class SpringTrap {
+  /*
+   * Proximity mine. Sits dormant until armTime elapses, then detonates
+   * the moment any enemy enters its triggerRadius. On detonation it
+   * deals AoE damage in blastRadius and applies a brief stun (freeze).
+   */
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.armed = false;
+    this.dead = false;
+    this.detonated = false;
+    this.seed = Math.random() * 1000;
+  }
+}
+
 class DamageNumber {
   // Floating damage text that pops up on hits. Crits get bigger/colored.
   constructor(x, y, value, isCrit) {
@@ -3821,6 +4374,12 @@ function computeSpellMods(playerState, spellId) {
   let pierceBonus = 0;
   let chainBonus = 0;
   let burnDmgMult = 0;        // Conflagration follow-up: lingering flame DPS bonus
+  // Ninja-specific: clone & trap shaping. Default to neutral so non-ninja
+  // spells that read these (none today) wouldn't be affected.
+  let cloneAttackRateMult = 1.0;
+  let cloneHpBonus = 0;
+  let cloneDurationMult = 1.0;
+  let trapDurationMult = 1.0;
   let applyStatus = null;     // Merged from talents AND items (cinder_brand etc.)
   const behavior = {};
 
@@ -3840,6 +4399,9 @@ function computeSpellMods(playerState, spellId) {
       if (m.pierceBonus) pierceBonus += m.pierceBonus * rank;
       if (m.chainBonus)  chainBonus  += m.chainBonus * rank;
       if (m.burnDmgMult) burnDmgMult += m.burnDmgMult * rank;
+      if (m.cloneAttackRateMult) cloneAttackRateMult += m.cloneAttackRateMult * rank;
+      if (m.cloneHpBonus)        cloneHpBonus        += m.cloneHpBonus * rank;
+      if (m.cloneDurationMult)   cloneDurationMult   += m.cloneDurationMult * rank;
       // Status payload from talents (Ignite/Glacial Pull/etc.) — merge so
       // multiple sources can stack on the same spell.
       if (m.applyStatus) {
@@ -3852,6 +4414,10 @@ function computeSpellMods(playerState, spellId) {
     if (node.type === 'global_mod') {
       const m = node.mods || {};
       if (m.critChanceBonus) critChance += m.critChanceBonus * rank;
+      // Trap duration is a global modifier — Patient Wire applies to all
+      // trap-style spells (Caltrops, Spring Trap) regardless of which
+      // spell triggered the rank gain.
+      if (m.trapDurationMult) trapDurationMult += m.trapDurationMult * rank;
     }
   }
 
@@ -3907,7 +4473,12 @@ function computeSpellMods(playerState, spellId) {
     }
   }
 
-  return { dmgMult, critChance, critMult, radiusMult, sizeMult, pierceBonus, chainBonus, burnDmgMult, applyStatus, behavior };
+  return {
+    dmgMult, critChance, critMult, radiusMult, sizeMult,
+    pierceBonus, chainBonus, burnDmgMult,
+    cloneAttackRateMult, cloneHpBonus, cloneDurationMult, trapDurationMult,
+    applyStatus, behavior,
+  };
 }
 
 /*
@@ -4488,6 +5059,10 @@ class Game {
     this.flamePatches = [];      // Conflagration's lingering ground fire
     this.flameWalls = [];        // Wall of Flame
     this.stormClouds = [];       // Storm Cloud spell — hovering shock dispenser
+    this.shadowClones = [];      // Ninja Shadow path — sentry decoys
+    this.smokeBombs = [];        // Ninja Shadow path — slow + DoT clouds
+    this.caltrops = [];          // Ninja Arsenal path — bleed/slow zones
+    this.springTraps = [];       // Ninja Arsenal path — proximity mines
     this.damageNumbers = [];     // floating damage text
     this.explosions = [];        // visual-only expanding ring on impact
 
@@ -4589,6 +5164,10 @@ class Game {
     this.flamePatches = [];
     this.flameWalls = [];
     this.stormClouds = [];
+    this.shadowClones = [];
+    this.smokeBombs = [];
+    this.caltrops = [];
+    this.springTraps = [];
     this.damageNumbers = [];
     this.explosions = [];
     this.shake = 0;
@@ -4685,6 +5264,39 @@ class Game {
   }
   spawnStormCloud(opts) {
     this.stormClouds.push(new StormCloud(opts));
+  }
+  spawnShadowClone(opts) {
+    this.shadowClones.push(new ShadowClone(opts));
+  }
+  spawnSmokeBomb(opts) {
+    this.smokeBombs.push(new SmokeBomb(opts));
+  }
+  spawnCaltrops(opts) {
+    this.caltrops.push(new Caltrops(opts));
+  }
+  spawnSpringTrap(opts) {
+    this.springTraps.push(new SpringTrap(opts));
+  }
+  /*
+   * Restore HP without overhealing past max. Floats a green "+N" number
+   * so vampire/lifesteal effects feel concrete to the player. Used by
+   * Crescent Strike's lifesteal keystone, Reaping Strike, and any future
+   * heal-on-hit / heal-on-cast effects.
+   */
+  healPlayer(amount) {
+    if (!this.player?.alive || amount <= 0) return;
+    const before = this.player.hp;
+    this.player.hp = Math.min(this.player.maxHp, this.player.hp + amount);
+    const delta = this.player.hp - before;
+    if (delta < 1) return;
+    this.damageNumbers.push(new DamageNumber(
+      this.player.x + (Math.random() - 0.5) * 16,
+      this.player.y - this.player.radius - 4,
+      `+${Math.round(delta)}`,
+      false,
+    ));
+    // Tag last entry as a heal so the renderer can colour it green.
+    this.damageNumbers[this.damageNumbers.length - 1].isHeal = true;
   }
   spawnExplosion(x, y, radius, color, kind = 'burst') {
     // Visual-only expanding ring — actual damage handled by caller.
@@ -4879,6 +5491,10 @@ class Game {
     this.tickFlamePatches(dt);
     this.tickFlameWalls(dt);
     this.tickStormClouds(dt);
+    this.tickShadowClones(dt);
+    this.tickSmokeBombs(dt);
+    this.tickCaltrops(dt);
+    this.tickSpringTraps(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
@@ -4909,20 +5525,27 @@ class Game {
   }
 
   tickSpells(dt) {
-    // Focus combo (Ninja): each stack shaves 8% off effective cooldowns.
-    // Clamp the multiplier so a maxed combo doesn't break the cast loop.
-    const focusMult = Math.max(
-      0.45,
-      1 - 0.08 * (this.player?.focusStacks || 0)
-    );
+    // Focus combo (Ninja): each stack does TWO things on every cast —
+    //   1. shaves 8% off cooldowns (multiplicative, floor 0.45×)
+    //   2. boosts damage by 4% (capped at 28% on a 7-stack roof)
+    // The damage component is what makes Focus feel like a real combo
+    // crescendo instead of "just CDR". We clamp both terms so a maxed
+    // combo doesn't break the cast loop or trivialize bosses.
+    const stacks = this.player?.focusStacks || 0;
+    const focusCdMult = Math.max(0.45, 1 - 0.08 * stacks);
+    const focusDmgMult = 1 + Math.min(0.28, 0.04 * stacks);
     for (const s of this.activeSpells) {
       // Defensive: a renamed/removed spell shouldn't crash the loop.
       if (!SPELLS[s.spellId]) continue;
-      const cd = computeSpellCooldown(this.playerState, s.spellId) * focusMult;
+      const cd = computeSpellCooldown(this.playerState, s.spellId) * focusCdMult;
       s.cdAcc += dt;
       if (s.cdAcc >= cd) {
         s.cdAcc = 0;
         const mods = computeSpellMods(this.playerState, s.spellId);
+        // Apply Focus damage multiplier on top of all other dmg mults.
+        // Stays here (not in computeSpellMods) so it's strictly tied to
+        // the moment of casting and visible to anyone reading the loop.
+        mods.dmgMult *= focusDmgMult;
         SPELLS[s.spellId].cast(this, this.player, mods);
         this.player.castFlash = 0.2;
         Logger.event('spell_cast', { spell: s.spellId, wave: this.waveMgr.wave });
@@ -4941,6 +5564,7 @@ class Game {
           const procSpell = SPELLS[proc.effect.proc.spellId];
           if (procSpell) {
             const procMods = computeSpellMods(this.playerState, proc.effect.proc.spellId);
+            procMods.dmgMult *= focusDmgMult;
             procSpell.cast(this, this.player, procMods);
           }
         }
@@ -5000,7 +5624,18 @@ class Game {
       }
 
       // ===== Movement (slowed by status if applicable) =====
-      const dir = Vec.norm(Vec.sub(player, e));
+      // Shadow Clone misdirection — if a clone is closer than the player,
+      // the enemy walks toward the clone instead. Lets the ninja kite.
+      let steerTarget = player;
+      let steerDist = Vec.dist(player, e);
+      let cloneTarget = null;
+      if (this.shadowClones.length > 0) {
+        for (const c of this.shadowClones) {
+          const cd = Vec.dist(c, e);
+          if (cd < steerDist) { steerDist = cd; steerTarget = c; cloneTarget = c; }
+        }
+      }
+      const dir = Vec.norm(Vec.sub(steerTarget, e));
       const movementSpeed = e.speed * speedFactor;
       let vx = dir.x * movementSpeed;
       let vy = dir.y * movementSpeed;
@@ -5009,6 +5644,21 @@ class Game {
       e.x += vx * dt;
       e.y += vy * dt;
       e.pvx *= 0.88; e.pvy *= 0.88;
+
+      // Clone contact — enemy detonates against the clone instead of the
+      // player. Clone takes 1 hp (the clone's hp pool gates how many
+      // detonations it absorbs); enemy dies, no player damage.
+      if (cloneTarget && Vec.dist(cloneTarget, e) < (cloneTarget.radius || 11) + e.radius) {
+        cloneTarget.hp = (cloneTarget.hp || 0) - 1;
+        e.hp = 0;
+        e.alive = false;
+        this.spawnExplosion(e.x, e.y, e.radius * 1.4, e.color || '#ff5b6e');
+        this.spawnHitParticles(e.x, e.y, '#1a1612', 10);
+        this.addShake(0.10);
+        if (e.flash > 0) e.flash -= dt;
+        if (e.shock > 0) e.shock -= dt;
+        continue;
+      }
 
       // ===== Kamikaze contact damage =====
       // Touching the player triggers a one-shot detonation: the enemy
@@ -5330,6 +5980,182 @@ class Game {
       const x = this.explosions[i];
       x.t += dt;
       if (x.t >= x.life) this.explosions.splice(i, 1);
+    }
+  }
+
+  /*
+   * Shadow Clones — auto-throw shuriken at the nearest enemy. Take a few
+   * hits before dispersing. On death (life expires OR hp depleted) emit
+   * an ink puff. The Legion keystone causes a clone to spawn one weaker
+   * mini-clone when it dies; mini-clones can't recursively spawn.
+   */
+  tickShadowClones(dt) {
+    for (let i = this.shadowClones.length - 1; i >= 0; i--) {
+      const c = this.shadowClones[i];
+      c.t += dt;
+      c.bob += dt;
+      // Lifetime + hp expiry
+      if (c.t >= c.life || c.hp <= 0) {
+        this.spawnExplosion(c.x, c.y, 32, '#1a1612', 'smoke');
+        // Legion: spawn one short-lived mini clone where this one died.
+        if (c.legion && !c._spawned) {
+          c._spawned = true;
+          this.spawnShadowClone({
+            x: c.x, y: c.y,
+            life: 2.4,
+            hp: 1,
+            attackInterval: c.attackInterval * 1.2,
+            attackDamage: c.attackDamage * 0.55,
+            attackRange: c.attackRange,
+            radius: 9,
+            legion: false,
+            crit: c.crit,
+            spell: 'shadow_clone:legion',
+          });
+        }
+        this.shadowClones.splice(i, 1);
+        continue;
+      }
+      // Periodic shuriken throw at nearest enemy in range
+      c.attackAcc += dt;
+      if (c.attackAcc >= c.attackInterval) {
+        c.attackAcc = 0;
+        const target = this.findNearestEnemyTo(c, c.attackRange);
+        if (target) {
+          const dir = Vec.norm(Vec.sub(target, c));
+          this.spawnProjectile({
+            x: c.x, y: c.y,
+            vx: dir.x * 480, vy: dir.y * 480,
+            radius: 4,
+            damage: c.attackDamage,
+            color: '#9890a8',
+            life: 1.2,
+            pierce: 0,
+            crit: c.crit || { chance: 0, mult: 2 },
+            spellBaseDmg: c.attackDamage,
+            trail: 'steel',
+            spell: c.spell,
+          });
+        }
+      }
+    }
+  }
+
+  /*
+   * Smoke Bombs — slow + DoT cloud. Refreshes the player's iframes while
+   * they remain inside the cloud (hides them). Slows enemies that walk
+   * through it; ticks small DoT damage too. Veil keystone freezes
+   * enemies briefly when they enter.
+   */
+  tickSmokeBombs(dt) {
+    for (let i = this.smokeBombs.length - 1; i >= 0; i--) {
+      const sb = this.smokeBombs[i];
+      sb.t += dt;
+      if (sb.t >= sb.life) { this.smokeBombs.splice(i, 1); continue; }
+      // Apply slow + DoT to enemies inside
+      sb.dmgAcc += dt;
+      const tickIv = 0.3;
+      const wantTick = sb.dmgAcc >= tickIv;
+      const tickDmg = sb.dps * tickIv;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(sb, e) >= sb.radius + e.radius) continue;
+        // Slow refresh
+        e.applyStatus('slow', { duration: sb.slowDuration, factor: sb.slowFactor }, this.runElapsed);
+        // Veil: brief freeze on contact
+        if (sb.veilFreeze && !e.statuses?.freeze) {
+          e.applyStatus('freeze', { duration: 0.6, factor: 0 }, this.runElapsed);
+        }
+        if (wantTick) {
+          const a = e.takeDamage(tickDmg, { spell: sb.spell });
+          this.totalDamageDealt += a;
+        }
+      }
+      if (wantTick) sb.dmgAcc = 0;
+      // Player inside the cloud gets refreshed iframes — they're hidden.
+      if (this.player?.alive && Vec.dist(sb, this.player) < sb.radius) {
+        this.player.iframes = Math.max(this.player.iframes, 0.25);
+      }
+    }
+  }
+
+  /*
+   * Caltrops — slow + bleed when enemies walk through. Slow refresh is
+   * cheaper than smoke (no friend-of-foe protection here). Bleed is a
+   * dpsRatio-style ignite payload so it scales with the spell's damage.
+   */
+  tickCaltrops(dt) {
+    for (let i = this.caltrops.length - 1; i >= 0; i--) {
+      const cl = this.caltrops[i];
+      cl.t += dt;
+      if (cl.t >= cl.life) { this.caltrops.splice(i, 1); continue; }
+      cl.dmgAcc += dt;
+      const tickIv = 0.25;
+      const wantTick = cl.dmgAcc >= tickIv;
+      const tickDmg = cl.dps * tickIv;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(cl, e) >= cl.radius + e.radius) continue;
+        // Slow refresh — Caltrops slow is shorter but stronger than smoke
+        e.applyStatus('slow', { duration: cl.slowDuration, factor: cl.slowFactor }, this.runElapsed);
+        // Bleed (re-uses the ignite status as a generic DoT — already
+        // wired into the ticker)
+        e.applyStatus('ignite', {
+          duration: cl.bleedDuration,
+          dps: cl.dps * cl.bleedDpsRatio,
+        }, this.runElapsed);
+        if (wantTick) {
+          const a = e.takeDamage(tickDmg, { spell: cl.spell });
+          this.totalDamageDealt += a;
+        }
+      }
+      if (wantTick) cl.dmgAcc = 0;
+    }
+  }
+
+  /*
+   * Spring Traps — wait armTime, then detonate the moment any enemy enters
+   * triggerRadius. Detonation = AoE damage in blastRadius, brief stun
+   * (freeze), screen shake, ink burst. Removed afterward (one-shot).
+   */
+  tickSpringTraps(dt) {
+    for (let i = this.springTraps.length - 1; i >= 0; i--) {
+      const tr = this.springTraps[i];
+      tr.t += dt;
+      if (!tr.armed && tr.t >= tr.armTime) tr.armed = true;
+      // Lifetime expiry without trigger
+      if (tr.t >= tr.life && !tr.detonated) {
+        this.springTraps.splice(i, 1);
+        continue;
+      }
+      if (!tr.armed) continue;
+      // Look for any enemy inside trigger radius
+      let trigger = null;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(tr, e) < tr.triggerRadius + e.radius) { trigger = e; break; }
+      }
+      if (!trigger) continue;
+      // Detonate
+      tr.detonated = true;
+      const isCrit = Math.random() < (tr.crit?.chance || 0);
+      const dmg = isCrit ? tr.damage * (tr.crit?.mult || 2) : tr.damage;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(tr, e) < tr.blastRadius + e.radius) {
+          let final = dmg * computeConditionalDamageMult(this.playerState, e);
+          const a = e.takeDamage(final, { spell: tr.spell });
+          this.totalDamageDealt += a;
+          this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit);
+          if (tr.stunDuration > 0) {
+            e.applyStatus('freeze', { duration: tr.stunDuration, factor: 0 }, this.runElapsed);
+          }
+        }
+      }
+      this.spawnExplosion(tr.x, tr.y, tr.blastRadius, '#c14e3a', 'burst');
+      this.spawnHitParticles(tr.x, tr.y, '#c14e3a', 14);
+      this.addShake(0.30);
+      this.springTraps.splice(i, 1);
     }
   }
 
@@ -5800,12 +6626,16 @@ const Renderer = {
     // World layers
     this.drawFlamePatches(ctx, game.flamePatches, game.runElapsed);
     this.drawFlameWalls(ctx, game.flameWalls, w, game.runElapsed);
+    this.drawCaltrops(ctx, game.caltrops, game.runElapsed);
+    this.drawSpringTraps(ctx, game.springTraps, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells);
     this.drawAura(ctx, game.player, game.auraPulse, game);
     this.drawEnemies(ctx, game.enemies);
+    this.drawShadowClones(ctx, game.shadowClones, game.runElapsed);
     this.drawProjectiles(ctx, game.projectiles);
     this.drawStormClouds(ctx, game.stormClouds, game.runElapsed);
+    this.drawSmokeBombs(ctx, game.smokeBombs, game.runElapsed);
     this.drawLightnings(ctx, game.lightnings);
     this.drawExplosions(ctx, game.explosions);
     this.drawParticles(ctx, game.particles);
@@ -7535,6 +8365,157 @@ const Renderer = {
     }
   },
 
+  /* ---- Shadow Clone — translucent ninja silhouette throwing shuriken
+   * (pure visual — actual projectiles spawn via tickShadowClones). The
+   * silhouette flickers and is missing the vermilion eye-band so it
+   * reads as "not-quite-real". ---- */
+  drawShadowClones(ctx, clones, t) {
+    for (const c of clones) {
+      const lifeT = c.t / c.life;
+      const fade = lifeT < 0.85 ? 1 : (1 - lifeT) / 0.15;
+      const flick = 0.55 + 0.20 * Math.sin(t * 6 + c.bob * 1.4);
+      const a = fade * flick;
+      const cx = c.x, cy = c.y;
+      const r = c.radius || 11;
+      // Ink puff shadow on ground
+      ctx.fillStyle = `rgba(26,22,18,${0.18 * fade})`;
+      ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.9, r * 1.1, r * 0.4, 0, 0, TAU); ctx.fill();
+      // Silhouette body
+      ctx.save();
+      ctx.translate(cx, cy + Math.sin(t * 2 + c.bob) * 1.4);
+      ctx.fillStyle = `rgba(36,30,52,${0.85 * a})`;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.65, -r * 0.6);
+      ctx.lineTo( r * 0.65, -r * 0.6);
+      ctx.lineTo( r * 0.85,  r * 0.9);
+      ctx.lineTo(-r * 0.85,  r * 0.9);
+      ctx.closePath();
+      ctx.fill();
+      // Hood arc
+      ctx.fillStyle = `rgba(26,22,18,${0.95 * a})`;
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.7, r * 0.7, 0, Math.PI, true);
+      ctx.fill();
+      // Faint vermilion glow where the eyes would be (no full band — it's a clone)
+      ctx.fillStyle = `rgba(168,58,44,${0.35 * a})`;
+      ctx.fillRect(-r * 0.35, -r * 0.85, r * 0.7, 1.2);
+      ctx.restore();
+      // HP pip — small dots above the head per remaining hit
+      const maxPips = Math.max(1, Math.round(c.hp));
+      for (let i = 0; i < maxPips; i++) {
+        ctx.fillStyle = `rgba(200,148,26,${a})`;
+        ctx.beginPath();
+        ctx.arc(cx - (maxPips - 1) * 2.2 + i * 4.4, cy - r - 5, 1.3, 0, TAU);
+        ctx.fill();
+      }
+    }
+  },
+
+  /* ---- Smoke Bomb — soft ink cloud that obscures the player. Multiple
+   * overlapping puff blobs animate via wobbling positions. ---- */
+  drawSmokeBombs(ctx, bombs, t) {
+    for (const sb of bombs) {
+      const lifeT = sb.t / sb.life;
+      const fadeIn = Math.min(1, sb.t / 0.25);
+      const fadeOut = Math.min(1, (sb.life - sb.t) / 0.5);
+      const alpha = Math.min(fadeIn, fadeOut);
+      const cx = sb.x, cy = sb.y;
+      const r = sb.radius;
+      const puffs = 9;
+      for (let i = 0; i < puffs; i++) {
+        const ang = (i / puffs) * TAU + sb.seed;
+        const rad = r * (0.45 + 0.35 * Math.sin(t * 1.2 + i + sb.seed));
+        const px = cx + Math.cos(ang) * rad;
+        const py = cy + Math.sin(ang) * rad;
+        const pr = r * (0.35 + 0.10 * Math.sin(t * 2 + i * 1.7));
+        ctx.fillStyle = `rgba(60,52,42,${0.50 * alpha})`;
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(26,22,18,${0.30 * alpha})`;
+        ctx.beginPath(); ctx.arc(px - pr * 0.25, py - pr * 0.20, pr * 0.55, 0, TAU); ctx.fill();
+      }
+      // Central darker mass
+      ctx.fillStyle = `rgba(26,22,18,${0.30 * alpha})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, TAU); ctx.fill();
+    }
+  },
+
+  /* ---- Caltrops — scorched ground patch with little spikes scattered
+   * inside it. Reads as a debris/spike field rather than smoke. ---- */
+  drawCaltrops(ctx, patches, t) {
+    for (const cl of patches) {
+      const lifeT = cl.t / cl.life;
+      const fade = lifeT < 0.85 ? 1 : (1 - lifeT) / 0.15;
+      const r = cl.radius;
+      // Stained ground disc
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cl.x, cl.y, r, 0, TAU); ctx.clip();
+      ctx.fillStyle = `rgba(60,52,42,${0.18 * fade})`;
+      ctx.fillRect(cl.x - r, cl.y - r, r * 2, r * 2);
+      hatch(ctx, cl.x, cl.y, r * 2, r * 2, 3, Math.PI / 2.6, `rgba(26,22,18,${0.22 * fade})`, 0.5);
+      ctx.restore();
+      // Scattered caltrop pips (small 4-pointed stars)
+      const pips = Math.max(8, Math.floor(r / 9));
+      for (let i = 0; i < pips; i++) {
+        const ang = (i / pips) * TAU + cl.seed;
+        const dist = (Math.sin(cl.seed * 1.7 + i * 2.3) + 1) * 0.5 * r * 0.85;
+        const px = cl.x + Math.cos(ang) * dist;
+        const py = cl.y + Math.sin(ang) * dist;
+        ctx.fillStyle = `rgba(200,180,90,${fade})`;
+        drawStarPath(ctx, px, py, 3.2, 1.0, 4, ang * 1.3);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(26,22,18,${0.7 * fade})`;
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+      // Outline
+      ctx.strokeStyle = `rgba(26,22,18,${0.55 * fade})`;
+      ctx.lineWidth = 1.0;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.arc(cl.x, cl.y, r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  },
+
+  /* ---- Spring Trap — small mine that pulses faster as it arms. Vermilion
+   * heart with an ink ring; pulses red when armed. ---- */
+  drawSpringTraps(ctx, traps, t) {
+    for (const tr of traps) {
+      const lifeT = Math.min(1, tr.t / tr.life);
+      const armPct = Math.min(1, tr.t / Math.max(0.001, tr.armTime));
+      const armed = tr.armed;
+      const cx = tr.x, cy = tr.y;
+      // Ground shadow
+      ctx.fillStyle = `rgba(26,22,18,${0.20})`;
+      ctx.beginPath(); ctx.ellipse(cx, cy + 4, 9, 3, 0, 0, TAU); ctx.fill();
+      // Outer ring (arming progress sweep)
+      ctx.strokeStyle = `rgba(26,22,18,${0.85})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8, -Math.PI / 2, -Math.PI / 2 + armPct * TAU);
+      ctx.stroke();
+      // Casing
+      ctx.fillStyle = armed ? '#3a2a26' : '#2a221c';
+      ctx.beginPath(); ctx.arc(cx, cy, 6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#1a1612';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      // Pulsing core — red when armed, gold while arming
+      const pulseRate = armed ? 5 : 2;
+      const pulse = 0.5 + 0.5 * Math.sin(t * pulseRate + tr.seed);
+      const coreColor = armed ? `rgba(200,60,40,${0.55 + pulse * 0.4})` : `rgba(200,148,26,${0.4 + pulse * 0.3})`;
+      ctx.fillStyle = coreColor;
+      ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, TAU); ctx.fill();
+      // Trigger range hint when armed (very faint)
+      if (armed) {
+        ctx.strokeStyle = `rgba(200,60,40,${0.18 + pulse * 0.10})`;
+        ctx.lineWidth = 0.6;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath(); ctx.arc(cx, cy, tr.triggerRadius, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  },
+
   drawDamageNumbers(ctx, nums) {
     ctx.textAlign = 'center';
     for (const d of nums) {
@@ -7547,10 +8528,12 @@ const Renderer = {
       const text = d.isCrit ? `${d.value}!` : `${d.value}`;
       const halo = ctx.measureText(text);
       ctx.fillRect(d.x - halo.width / 2 - 2, d.y - size + 1, halo.width + 4, size + 2);
-      // Main text — gold for crits, vermilion for normal hits
-      ctx.fillStyle = d.isCrit
-        ? `rgba(200,148,26,${fade})`
-        : `rgba(168,58,44,${fade})`;
+      // Main text — gold for crits, green for heals, vermilion for normal hits
+      let fillColor;
+      if (d.isHeal)      fillColor = `rgba(112,168,96,${fade})`;
+      else if (d.isCrit) fillColor = `rgba(200,148,26,${fade})`;
+      else               fillColor = `rgba(168,58,44,${fade})`;
+      ctx.fillStyle = fillColor;
       ctx.fillText(text, d.x, d.y);
     }
     ctx.textAlign = 'start';
@@ -7650,6 +8633,15 @@ const UI = {
     if (trees.length === 1) {
       this.showStarterSelect(charId, trees[0]);
       return;
+    }
+
+    // Per-character flavour subtitle so the path screen reads right for
+    // each class. Ninja is steel/shadow/arsenal, not arcana.
+    const subtitle = this.$('path-subtitle');
+    if (subtitle) {
+      subtitle.textContent = charId === 'ninja'
+        ? '— Choose your discipline —'
+        : '— Channel your first arcanum —';
     }
 
     const cont = this.$('path-choices');
@@ -7782,6 +8774,7 @@ const UI = {
     vigil: '🛡',
     steel: '✦',
     shadow: '☾',
+    arsenal: '✜',
   },
 
   // Spell icons for the unlock card headers
@@ -7796,6 +8789,16 @@ const UI = {
     wall_of_flame: '▮',
     pyroclasm: '💥',
     frost_spike: '❄',
+    // Ninja
+    crescent_strike: '☽',
+    reaping_strike: '⚔',
+    shuriken_toss: '✦',
+    shadow_clone: '☯',
+    flicker_step: '☾',
+    smoke_bomb: '◌',
+    crossbow_bolt: '➶',
+    caltrops: '✺',
+    spring_trap: '✦',
   },
 
   showSkillTree(ps, wave, ptsAwarded = {}, healAmount = 0) {
@@ -8794,16 +9797,29 @@ const UI = {
     this.$('hud-hp').textContent = `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`;
     this.$('hud-time').textContent = formatTime(game.runElapsed);
     // Focus stacks (Ninja-only) — show stack count + cap, hidden for
-    // characters that don't generate Focus.
+    // characters that don't generate Focus. Hover the widget to read the
+    // mechanic; tooltip surfaces the live numbers so the player knows
+    // exactly what each stack is worth right now.
     const focusWrap = this.$('hud-focus-wrap');
     if (focusWrap) {
       const isNinja = game.playerState?.charDef?.id === 'ninja';
       if (isNinja) {
         focusWrap.style.display = '';
         const cap = game.player._focusCap || 5;
-        this.$('hud-focus').textContent = `${game.player.focusStacks || 0} / ${cap}`;
+        const stacks = game.player.focusStacks || 0;
+        this.$('hud-focus').textContent = `${stacks} / ${cap}`;
+        focusWrap.classList.toggle('is-max', stacks >= cap);
+        const cdrPct = Math.round(Math.min(0.55, 0.08 * stacks) * 100);
+        const dmgPct = Math.round(Math.min(0.28, 0.04 * stacks) * 100);
+        const grace = (game.player._focusDecayInterval || 4.0).toFixed(1);
+        focusWrap.setAttribute('data-tooltip',
+          `FOCUS — kill enemies to stack (cap ${cap}, decays after ${grace}s).\n` +
+          `Each stack: −8% cooldown AND +4% damage on every cast.\n` +
+          `Right now: ${stacks} stacks → −${cdrPct}% CD, +${dmgPct}% dmg.`);
       } else {
         focusWrap.style.display = 'none';
+        focusWrap.removeAttribute('data-tooltip');
+        focusWrap.classList.remove('is-max');
       }
     }
 
