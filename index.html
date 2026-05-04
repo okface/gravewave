@@ -2716,148 +2716,334 @@ const SKILL_TREES = {
     ],
   },
 
+  /*
+   * Fire tree — DEEP version. Same shape as Frost: T1 unlock → T2-3
+   * generic feeders → T4 keystone fork → T5-9 path lines (multi-rank
+   * + 1-pt identity nodes) → T10 capstone. Wall-of-Flame and Pyroclasm
+   * remain as side-spell unlocks anchored at T2/T3 (cost 2 SP / 3 SP)
+   * with a small set of upgrades each — they're the deeper "side
+   * branches" rather than a separate full tree.
+   */
   fire: {
     id: 'fire', name: 'Fire', color: 'fire',
     nodes: [
-      // ===== FIREBALL — tier 1 (1 SP) =====
+      // ===== TIER 1 — unlock =====
       { id: 'f_unlock_fireball', name: 'Fireball', tier: 1, cost: 1, requires: [],
         type: 'unlock_spell', spellId: 'fireball',
         desc: 'Burning projectile. 18 dmg + 14 splash in 90 radius, 1.5s CD.' },
 
+      // ===== TIER 2 — generic entry =====
       { id: 'f_fb_dmg', name: 'Heat', requires: ['f_unlock_fireball'],
-        type: 'spell_mod', spellId: 'fireball', mods: { dmgMult: 0.20 },
-        maxRank: 3, desc: '+20% damage per rank.' },
+        type: 'spell_mod', spellId: 'fireball', mods: { dmgMult: 0.10 },
+        maxRank: 5, desc: '+10% Fireball damage per rank.' },
 
       { id: 'f_fb_radius', name: 'Spread', requires: ['f_unlock_fireball'],
-        type: 'spell_mod', spellId: 'fireball', mods: { radiusMult: 0.15 },
-        maxRank: 3, desc: '+15% blast radius per rank.' },
+        type: 'spell_mod', spellId: 'fireball', mods: { radiusMult: 0.10 },
+        maxRank: 4, desc: '+10% blast radius per rank.' },
 
-      { id: 'f_fb_cdr', name: 'Quick Cast', requires: ['f_unlock_fireball'],
-        type: 'spell_mod', spellId: 'fireball', mods: { cdMult: -0.10 },
-        maxRank: 3, desc: '−10% Fireball cooldown per rank.' },
+      // ===== TIER 3 — sub-feeders =====
+      { id: 'f_fb_cdr', name: 'Quick Cast', requires: ['f_fb_dmg'],
+        treePointsRequired: 2,
+        type: 'spell_mod', spellId: 'fireball', mods: { cdMult: -0.06 },
+        maxRank: 4, desc: '−6% Fireball cooldown per rank.' },
 
-      // Ignite — REDESIGNED. Burning enemies are crit-struck by all your
-      // spells, instead of taking a tiny DoT. Now a real damage amp synergy.
-      { id: 'f_fb_ignite', name: 'Ignite', requires: ['f_unlock_fireball'],
+      { id: 'f_fb_ignite', name: 'Ignite', requires: ['f_fb_radius'],
+        treePointsRequired: 2,
         type: 'spell_mod', spellId: 'fireball',
         mods: { applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.0, critOnHit: true } } },
-        desc: 'Fireball impacts ignite the target for 3s. ALL your spells deal critical hits to ignited enemies (2× damage).' },
+        desc: 'Fireball impacts ignite the target for 3s. ALL your spells crit-strike ignited enemies.' },
 
-      // Keystone fork
-      { id: 'f_keystone_conflagration', name: 'Conflagration', requires: ['f_unlock_fireball'],
+      // ===== TIER 4 — KEYSTONE FORK =====
+      { id: 'f_keystone_conflagration', name: 'Conflagration',
+        requires: ['f_fb_ignite'],
+        treePointsRequired: 4,
         type: 'keystone', affects: 'fireball',
         modAdjust: { dmgMult: 0.7, radiusMult: 1.4 },
         behavior: { lingeringFlame: true },
         lockedBy: ['f_keystone_detonation'], keystone: true,
         desc: 'Fireball impacts leave burning ground for 2.5s (DoT). Fireball damage ×0.7, radius ×1.4.' },
 
-      { id: 'f_keystone_detonation', name: 'Detonation', requires: ['f_unlock_fireball'],
+      { id: 'f_keystone_detonation', name: 'Detonation',
+        requires: ['f_fb_cdr'],
+        treePointsRequired: 4,
         type: 'keystone', affects: 'fireball',
         modAdjust: { dmgMult: 1.9 },
         behavior: { noSplash: true, projectileBoost: 1.5 },
         lockedBy: ['f_keystone_conflagration'], keystone: true,
-        desc: 'Fireball: single-target focus. Damage ×1.9, no AOE splash, 1.5× projectile speed.' },
+        desc: 'Fireball: single-target focus. ×1.9 damage, no AOE splash, 1.5× projectile speed.' },
 
-      { id: 'f_conf_radius', name: 'Spreading Inferno', requires: ['f_keystone_conflagration'],
-        type: 'spell_mod', spellId: 'fireball', mods: { radiusMult: 0.20 },
-        maxRank: 3, desc: '+20% blast radius per rank.' },
+      // ===================================================================
+      // CONFLAGRATION LINE — DoT / spread / crowd-control flavour
+      // ===================================================================
+      { id: 'f_conf_radius', name: 'Spreading Inferno',
+        requires: ['f_keystone_conflagration'], treePointsRequired: 5,
+        type: 'spell_mod', spellId: 'fireball', mods: { radiusMult: 0.10 },
+        maxRank: 4, desc: '+10% blast radius per rank — the lingering flame patch grows with it.' },
 
-      { id: 'f_conf_burn', name: 'Embers Linger', requires: ['f_keystone_conflagration'],
-        type: 'spell_mod', spellId: 'fireball', mods: { burnDmgMult: 0.30 },
-        maxRank: 3, desc: '+30% lingering flame damage per rank.' },
+      { id: 'f_conf_burn', name: 'Embers Linger',
+        requires: ['f_conf_radius'], treePointsRequired: 7,
+        type: 'spell_mod', spellId: 'fireball', mods: { burnDmgMult: 0.15 },
+        maxRank: 4, desc: '+15% lingering flame DPS per rank.' },
 
-      { id: 'f_det_dmg', name: 'Compressed Charge', requires: ['f_keystone_detonation'],
-        type: 'spell_mod', spellId: 'fireball', mods: { dmgMult: 0.20 },
-        maxRank: 3, desc: '+20% damage per rank.' },
+      { id: 'f_conf_wildfire', name: 'Wildfire',
+        requires: ['f_conf_burn'], treePointsRequired: 9,
+        type: 'spell_mod', spellId: 'fireball',
+        behaviorOverride: { igniteSpreads: true },
+        desc: 'Each second, ignited enemies have a chance to ignite a nearby foe. Cascades across packs.' },
 
-      // ===== WALL OF FLAME — tier 2 (2 SP) =====
+      { id: 'f_conf_kindling', name: 'Kindled Mind',
+        requires: ['f_conf_wildfire'], treePointsRequired: 11,
+        type: 'global_mod', mods: { fireCdrMult: 0.95 },
+        maxRank: 3, desc: '−5% cooldown on ALL Fire spells per rank.' },
+
+      { id: 'f_conf_searing', name: 'Searing Touch',
+        requires: ['f_conf_kindling'], treePointsRequired: 13,
+        type: 'global_mod', mods: { dmgVsIgnited: 0.10 },
+        maxRank: 4, desc: '+10% damage from ALL spells against ignited enemies, per rank.' },
+
+      // T10 Conflagration capstone
+      { id: 'f_conf_capstone', name: 'Phoenix Trail',
+        requires: ['f_conf_kindling', 'f_conf_wildfire'],
+        treePointsRequired: 16,
+        type: 'spell_mod', spellId: 'fireball',
+        behaviorOverride: { igniteKillRefundsCD: 0.3 },
+        desc: 'Killing an ignited enemy has a 30% chance to instantly refund Fireball\'s cooldown. DoT-stacking sustain.' },
+
+      // ===================================================================
+      // DETONATION LINE — single-target burst / mobile sniper flavour
+      // ===================================================================
+      { id: 'f_det_dmg', name: 'Compressed Charge',
+        requires: ['f_keystone_detonation'], treePointsRequired: 5,
+        type: 'spell_mod', spellId: 'fireball', mods: { dmgMult: 0.10 },
+        maxRank: 5, desc: '+10% Fireball damage per rank — Detonation rewards stacking damage.' },
+
+      { id: 'f_det_speed', name: 'Tracer',
+        requires: ['f_det_dmg'], treePointsRequired: 7,
+        type: 'spell_mod', spellId: 'fireball',
+        behaviorOverride: { fireballPiercesOnce: true },
+        desc: 'Fireball pierces ONE enemy on the way to its target — clear small mobs in front of bosses.' },
+
+      { id: 'f_det_crit', name: 'Pinpoint',
+        requires: ['f_det_speed'], treePointsRequired: 9,
+        type: 'spell_mod', spellId: 'fireball', mods: { critChanceBonus: 0.06 },
+        maxRank: 4, desc: '+6% Fireball crit chance per rank.' },
+
+      { id: 'f_det_recoil', name: 'Recoil',
+        requires: ['f_det_crit'], treePointsRequired: 11,
+        type: 'spell_mod', spellId: 'fireball', mods: { cdMult: -0.05 },
+        maxRank: 3, desc: '−5% Fireball cooldown per rank.' },
+
+      { id: 'f_det_overpressure', name: 'Overpressure',
+        requires: ['f_det_recoil'], treePointsRequired: 13,
+        type: 'spell_mod', spellId: 'fireball',
+        behaviorOverride: { critsApplyShock: { duration: 4.0, multiplier: 1.5 } },
+        desc: 'Critical Fireball hits also Shock the target — your next strike on that enemy deals +50%.' },
+
+      // T10 Detonation capstone
+      { id: 'f_det_capstone', name: 'Armageddon',
+        requires: ['f_det_overpressure', 'f_det_crit'],
+        treePointsRequired: 16,
+        type: 'spell_mod', spellId: 'fireball',
+        behaviorOverride: { onCritSpawnFireball: 0.5 },
+        desc: '50% chance on a Fireball crit to spawn a free Fireball at the target. Crit-into-crit chains.' },
+
+      // ===================================================================
+      // SIDE BRANCH — Wall of Flame (T2 unlock, 2 SP)
+      // ===================================================================
       { id: 'f_unlock_wall', name: 'Wall of Flame', tier: 2, cost: 2, requires: [],
+        treePointsRequired: 5,
         type: 'unlock_spell', spellId: 'wall_of_flame',
         desc: 'Horizontal wall of fire across the battlefield. 7 dmg/tick, 8s duration, 7s CD.' },
 
       { id: 'f_wall_dmg', name: 'Hotter Flame', requires: ['f_unlock_wall'],
-        type: 'spell_mod', spellId: 'wall_of_flame', mods: { dmgMult: 0.20 },
-        maxRank: 3, desc: '+20% damage per tick per rank.' },
+        type: 'spell_mod', spellId: 'wall_of_flame', mods: { dmgMult: 0.15 },
+        maxRank: 4, desc: '+15% Wall tick damage per rank.' },
 
-      // ===== PYROCLASM — tier 3 (3 SP) =====
+      { id: 'f_wall_size', name: 'Wider Wall', requires: ['f_unlock_wall'],
+        type: 'spell_mod', spellId: 'wall_of_flame', mods: { sizeMult: 0.15 },
+        maxRank: 3, desc: '+15% wall length per rank.' },
+
+      // ===================================================================
+      // SIDE BRANCH — Pyroclasm (T3 unlock, 3 SP)
+      // ===================================================================
       { id: 'f_unlock_pyro', name: 'Pyroclasm', tier: 3, cost: 3, requires: [],
+        treePointsRequired: 10,
         type: 'unlock_spell', spellId: 'pyroclasm',
         desc: 'Massive eruption at densest cluster. 80 dmg in 150 radius, 6.5s CD.' },
 
       { id: 'f_pyro_dmg', name: 'Fissure', requires: ['f_unlock_pyro'],
-        type: 'spell_mod', spellId: 'pyroclasm', mods: { dmgMult: 0.20 },
-        maxRank: 3, desc: '+20% damage per rank.' },
+        type: 'spell_mod', spellId: 'pyroclasm', mods: { dmgMult: 0.12 },
+        maxRank: 5, desc: '+12% Pyroclasm damage per rank.' },
 
-      // ===== PASSIVE =====
-      { id: 'f_global_cdr', name: 'Kindled Mind', requires: [],
-        type: 'global_mod', mods: { fireCdrMult: 0.92 },
-        maxRank: 3, desc: '−8% cooldown on Fire spells per rank.' },
+      { id: 'f_pyro_radius', name: 'Caldera', requires: ['f_unlock_pyro'],
+        type: 'spell_mod', spellId: 'pyroclasm', mods: { radiusMult: 0.10 },
+        maxRank: 3, desc: '+10% Pyroclasm radius per rank.' },
     ],
   },
 
+  /*
+   * Frost tree — DEEP version (Diablo / WoW MoP shape).
+   *
+   * 10 functional tiers organised as: T1 unlock → T2 entry feeders →
+   * T3 sub-feeders → T4 KEYSTONE FORK → T5-9 path lines (alternate
+   * scaling ranks and 1-pt identity nodes) → T10 capstones.
+   *
+   * Two distinct paths after the keystone, mutually exclusive. Each
+   * path requires deepening investment to unlock its later tiers
+   * (Diablo's "N points spent in this tree" gate via
+   * `treePointsRequired`). A capstone needs ~14 pts in the tree —
+   * which is two-thirds of a full path — so reaching it is a real
+   * commitment, not a casual grab.
+   *
+   * Multi-rank ranks give players somewhere to dump per-wave TP
+   * without trivialising decisions; single-pt switches sit at the
+   * forks and identity moments. All node IDs preserved from before
+   * where they map cleanly so saved progress / fusion inheritance
+   * don't break.
+   */
   frost: {
     id: 'frost', name: 'Frost', color: 'frost',
     nodes: [
-      // ===== FROST SPIKE — unlock =====
+      // ===== TIER 1 — unlock =====
       { id: 'fr_unlock_spike', name: 'Frost Spike', tier: 1, cost: 1, requires: [],
         type: 'unlock_spell', spellId: 'frost_spike',
         desc: 'Pierces toward farthest enemy. 12 dmg, 2 pierce, slows hit targets 35% for 1.5s, 0.85s CD.' },
 
-      // ===== ENTRY TALENTS (path-agnostic) =====
+      // ===== TIER 2 — generic entry talents (always available) =====
       { id: 'fr_spike_dmg', name: 'Sharpened', requires: ['fr_unlock_spike'],
-        type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.15 },
-        maxRank: 3, desc: '+15% Frost Spike damage per rank.' },
+        type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.10 },
+        maxRank: 5, desc: '+10% Frost Spike damage per rank.' },
 
       { id: 'fr_spike_chill', name: 'Lasting Chill', requires: ['fr_unlock_spike'],
         type: 'spell_mod', spellId: 'frost_spike',
         mods: { applyStatus: { slow: { duration: 3.0, factor: 0.5 } } },
         desc: 'Slow becomes 50% strength (was 35%) and lasts 3s (was 1.5s).' },
 
-      // ===== SHATTER PATH — keystone (mutex with Glacial) =====
-      { id: 'fr_keystone_shatter', name: 'Shatter Path', requires: ['fr_unlock_spike'],
+      // ===== TIER 3 — sub-feeders (unlock after 2 pts in tree) =====
+      { id: 'fr_spike_speed', name: 'Crystallised', requires: ['fr_spike_dmg'],
+        treePointsRequired: 2,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { sizeMult: 0.10 },
+        maxRank: 3, desc: '+10% projectile size per rank — fatter spike, easier to hit clusters.' },
+
+      { id: 'fr_spike_pierce_pre', name: 'Honed Tip', requires: ['fr_spike_chill'],
+        treePointsRequired: 2,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
+        maxRank: 2, desc: '+1 pierce per rank — line up shots through crowds.' },
+
+      // ===== TIER 4 — KEYSTONE FORK (mutex). Requires 4 pts in tree. =====
+      { id: 'fr_keystone_shatter', name: 'Shatter Path',
+        requires: ['fr_spike_dmg'],
+        treePointsRequired: 4,
         type: 'keystone', affects: 'frost_spike',
         modAdjust: { dmgMult: 0.85, pierceBonus: -1 },
         behavior: { splitsOnFirstHit: 3 },
         lockedBy: ['fr_keystone_glacial'], keystone: true,
-        desc: 'On first hit, Frost Spike splits into 3 fragments at 65% damage each. Pierce −1.' },
+        desc: 'On first hit, Frost Spike splits into 3 fragments at 65% damage each. Pierce −1, damage −15%.' },
 
-      { id: 'fr_shatter_pierce', name: 'Pierce', requires: ['fr_keystone_shatter'],
-        type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
-        maxRank: 2, desc: '+1 pierce per rank — fragments still split.' },
-
-      { id: 'fr_shatter_splinter', name: 'Splintering', requires: ['fr_keystone_shatter'],
-        type: 'spell_mod', spellId: 'frost_spike', mods: { splitDmgMult: 0.25 },
-        maxRank: 2, desc: 'Fragments deal +25% of full damage per rank (65% → 90% → 115%).' },
-
-      { id: 'fr_shatter_capstone', name: 'Crystal Cascade',
-        requires: ['fr_keystone_shatter', 'fr_shatter_splinter'],
-        type: 'spell_mod', spellId: 'frost_spike',
-        behaviorOverride: { shatterOnFrozenExplodes: true },
-        desc: 'Hitting a frozen enemy detonates them — 3.0 unit explosion at 200% Frost Spike damage. Synergises with Glacial allies.' },
-
-      // ===== GLACIAL PATH — keystone (mutex with Shatter) =====
-      { id: 'fr_keystone_glacial', name: 'Glacial Path', requires: ['fr_unlock_spike'],
+      { id: 'fr_keystone_glacial', name: 'Glacial Path',
+        requires: ['fr_spike_chill'],
+        treePointsRequired: 4,
         type: 'keystone', affects: 'frost_spike',
         modAdjust: { dmgMult: 0.90 },
         behavior: { freezeOnSlow: { duration: 1.5 } },
         lockedBy: ['fr_keystone_shatter'], keystone: true,
         desc: 'Hitting an already-slowed enemy fully FREEZES them for 1.5s instead of refreshing slow. −10% damage.' },
 
-      { id: 'fr_glacial_freeze', name: 'Deep Freeze', requires: ['fr_keystone_glacial'],
+      // ===================================================================
+      // SHATTER LINE — physical/burst flavour. Each pair of tiers has a
+      // multi-rank scaling node + a 1-pt identity switch.
+      // ===================================================================
+      // ----- T5 SHATTER (req: 5 pts in tree) -----
+      { id: 'fr_shatter_splinter', name: 'Splintering',
+        requires: ['fr_keystone_shatter'],
+        treePointsRequired: 5,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { splitDmgMult: 0.10 },
+        maxRank: 4, desc: 'Fragments deal +10% of full damage per rank (65% → 105%).' },
+
+      // ----- T6 SHATTER (req: 7 pts in tree) -----
+      { id: 'fr_shatter_pierce', name: 'Razor Edge',
+        requires: ['fr_shatter_splinter'],
+        treePointsRequired: 7,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
+        maxRank: 3, desc: '+1 pierce per rank — fragments still split through every target.' },
+
+      // ----- T7 SHATTER (req: 9 pts in tree) -----
+      { id: 'fr_shatter_swarm', name: 'Cascade',
+        requires: ['fr_shatter_pierce'],
+        treePointsRequired: 9,
         type: 'spell_mod', spellId: 'frost_spike',
-        mods: { freezeDurationBonus: 0.5 },
-        maxRank: 2, desc: '+0.5s freeze duration per rank.' },
+        behaviorOverride: { fragmentsRespawnOnHit: true },
+        desc: 'Each fragment that hits a NEW enemy spawns one more fragment. Snowballs through dense waves.' },
 
-      { id: 'fr_glacial_hypothermia', name: 'Hypothermia', requires: ['fr_keystone_glacial'],
-        type: 'global_mod',
-        mods: { dmgVsFrozen: 0.20 },
-        maxRank: 2, desc: '+20% damage from ALL your spells against frozen enemies, per rank.' },
+      // ----- T8 SHATTER (req: 11 pts) -----
+      { id: 'fr_shatter_velocity', name: 'Brittle Edge',
+        requires: ['fr_shatter_swarm'],
+        treePointsRequired: 11,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.10 },
+        maxRank: 4, desc: '+10% Frost Spike damage per rank — feeds into the fragment damage curve.' },
 
+      // ----- T9 SHATTER (req: 13 pts) -----
+      { id: 'fr_shatter_crit', name: 'Cleaving Strike',
+        requires: ['fr_shatter_velocity'],
+        treePointsRequired: 13,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { critChanceBonus: 0.05 },
+        maxRank: 3, desc: '+5% Frost Spike crit chance per rank — fragments inherit crits.' },
+
+      // ----- T10 SHATTER capstone (req: 16 pts + dual prereqs) -----
+      { id: 'fr_shatter_capstone', name: 'Crystal Cascade',
+        requires: ['fr_shatter_velocity', 'fr_shatter_swarm'],
+        treePointsRequired: 16,
+        type: 'spell_mod', spellId: 'frost_spike',
+        behaviorOverride: { shatterOnFrozenExplodes: true },
+        desc: 'Hitting a frozen enemy detonates them — 60u explosion at 200% Frost Spike damage. Lethal next to a Glacial-investing ally.' },
+
+      // ===================================================================
+      // GLACIAL LINE — control + amplifier flavour.
+      // ===================================================================
+      // ----- T5 GLACIAL (req: 5 pts) -----
+      { id: 'fr_glacial_freeze', name: 'Deep Freeze',
+        requires: ['fr_keystone_glacial'],
+        treePointsRequired: 5,
+        type: 'spell_mod', spellId: 'frost_spike',
+        mods: { freezeDurationBonus: 0.3 },
+        maxRank: 4, desc: '+0.3s freeze duration per rank (1.5s base → up to 2.7s).' },
+
+      // ----- T6 GLACIAL (req: 7 pts) -----
+      { id: 'fr_glacial_brittle', name: 'Brittle',
+        requires: ['fr_glacial_freeze'],
+        treePointsRequired: 7,
+        type: 'global_mod', mods: { dmgVsFrozen: 0.10 },
+        maxRank: 3, desc: '+10% damage from ALL spells against frozen enemies, per rank.' },
+
+      // ----- T7 GLACIAL (req: 9 pts) -----
+      { id: 'fr_glacial_resonance', name: 'Frost Resonance',
+        requires: ['fr_glacial_brittle'],
+        treePointsRequired: 9,
+        type: 'spell_mod', spellId: 'frost_spike',
+        behaviorOverride: { freezeSpikeChainsToFrozen: true },
+        desc: 'Frost Spike that hits a frozen target arcs once to the nearest non-frozen enemy and slows them.' },
+
+      // ----- T8 GLACIAL (req: 11 pts) -----
+      { id: 'fr_glacial_hypothermia', name: 'Hypothermia',
+        requires: ['fr_glacial_resonance'],
+        treePointsRequired: 11,
+        type: 'global_mod', mods: { dmgVsFrozen: 0.10 },
+        maxRank: 4, desc: 'Stack: +10% MORE damage to frozen enemies per rank (multiplicative with Brittle).' },
+
+      // ----- T9 GLACIAL (req: 13 pts) -----
+      { id: 'fr_glacial_permafrost', name: 'Permafrost',
+        requires: ['fr_glacial_hypothermia'],
+        treePointsRequired: 13,
+        type: 'spell_mod', spellId: 'frost_spike', mods: { freezeDurationBonus: 0.4 },
+        maxRank: 3, desc: '+0.4s freeze duration per rank — frozen targets practically don\'t move.' },
+
+      // ----- T10 GLACIAL capstone -----
       { id: 'fr_glacial_capstone', name: 'Absolute Zero',
-        requires: ['fr_keystone_glacial', 'fr_glacial_hypothermia'],
+        requires: ['fr_glacial_permafrost', 'fr_glacial_resonance'],
+        treePointsRequired: 16,
         type: 'spell_mod', spellId: 'frost_spike',
         behaviorOverride: { absoluteZero: { radius: 60, duration: 1.0 } },
-        desc: 'Killing a frozen enemy spreads freeze to all enemies within 60u for 1s. Chain-freezes the screen.' },
+        desc: 'Killing a frozen enemy spreads freeze to everything within 60u for 1s. Chain-freezes the screen.' },
     ],
   },
 
@@ -3972,6 +4158,17 @@ function nodeBlockedReason(node, playerState) {
     const missing = node.requires.filter(r => !isNodeTaken(playerState, r));
     const missingNode = findNode(missing[0]);
     return `Requires ${missingNode?.name || missing[0]}`;
+  }
+  // Tier gate — Diablo-style. Some deep nodes only become available
+  // after the player has spent N total points anywhere in this tree,
+  // which forces real path commitment before unlocking T6+ powers.
+  if (node.treePointsRequired) {
+    const treeId = findNodeTree(node.id);
+    const have = pointsInTree(playerState, treeId);
+    if (have < node.treePointsRequired) {
+      const need = node.treePointsRequired - have;
+      return `Need ${need} more pts in ${SKILL_TREES[treeId]?.name || treeId}`;
+    }
   }
   // Affordability — uses the right currency
   const cost = node.cost ?? 1;
