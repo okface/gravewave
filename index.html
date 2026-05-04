@@ -839,12 +839,12 @@
   }
   .atlas-node-name-html {
     font-family: 'Cinzel', serif;
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.03em;
     color: var(--ink-mid);
     text-align: center;
-    line-height: 1.15;
+    line-height: 1.1;
     pointer-events: none;
     /* 2-line clamp with ellipsis */
     display: -webkit-box;
@@ -855,6 +855,7 @@
     text-overflow: ellipsis;
     word-break: break-word;
     box-sizing: border-box;
+    text-transform: uppercase;
   }
   .atlas-node.eligible .atlas-node-name-html,
   .atlas-node.taken .atlas-node-name-html,
@@ -2527,7 +2528,7 @@ const SPELLS = {
           }
         }
       }
-      game.spawnExplosion(center.x, center.y, range, '#e94560');
+      game.spawnExplosion(center.x, center.y, range, '#b6332a', 'slash');
       game.addShake(0.12);
     },
   },
@@ -2789,7 +2790,7 @@ const SKILL_TREES = {
         requires: ['f_conf_burn'], treePointsRequired: 9,
         type: 'spell_mod', spellId: 'fireball',
         behaviorOverride: { igniteSpreads: true },
-        desc: 'Each second, ignited enemies have a chance to ignite a nearby foe. Cascades across packs.' },
+        desc: 'Each second, ignited enemies have a chance to ignite a nearby foe.' },
 
       { id: 'f_conf_kindling', name: 'Kindled Mind',
         requires: ['f_conf_wildfire'], treePointsRequired: 11,
@@ -2803,14 +2804,14 @@ const SKILL_TREES = {
 
       // T10 Conflagration capstone
       { id: 'f_conf_capstone', name: 'Phoenix Trail',
-        requires: ['f_conf_kindling', 'f_conf_wildfire'],
+        requires: ['f_conf_searing'],
         treePointsRequired: 16,
         type: 'spell_mod', spellId: 'fireball',
         behaviorOverride: { igniteKillRefundsCD: 0.3 },
-        desc: 'Killing an ignited enemy has a 30% chance to instantly refund Fireball\'s cooldown. DoT-stacking sustain.' },
+        desc: 'Killing an ignited enemy has a 30% chance to refund Fireball\'s cooldown.' },
 
       // ===================================================================
-      // DETONATION LINE — single-target burst / mobile sniper flavour
+      // DETONATION LINE — single-target burst.
       // ===================================================================
       { id: 'f_det_dmg', name: 'Compressed Charge',
         requires: ['f_keystone_detonation'], treePointsRequired: 5,
@@ -2841,11 +2842,11 @@ const SKILL_TREES = {
 
       // T10 Detonation capstone
       { id: 'f_det_capstone', name: 'Armageddon',
-        requires: ['f_det_overpressure', 'f_det_crit'],
+        requires: ['f_det_overpressure'],
         treePointsRequired: 16,
         type: 'spell_mod', spellId: 'fireball',
         behaviorOverride: { onCritSpawnFireball: 0.5 },
-        desc: '50% chance on a Fireball crit to spawn a free Fireball at the target. Crit-into-crit chains.' },
+        desc: 'Critical Fireballs have a 50% chance to spawn a free Fireball at the target.' },
 
       // ===================================================================
       // SIDE BRANCH — Wall of Flame (T2 unlock, 2 SP)
@@ -2928,7 +2929,7 @@ const SKILL_TREES = {
       { id: 'fr_spike_pierce_pre', name: 'Honed Tip', requires: ['fr_spike_chill'],
         treePointsRequired: 2,
         type: 'spell_mod', spellId: 'frost_spike', mods: { pierceBonus: 1 },
-        maxRank: 2, desc: '+1 pierce per rank — line up shots through crowds.' },
+        maxRank: 2, desc: '+1 pierce per rank.' },
 
       // ===== TIER 4 — KEYSTONE FORK (mutex). Requires 4 pts in tree. =====
       { id: 'fr_keystone_shatter', name: 'Shatter Path',
@@ -2973,32 +2974,32 @@ const SKILL_TREES = {
         treePointsRequired: 9,
         type: 'spell_mod', spellId: 'frost_spike',
         behaviorOverride: { fragmentsRespawnOnHit: true },
-        desc: 'Each fragment that hits a NEW enemy spawns one more fragment. Snowballs through dense waves.' },
+        desc: 'Each fragment that hits a new enemy spawns one more fragment.' },
 
       // ----- T8 SHATTER (req: 11 pts) -----
       { id: 'fr_shatter_velocity', name: 'Brittle Edge',
         requires: ['fr_shatter_swarm'],
         treePointsRequired: 11,
         type: 'spell_mod', spellId: 'frost_spike', mods: { dmgMult: 0.10 },
-        maxRank: 4, desc: '+10% Frost Spike damage per rank — feeds into the fragment damage curve.' },
+        maxRank: 4, desc: '+10% Frost Spike damage per rank.' },
 
       // ----- T9 SHATTER (req: 13 pts) -----
       { id: 'fr_shatter_crit', name: 'Cleaving Strike',
         requires: ['fr_shatter_velocity'],
         treePointsRequired: 13,
         type: 'spell_mod', spellId: 'frost_spike', mods: { critChanceBonus: 0.05 },
-        maxRank: 3, desc: '+5% Frost Spike crit chance per rank — fragments inherit crits.' },
+        maxRank: 3, desc: '+5% Frost Spike crit chance per rank.' },
 
-      // ----- T10 SHATTER capstone (req: 16 pts + dual prereqs) -----
+      // ----- T10 SHATTER capstone -----
       { id: 'fr_shatter_capstone', name: 'Crystal Cascade',
-        requires: ['fr_shatter_velocity', 'fr_shatter_swarm'],
+        requires: ['fr_shatter_crit'],
         treePointsRequired: 16,
         type: 'spell_mod', spellId: 'frost_spike',
         behaviorOverride: { shatterOnFrozenExplodes: true },
-        desc: 'Hitting a frozen enemy detonates them — 60u explosion at 200% Frost Spike damage. Lethal next to a Glacial-investing ally.' },
+        desc: 'Hitting a frozen enemy detonates them — 60u explosion at 200% damage.' },
 
       // ===================================================================
-      // GLACIAL LINE — control + amplifier flavour.
+      // GLACIAL LINE — control + damage amp.
       // ===================================================================
       // ----- T5 GLACIAL (req: 5 pts) -----
       { id: 'fr_glacial_freeze', name: 'Deep Freeze',
@@ -3028,22 +3029,22 @@ const SKILL_TREES = {
         requires: ['fr_glacial_resonance'],
         treePointsRequired: 11,
         type: 'global_mod', mods: { dmgVsFrozen: 0.10 },
-        maxRank: 4, desc: 'Stack: +10% MORE damage to frozen enemies per rank (multiplicative with Brittle).' },
+        maxRank: 4, desc: '+10% damage to frozen enemies per rank (stacks with Brittle).' },
 
       // ----- T9 GLACIAL (req: 13 pts) -----
       { id: 'fr_glacial_permafrost', name: 'Permafrost',
         requires: ['fr_glacial_hypothermia'],
         treePointsRequired: 13,
         type: 'spell_mod', spellId: 'frost_spike', mods: { freezeDurationBonus: 0.4 },
-        maxRank: 3, desc: '+0.4s freeze duration per rank — frozen targets practically don\'t move.' },
+        maxRank: 3, desc: '+0.4s freeze duration per rank.' },
 
       // ----- T10 GLACIAL capstone -----
       { id: 'fr_glacial_capstone', name: 'Absolute Zero',
-        requires: ['fr_glacial_permafrost', 'fr_glacial_resonance'],
+        requires: ['fr_glacial_permafrost'],
         treePointsRequired: 16,
         type: 'spell_mod', spellId: 'frost_spike',
         behaviorOverride: { absoluteZero: { radius: 60, duration: 1.0 } },
-        desc: 'Killing a frozen enemy spreads freeze to everything within 60u for 1s. Chain-freezes the screen.' },
+        desc: 'Killing a frozen enemy spreads freeze to all enemies within 60u for 1s.' },
     ],
   },
 
@@ -3152,7 +3153,7 @@ const SKILL_TREES = {
         type: 'keystone', affects: 'flicker_step',
         modAdjust: { dmgMult: 1.6, radiusMult: 1.20 },
         lockedBy: ['sh_flicker_phase'], keystone: true,
-        desc: '+60% Flicker damage and +20% radius. Pure burst slash.' },
+        desc: '+60% Flicker damage and +20% radius.' },
     ],
   },
 
@@ -3829,7 +3830,8 @@ function computeSpellMods(playerState, spellId) {
     const node = findNode(nodeId);
     if (!node) continue;
     if (node.type === 'spell_mod' && matchSpellId(node.spellId)) {
-      const m = node.mods;
+      // Some identity nodes carry behaviorOverride only — no `mods`.
+      const m = node.mods || {};
       if (m.dmgMult)    dmgMult    += m.dmgMult * rank;
       if (m.radiusMult) radiusMult += m.radiusMult * rank;
       if (m.sizeMult)   sizeMult   += m.sizeMult * rank;
@@ -3846,7 +3848,7 @@ function computeSpellMods(playerState, spellId) {
       if (node.behaviorOverride) Object.assign(behavior, node.behaviorOverride);
     }
     if (node.type === 'global_mod') {
-      const m = node.mods;
+      const m = node.mods || {};
       if (m.critChanceBonus) critChance += m.critChanceBonus * rank;
     }
   }
@@ -3952,7 +3954,7 @@ function computeSpellCooldown(playerState, spellId) {
     const node = findNode(nodeId);
     if (!node) continue;
     if (node.type === 'global_mod') {
-      const m = node.mods;
+      const m = node.mods || {};
       // Per-rank CDR: applied once per rank multiplicatively
       for (let i = 0; i < rank; i++) {
         if (eligibleTrees.has('gravity') && m.gravityCdrMult)        cd *= m.gravityCdrMult;
@@ -4681,9 +4683,13 @@ class Game {
   spawnStormCloud(opts) {
     this.stormClouds.push(new StormCloud(opts));
   }
-  spawnExplosion(x, y, radius, color) {
-    // Visual-only expanding ring — actual damage handled by caller
-    this.explosions.push({ x, y, radius, color, t: 0, life: 0.45, dead: false });
+  spawnExplosion(x, y, radius, color, kind = 'burst') {
+    // Visual-only expanding ring — actual damage handled by caller.
+    // `kind` selects how the renderer draws this: 'burst' (default —
+    // generic ink/cream sunburst), 'slash' (Ninja Crescent — crossed
+    // vermilion arcs), 'fire' (warm Fireball/Pyroclasm), 'frost'
+    // (Crystal Cascade — pale blue crystal shatter).
+    this.explosions.push({ x, y, radius, color, kind, t: 0, life: 0.45, dead: false });
     // Burst of fire particles for impact feedback
     for (let i = 0; i < 18; i++) {
       const a = rand(0, TAU);
@@ -4820,7 +4826,10 @@ class Game {
   }
 
   findEnemyCluster(from) {
-    /* Returns the enemy with most neighbors within 120px (rough cluster center). */
+    /* Returns the enemy with most neighbors within 120px (rough cluster
+       center). Falls back to the NEAREST enemy when nothing actually
+       has neighbours — picking a far lone enemy as "the cluster" looked
+       bugged from the player's view. */
     if (this.enemies.length === 0) return null;
     let best = null, bestN = -1;
     for (const e of this.enemies) {
@@ -4832,6 +4841,7 @@ class Game {
       }
       if (n > bestN) { bestN = n; best = e; }
     }
+    if (bestN <= 0) return this.findNearestEnemy(from);
     return best;
   }
 
@@ -6803,7 +6813,44 @@ const Renderer = {
       const a = 1 - lifeT;
       const r = ex.radius;
       const cx = ex.x, cy = ex.y;
+      const kind = ex.kind || 'burst';
 
+      // ----- SLASH (Ninja Crescent) — crossed vermilion arcs sweeping
+      // outward. Distinctive enough that the player sees the cleave
+      // even when it doesn't kill anything. -----
+      if (kind === 'slash') {
+        // Two crescent arcs at ~45° rotation, wider than the damage disc
+        // for visual punch. They expand as they fade.
+        const arcR = r * (0.6 + lifeT * 0.55);
+        const sweep = Math.PI * 0.85;            // arc length
+        const baseAng = (ex._slashAng ??= Math.random() * TAU);
+        ctx.lineCap = 'round';
+        for (let k = 0; k < 2; k++) {
+          const rot = baseAng + k * Math.PI;
+          // Outer ink stroke
+          ctx.strokeStyle = `rgba(26,22,18,${a * 0.95})`;
+          ctx.lineWidth = 4 * (1 - lifeT * 0.4);
+          ctx.beginPath();
+          ctx.arc(cx, cy, arcR, rot - sweep / 2, rot + sweep / 2);
+          ctx.stroke();
+          // Vermilion blade core
+          ctx.strokeStyle = `rgba(182,51,42,${a})`;
+          ctx.lineWidth = 2 * (1 - lifeT * 0.4);
+          ctx.beginPath();
+          ctx.arc(cx, cy, arcR, rot - sweep / 2, rot + sweep / 2);
+          ctx.stroke();
+        }
+        ctx.lineCap = 'butt';
+        // Centre flash — a small vermilion star at the impact point
+        if (a > 0.4) {
+          ctx.fillStyle = `rgba(182,51,42,${(a - 0.4) * 1.2})`;
+          drawStarPath(ctx, cx, cy, r * 0.18, r * 0.08, 4, -Math.PI / 4);
+          ctx.fill();
+        }
+        continue;
+      }
+
+      // ----- DEFAULT BURST (Fireball / Pyroclasm / explosion) -----
       // Scorched ground spreading
       const burnR = Math.min(1, lifeT * 3) * r * 0.6;
       if (burnR > 0) {
@@ -7333,11 +7380,6 @@ const UI = {
    * existing detail modal — the spend flow doesn't change.
    */
   _renderAtlas(container, ps) {
-    const intro = document.createElement('div');
-    intro.className = 'atlas-intro';
-    intro.innerHTML = 'Tap any node to read its description and spend points. Lines show prerequisites; dashed red lines mark mutually-exclusive keystones.';
-    container.appendChild(intro);
-
     for (const treeId of ps.charDef.skillTrees) {
       const tree = SKILL_TREES[treeId];
       if (!tree) continue;
@@ -7437,12 +7479,12 @@ const UI = {
 
     // Recursively assign cell x positions. Each subtree claims a width
     // equal to max(1, sum of its children's widths), parent centered.
-    const NODE_R = 14;
-    const NAME_H = 26;
-    const ROW_H = NODE_R * 2 + NAME_H + 18;
-    const PAD_Y = 14;
-    const CELL_W = 80;          // a touch wider so names breathe
-    const PAD_X = 14;
+    const NODE_R = 11;
+    const NAME_H = 22;
+    const ROW_H = NODE_R * 2 + NAME_H + 12;
+    const PAD_Y = 10;
+    const CELL_W = 56;          // tight enough that 5-wide tiers fit on a phone
+    const PAD_X = 6;
     const xCell = {};
     const visited = new Set();
     function place(nodeId, leftCell) {
@@ -7473,7 +7515,7 @@ const UI = {
     let cursor = 0;
     for (const root of roots) {
       const w = place(root.id, cursor);
-      cursor += w + 0.5;        // small gutter between top-level subtrees
+      cursor += w;        // no gutter between subtrees — they're already centered
     }
     // Anything still unplaced (cycles) gets parked at the right edge.
     for (const n of nodes) {
