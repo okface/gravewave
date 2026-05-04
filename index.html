@@ -4632,6 +4632,8 @@ class Game {
       1 - 0.08 * (this.player?.focusStacks || 0)
     );
     for (const s of this.activeSpells) {
+      // Defensive: a renamed/removed spell shouldn't crash the loop.
+      if (!SPELLS[s.spellId]) continue;
       const cd = computeSpellCooldown(this.playerState, s.spellId) * focusMult;
       s.cdAcc += dt;
       if (s.cdAcc >= cd) {
@@ -6980,10 +6982,26 @@ const UI = {
 
     const btn = this.$('tree-continue');
     btn.textContent = ps.pendingItem ? 'Continue (item awaits)' : `Begin Wave ${wave + 1}`;
+    // Hardened: catch any error in afterChoice so the player can always
+    // get out of the upgrade screen even if a downstream system breaks.
     btn.onclick = () => {
-      this.hideAllOverlays();
-      this._closeNodeModal();
-      this.game.afterChoice();
+      try {
+        this.hideAllOverlays();
+        this._closeNodeModal();
+        this.game.afterChoice();
+      } catch (e) {
+        if (typeof showRuntimeError === 'function')
+          showRuntimeError('afterChoice: ' + (e.stack || e.message || e));
+        // Force the wave forward as a fallback.
+        try {
+          this.hideAllOverlays();
+          this.game.state = 'playing';
+          this.game.waveMgr.startWave((this.game.waveMgr.wave || 0) + 1);
+        } catch (e2) {
+          if (typeof showRuntimeError === 'function')
+            showRuntimeError('fallback: ' + (e2.stack || e2.message || e2));
+        }
+      }
     };
 
     this._wireNodeModal(ps);
@@ -7283,8 +7301,18 @@ const UI = {
     content.innerHTML = '';
     const treeId = this._currentTreeTab;
     if (treeId === 'atlas') {
-      this._renderAtlas(content, ps);
-      return;
+      try {
+        this._renderAtlas(content, ps);
+      } catch (e) {
+        // Atlas blew up — fall back to a plain tab list so the player
+        // can still navigate the trees while we get a stack trace.
+        content.innerHTML = '<div style="color:#ff9b9b;padding:12px;font:11px JetBrains Mono,monospace;">Atlas render failed — falling back to detail tabs.<br>' +
+          (e.message || e) + '</div>';
+        if (typeof showRuntimeError === 'function') showRuntimeError('Atlas: ' + (e.stack || e.message || e));
+        // Fall through to detail-view of first real tree.
+        this._currentTreeTab = ps.charDef.skillTrees[0] || 'atlas';
+      }
+      if (this._currentTreeTab === 'atlas') return;
     }
     const tree = SKILL_TREES[treeId];
     if (!tree) return;
@@ -7907,6 +7935,38 @@ function formatTime(s) {
 /* ==========================================================================
  * 10. MAIN
  * ========================================================================*/
+/*
+ * Visible runtime error trap. When something throws (especially during
+ * the upgrade-screen render or a spell cast), surface it on-screen so
+ * the player can read it instead of staring at a frozen game. Tap the
+ * banner to dismiss.
+ */
+function showRuntimeError(msg) {
+  let el = document.getElementById('runtime-error-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'runtime-error-banner';
+    el.style.cssText = `
+      position: fixed; left: 8px; right: 8px; top: 8px; z-index: 9999;
+      background: rgba(120, 30, 30, 0.95); color: #fff;
+      font: 12px/1.4 'JetBrains Mono', monospace;
+      padding: 10px 14px; border: 1px solid #ff5b6e; border-radius: 4px;
+      max-height: 50vh; overflow: auto; cursor: pointer;
+    `;
+    el.addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+  }
+  el.textContent = '⚠ ' + msg + '  (tap to dismiss)';
+}
+window.addEventListener('error', (ev) => {
+  const m = ev.error?.stack || ev.error?.message || ev.message || 'unknown error';
+  showRuntimeError(m);
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  const m = ev.reason?.stack || ev.reason?.message || String(ev.reason);
+  showRuntimeError('Promise: ' + m);
+});
+
 function main() {
   const canvas = document.getElementById('game-canvas');
   const game = new Game(canvas);
@@ -7916,9 +7976,15 @@ function main() {
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); // clamp big spikes
     last = now;
-    game.update(dt);
-    game.render();
-    UI.updateHud(game);
+    try {
+      game.update(dt);
+      game.render();
+      UI.updateHud(game);
+    } catch (e) {
+      // Don't kill the loop — just surface and keep going so the user
+      // can at least navigate away from a busted upgrade screen.
+      showRuntimeError(e.stack || e.message || String(e));
+    }
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
