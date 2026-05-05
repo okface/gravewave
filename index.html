@@ -1615,6 +1615,149 @@
      player can take in their path, plus a universal rail. Click
      any takeable card to spend the wave's pick on it.
      ============================================================ */
+  /* ===== Per-spell rank picker (replaces the atlas split) ===== */
+  .overlay.overlay-rank {
+    align-items: stretch;
+    padding: 0;
+    overflow: hidden;
+  }
+  .rank-shell {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--paper);
+  }
+  .rank-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--paper-soft);
+  }
+  .rank-banner .rank-wave-label {
+    font-family: 'Cinzel', serif;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: 0.10em;
+  }
+  .rank-banner .rank-summary {
+    font-family: 'Spectral', serif;
+    font-size: 13px;
+    color: var(--ink-mid);
+    margin-top: 2px;
+  }
+  .rank-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .rank-spells {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 22px 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    align-content: start;
+  }
+  .rank-panel {
+    border: 1.5px solid var(--ink);
+    background: rgba(255, 250, 230, 0.85);
+    padding: 14px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 4px solid var(--accent, var(--gold));
+    position: relative;
+  }
+  .rank-panel.is-empty { opacity: 0.55; }
+  .rank-panel .rp-head {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .rank-panel .rp-icon {
+    font-size: 22px;
+    line-height: 1;
+  }
+  .rank-panel .rp-name {
+    font-family: 'Cinzel', serif;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    text-transform: uppercase;
+    flex: 1;
+  }
+  .rank-panel .rp-rank-num {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    color: var(--gold);
+    letter-spacing: 0.10em;
+  }
+  .rank-panel .rp-pips {
+    display: flex; gap: 5px; align-items: center;
+    margin: 2px 0 4px;
+  }
+  .rank-pip {
+    width: 14px; height: 14px;
+    border: 1px solid rgba(29, 21, 12, 0.55);
+    background: rgba(232, 220, 192, 0.4);
+    border-radius: 2px;
+  }
+  .rank-pip.filled {
+    background: var(--accent, var(--gold));
+    border-color: var(--ink);
+  }
+  .rank-pip.spec {
+    transform: rotate(45deg);
+    width: 16px; height: 16px;
+    border-color: var(--gold);
+  }
+  .rank-pip.spec.filled {
+    background: var(--gold);
+  }
+  .rank-panel .rp-next {
+    font-family: 'Spectral', serif;
+    font-size: 11px;
+    color: var(--ink-mid);
+    font-style: italic;
+    line-height: 1.3;
+    min-height: 14px;
+  }
+  .rank-panel .rp-spend {
+    cursor: pointer;
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 8px 10px;
+    margin-top: 2px;
+  }
+  .rank-panel .rp-spend:hover {
+    background: var(--vermilion);
+  }
+  .rank-panel .rp-spend:disabled {
+    opacity: 0.45; cursor: not-allowed;
+  }
+  .rank-panel.is-spec1-ready,
+  .rank-panel.is-spec2-ready {
+    border-top-color: var(--gold);
+    box-shadow: 0 0 0 1px var(--gold) inset;
+  }
+  .rank-panel .rp-spec-flag {
+    position: absolute; top: 6px; right: 8px;
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+  }
+
   .overlay.overlay-atlas {
     align-items: stretch;
     padding: 0;
@@ -1992,10 +2135,42 @@
     </div>
   </div>
 
-  <!-- Path Atlas overlay (post-wave). Static map: every card the player
-       can take in their path is laid out, plus a universal pivot rail.
-       1 click = 1 card. Locked cards show their reason. The whole point
-       is the build is BROWSEABLE and DETERMINISTIC. -->
+  <!-- Per-spell rank picker (post-wave). Replaces the awkward two-
+       column atlas. Shows ONE panel per owned spell, with a pip strip
+       (filled = invested, star = spec milestone at 4/8) and a "Spend 1
+       SP" button. Click a panel → modal with 3 picks (random fillers,
+       or 3 mutex specs at rank 4 / 8). Player keeps clicking until
+       SP runs out or they hit Continue (saving banked SP for later). -->
+  <div class="overlay overlay-rank" id="overlay-rank">
+    <div class="rank-shell">
+      <div class="rank-header">
+        <div class="rank-banner">
+          <div class="rank-wave-label" id="rank-wave-label">Wave Cleared</div>
+          <div class="rank-summary" id="rank-summary">Spend skill points or save them.</div>
+        </div>
+        <div class="rank-actions">
+          <button class="btn-ghost" id="btn-rank-atlas">More cards…</button>
+          <button class="btn-primary" id="btn-rank-continue">Continue</button>
+        </div>
+      </div>
+      <div class="rank-spells" id="rank-spells"></div>
+    </div>
+  </div>
+
+  <!-- Modal-style pick screen: 3 cards (or mutex specs). Sits on top
+       of overlay-rank; cancelling returns to it. -->
+  <div class="overlay" id="overlay-rank-pick">
+    <div class="overlay-inner">
+      <div class="subtitle" id="rank-pick-subtitle">— Choose Upgrade —</div>
+      <h1 id="rank-pick-heading">Spell — Rank 1</h1>
+      <div class="choices" id="rank-pick-choices"></div>
+      <button class="btn-ghost" id="btn-rank-pick-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Legacy Path Atlas overlay (still reachable via "More cards…").
+       Static map of universal cards + path constellation cards for
+       players who want to spend SP outside the per-spell tree. -->
   <div class="overlay overlay-atlas" id="overlay-atlas">
     <div class="atlas-shell">
       <div class="atlas-header">
@@ -4769,7 +4944,263 @@ const CARDS = {
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
     desc: '+12% damage and −10% radius. Mass concentrated.',
     effect: { spellId: 'gravity_bolt', dmgMult: 0.12, radiusMult: -0.10 } },
+
+  // ============================================================
+  // THIRD RANK-4 SPECS — third mutex spec for each starter damage
+  // spell. Existing system had only 2 keystones (e.g. f_conflag /
+  // f_detonation). The new rank-up flow always shows 3 mutex options,
+  // so we add a third flavor here. All boss-only and fully locked
+  // against the existing pair.
+  // ============================================================
+  fb_emberstorm: { id: 'fb_emberstorm', name: 'Emberstorm', axis: 'damage', tier: 2,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
+    lockedBy: ['f_conflag', 'f_detonation'],
+    desc: 'Spec: Each Fireball impact scatters 5 small embers in a ring (35% dmg each, 1.2s ignite).',
+    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 0.85 }, behavior: { emberstorm: { count: 5, frac: 0.35 } } } } },
+  fr_iceaxis: { id: 'fr_iceaxis', name: 'Ice Axis', axis: 'utility', tier: 2,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
+    lockedBy: ['fr_glacial', 'fr_shatter'],
+    desc: 'Spec: Frost Spike pierces all enemies and applies a stronger 60% slow for 3.5s.',
+    effect: { spellId: 'frost_spike', keystone: { modAdjust: { pierceBonus: 99 }, behavior: { iceAxis: true } } } },
+  lb_thunderspear: { id: 'lb_thunderspear', name: 'Thunderspear', axis: 'damage', tier: 2,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
+    lockedBy: ['e_pinpoint', 'e_storm_sat'],
+    desc: 'Spec: Lightning Bolt fires a piercing line bolt — first hit ×2.4 dmg, all subsequent in line ×1.0.',
+    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 0.95 }, behavior: { thunderspear: { firstMult: 2.4, count: 4 } } } } },
+  gb_warpfield: { id: 'gb_warpfield', name: 'Warp Field', axis: 'utility', tier: 2,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
+    lockedBy: ['g_grav_annihil', 'g_grav_collapse'],
+    desc: 'Spec: Gravity Bolt teleports enemies it touches by 80u toward you and slows them to a crawl.',
+    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 0.6 }, behavior: { warpField: { pull: 80 } } } } },
+
+  // ============================================================
+  // RANK-8 SECOND SPECS — unlocked when a spell hits 8 invested
+  // points. Bigger, build-defining transformations stacking on top
+  // of the rank-4 spec. All 3 are mutex per spell; bossOnly so they
+  // also surface naturally on boss waves outside the new picker.
+  // ============================================================
+  // ---- Fireball ----
+  fb_meteor: { id: 'fb_meteor', name: 'Meteor', axis: 'damage', tier: 3,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
+    lockedBy: ['fb_hydra', 'fb_solarflare'],
+    desc: 'Rank-8 Spec: Fireball becomes a falling Meteor — slower travel, ×2.4 damage, ×1.6 radius. Crater stuns 0.5s.',
+    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 2.4, radiusMult: 1.6 }, behavior: { meteor: true, projectileBoost: 0.55 } } } },
+  fb_hydra: { id: 'fb_hydra', name: 'Hydra Sigil', axis: 'utility', tier: 3,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
+    lockedBy: ['fb_meteor', 'fb_solarflare'],
+    desc: 'Rank-8 Spec: Fireball impacts have 30% chance to spawn a hydra-head sentry (8s, auto-shoots small fireballs).',
+    effect: { spellId: 'fireball', keystone: { behavior: { hydraOnHit: { chance: 0.30, life: 8.0 } } } } },
+  fb_solarflare: { id: 'fb_solarflare', name: 'Solar Flare', axis: 'damage', tier: 3,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
+    lockedBy: ['fb_meteor', 'fb_hydra'],
+    desc: 'Rank-8 Spec: Every 4th Fireball cast also detonates a 240u flame ring around you (140 dmg).',
+    effect: { spellId: 'fireball', keystone: { behavior: { everyNthCast: { every: 4, kind: 'ringBlast', radius: 240, dmg: 140, color: '#ff7733' } } } } },
+
+  // ---- Frost Spike ----
+  fr_iceage: { id: 'fr_iceage', name: 'Ice Age', axis: 'utility', tier: 3,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike', bossOnly: true,
+    lockedBy: ['fr_glacier', 'fr_permafrost'],
+    desc: 'Rank-8 Spec: Every 5th Frost Spike cast freezes ALL enemies on screen for 1.5s.',
+    effect: { spellId: 'frost_spike', keystone: { behavior: { everyNthCast: { every: 5, kind: 'globalFreeze', dur: 1.5 } } } } },
+  fr_glacier: { id: 'fr_glacier', name: 'Glacier Walker', axis: 'damage', tier: 3,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike', bossOnly: true,
+    lockedBy: ['fr_iceage', 'fr_permafrost'],
+    desc: 'Rank-8 Spec: Frost Spike leaves a frost trail that slows 70% for 3s. Travels with you.',
+    effect: { spellId: 'frost_spike', keystone: { modAdjust: { dmgMult: 1.4 }, behavior: { glacierTrail: { dur: 3.0, factor: 0.30 } } } } },
+  fr_permafrost: { id: 'fr_permafrost', name: 'Permafrost', axis: 'utility', tier: 3,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike', bossOnly: true,
+    lockedBy: ['fr_iceage', 'fr_glacier'],
+    desc: 'Rank-8 Spec: Killing a frozen enemy spawns an 80u permafrost patch — slows 60% for 6s.',
+    effect: { spellId: 'frost_spike', keystone: { behavior: { permafrostOnKill: { radius: 80, dur: 6.0, factor: 0.40 } } } } },
+
+  // ---- Lightning Bolt ----
+  lb_stormgod: { id: 'lb_stormgod', name: 'Storm God', axis: 'damage', tier: 3,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
+    lockedBy: ['lb_plasma', 'lb_discharge'],
+    desc: 'Rank-8 Spec: Every 4th Lightning Bolt cast calls down 3 free Lightning Bolts at random enemies.',
+    effect: { spellId: 'lightning_bolt', keystone: { behavior: { everyNthCast: { every: 4, kind: 'extraBolts', count: 3, spell: 'lightning_bolt' } } } } },
+  lb_plasma: { id: 'lb_plasma', name: 'Plasma', axis: 'damage', tier: 3,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
+    lockedBy: ['lb_stormgod', 'lb_discharge'],
+    desc: 'Rank-8 Spec: Lightning Bolt becomes a piercing plasma — ×1.8 dmg, +3 chains, all chained enemies shocked.',
+    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 1.8, chainBonus: 3 }, behavior: { plasma: true } } } },
+  lb_discharge: { id: 'lb_discharge', name: 'Discharge', axis: 'utility', tier: 3,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
+    lockedBy: ['lb_stormgod', 'lb_plasma'],
+    desc: 'Rank-8 Spec: Every cast also pulses 220u shock around you — 60 dmg + shock applied.',
+    effect: { spellId: 'lightning_bolt', keystone: { behavior: { castDischarge: { radius: 220, dmg: 60 } } } } },
+
+  // ---- Gravity Bolt ----
+  gb_blacksun: { id: 'gb_blacksun', name: 'Black Sun', axis: 'damage', tier: 3,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
+    lockedBy: ['gb_fracture', 'gb_ascension'],
+    desc: 'Rank-8 Spec: Gravity Bolt becomes a slow Black Sun — ×3 life, ×2.5 dmg, pulls everything in 320u.',
+    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 2.5, radiusMult: 1.5 }, behavior: { blackSun: { lifeMult: 3.0, pull: 320 } } } } },
+  gb_fracture: { id: 'gb_fracture', name: 'Fracture', axis: 'utility', tier: 3,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
+    lockedBy: ['gb_blacksun', 'gb_ascension'],
+    desc: 'Rank-8 Spec: Each Gravity Bolt fractures into 4 mini-bolts on impact (40% dmg each).',
+    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 0.7 }, behavior: { fracture: { count: 4, frac: 0.40 } } } } },
+  gb_ascension: { id: 'gb_ascension', name: 'Ascension', axis: 'defense', tier: 3,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
+    lockedBy: ['gb_blacksun', 'gb_fracture'],
+    desc: 'Rank-8 Spec: Every 5th cast briefly lifts you (1.5s iframes) and slams a 200u area for 200 dmg.',
+    effect: { spellId: 'gravity_bolt', keystone: { behavior: { everyNthCast: { every: 5, kind: 'ascensionSlam', iframes: 1.5, radius: 200, dmg: 200 } } } } },
 };
+
+
+/* --- Spell Trees --------------------------------------------------------
+ * Per-spell upgrade pool used by the new SP rank picker. Replaces the
+ * old "scattered cards across an atlas" UX with: pick a spell, see its
+ * rank pip strip (with milestones at 4 and 8), spend 1 SP for one of
+ * three random fillers OR — at rank 4 / rank 8 — one of three mutex
+ * specs. Rank-4 = first specialization, rank-8 = second specialization.
+ *
+ * Schema:
+ *   fillerPool   : card ids drawn from CARDS for non-milestone picks;
+ *                  3 random unowned ones surfaced per pick.
+ *   rank4Specs   : exactly 3 mutex card ids — the first specialization.
+ *                  Surfaced when rank reaches 4 (i.e. taking the 5th pick).
+ *   rank8Specs   : exactly 3 mutex card ids — the second specialization,
+ *                  stacks on top of the rank-4 spec. Empty array if not
+ *                  yet authored — picker falls back to fillers.
+ *
+ * Spells the player owns but that aren't in this registry get no rank
+ * picker (they still receive global card effects via the universal rail
+ * inside the legacy atlas, which we keep available as a "More" button).
+ * ----------------------------------------------------------------------- */
+const SPELL_TREES = {
+  fireball: {
+    name: 'Fireball', icon: '🔥',
+    fillerPool: ['f_heat', 'f_spread', 'f_quickcast', 'f_ignite', 'fb_heatshield', 'fb_searing', 'fb_pyromancer', 'fb_smolder'],
+    rank4Specs: ['f_conflag', 'f_detonation', 'fb_emberstorm'],
+    rank8Specs: ['fb_meteor', 'fb_hydra', 'fb_solarflare'],
+  },
+  frost_spike: {
+    name: 'Frost Spike', icon: '❄',
+    fillerPool: ['fr_cold', 'fr_pierce', 'fr_numb', 'fr_winter', 'fr_hypothermia', 'fr_splinter', 'fr_kiteflow', 'fr_brittlebone', 'fr_chillkeen', 'fr_glacierheart'],
+    rank4Specs: ['fr_glacial', 'fr_shatter', 'fr_iceaxis'],
+    rank8Specs: ['fr_iceage', 'fr_glacier', 'fr_permafrost'],
+  },
+  lightning_bolt: {
+    name: 'Lightning Bolt', icon: '⚡',
+    fillerPool: ['e_voltage', 'e_forking', 'e_shock', 'e_cdr', 'lb_grounded', 'lb_castheal', 'lb_critwave', 'lb_scorchedearth'],
+    rank4Specs: ['e_pinpoint', 'e_storm_sat', 'lb_thunderspear'],
+    rank8Specs: ['lb_stormgod', 'lb_plasma', 'lb_discharge'],
+  },
+  gravity_bolt: {
+    name: 'Gravity Bolt', icon: '◆',
+    fillerPool: ['g_grav_crush', 'g_grav_wider', 'g_grav_glacial', 'g_grav_void', 'g_grav_cdr', 'gb_singtax', 'gb_castshield', 'gb_eventreward', 'gb_density'],
+    rank4Specs: ['g_grav_annihil', 'g_grav_collapse', 'gb_warpfield'],
+    rank8Specs: ['gb_blacksun', 'gb_fracture', 'gb_ascension'],
+  },
+  // Defense / Utility / On-use — fillers + 3 rank-4 specs each. No
+  // rank-8 yet; players who put 8 points into one of these get more
+  // fillers from the pool until rank-8 specs are authored.
+  aegis_pulse: {
+    name: 'Aegis Pulse', icon: '🛡',
+    fillerPool: ['ae_thicker', 'ae_quickseal', 'ae_widefield', 'ae_oversize', 'ae_thornglass'],
+    rank4Specs: ['ae_reactive', 'ae_eternal', 'ae_refractive'],
+    rank8Specs: [],
+  },
+  wardroot: {
+    name: 'Wardroot', icon: '☘',
+    fillerPool: ['wr_thicken', 'wr_reach', 'wr_cdr', 'wr_witherbloom', 'wr_grindslow'],
+    rank4Specs: ['wr_verdant', 'wr_thorned', 'wr_snaring'],
+    rank8Specs: [],
+  },
+  soul_anchor: {
+    name: 'Soul Anchor', icon: '✚',
+    fillerPool: ['sa_resonance', 'sa_quickprayer', 'sa_afterglow'],
+    rank4Specs: ['sa_phoenix', 'sa_vampiric', 'sa_steady'],
+    rank8Specs: [],
+  },
+  shadowblade: {
+    name: 'Shadowblade', icon: '🗡',
+    fillerPool: ['sb_keenedge', 'sb_swift', 'sb_punctures', 'sb_widerorbit'],
+    rank4Specs: ['sb_twinedge', 'sb_bloodbound', 'sb_reckless'],
+    rank8Specs: [],
+  },
+  battle_hymn: {
+    name: 'Battle Hymn', icon: '♬',
+    fillerPool: ['bh_lyric', 'bh_metronome', 'bh_legato', 'bh_chorus'],
+    rank4Specs: ['bh_crescendo', 'bh_battlecry', 'bh_anthem'],
+    rank8Specs: [],
+  },
+  mark_of_frailty: {
+    name: 'Mark of Frailty', icon: '⊹',
+    fillerPool: ['mf_brand', 'mf_quickbrand', 'mf_critfocus', 'mf_bountypoints'],
+    rank4Specs: ['mf_hunters', 'mf_doom', 'mf_soulchain'],
+    rank8Specs: [],
+  },
+  time_dilation: {
+    name: 'Time Dilation', icon: '⌛',
+    fillerPool: ['td_extend', 'td_qcd', 'td_brittle'],
+    rank4Specs: ['td_distortion', 'td_stasis', 'td_echo'],
+    rank8Specs: [],
+  },
+  doom_sigil: {
+    name: 'Doom Sigil', icon: '🜏',
+    fillerPool: ['ds_potency', 'ds_wider', 'ds_quickseal'],
+    rank4Specs: ['ds_twin', 'ds_imploder', 'ds_heavens'],
+    rank8Specs: [],
+  },
+  berserkers_howl: {
+    name: "Berserker's Howl", icon: '🜨',
+    fillerPool: ['bk_louder', 'bk_longer', 'bk_resilient'],
+    rank4Specs: ['bk_bloodlust', 'bk_reckless', 'bk_laststand'],
+    rank8Specs: [],
+  },
+  // Ninja paths — keep the existing card pools so ninja runs stay
+  // upgradeable in the new rank UI. Picked 3 keystones each as the
+  // mutex rank-4 spec set; keystones not yet in a triplet share with
+  // existing constellation pairs.
+  crescent_strike: {
+    name: 'Crescent Strike', icon: '☽',
+    fillerPool: ['st_honed', 'st_long', 'st_cluster', 'st_thirst'],
+    rank4Specs: ['st_whirl', 'st_exec', 'st_unlock_reaping'],
+    rank8Specs: [],
+  },
+  shadow_clone: {
+    name: 'Shadow Clone', icon: '☯',
+    fillerPool: ['sh_sharper', 'sh_rhythm', 'sh_persist', 'sh_focus_cap', 'sh_focus_grace'],
+    rank4Specs: ['sh_twin', 'sh_legion', 'sh_unlock_smoke'],
+    rank8Specs: [],
+  },
+  crossbow_bolt: {
+    name: 'Crossbow Bolt', icon: '➶',
+    fillerPool: ['ar_tempered', 'ar_pierce', 'ar_quickdraw', 'ar_trap_dur'],
+    rank4Specs: ['ar_marks', 'ar_volley', 'ar_unlock_spring'],
+    rank8Specs: [],
+  },
+};
+
+/* Returns the pick offered when the player spends 1 SP on the given
+ * spell. Returns one of:
+ *   { kind: 'spec1', cards: [...3 mutex cards] }
+ *   { kind: 'spec2', cards: [...3 mutex cards] }
+ *   { kind: 'filler', cards: [...up to 3 random unowned fillers] }
+ *   { kind: 'maxed' }   — pool exhausted
+ */
+function nextRankPick(playerState, spellId) {
+  const tree = SPELL_TREES[spellId];
+  if (!tree) return { kind: 'maxed', cards: [] };
+  const rank = pointsInSpell(playerState, spellId);
+  const taken = playerState.takenCards || new Set();
+  if (rank === 4 && tree.rank4Specs.length === 3) {
+    return { kind: 'spec1', cards: tree.rank4Specs.map(id => CARDS[id]).filter(Boolean) };
+  }
+  if (rank === 8 && tree.rank8Specs && tree.rank8Specs.length === 3) {
+    return { kind: 'spec2', cards: tree.rank8Specs.map(id => CARDS[id]).filter(Boolean) };
+  }
+  // Filler: 3 random unowned fillers from the pool. Specs the player
+  // didn't take at the milestone (because they picked the mutex twin)
+  // get filtered by lockedBy automatically when shown.
+  const available = tree.fillerPool.filter(id => !taken.has(id));
+  if (available.length === 0) return { kind: 'maxed', cards: [] };
+  const sample = sampleN(available, Math.min(3, available.length));
+  return { kind: 'filler', cards: sample.map(id => CARDS[id]).filter(Boolean) };
+}
 
 
 /* --- Items / Equipment --------------------------------------------------
@@ -6869,6 +7300,39 @@ class Game {
         if (cb.castHeal && this.player?.alive) {
           this.healPlayer(cb.castHeal);
         }
+        // Rank-8 spec: castDischarge — every Lightning Bolt cast pulses
+        // a 220u shock ring around the player. Reuses the apply-aura
+        // path so it shares visuals with Static Field.
+        if (cb.castDischarge && this.player?.alive) {
+          const cd2 = cb.castDischarge;
+          const r = cd2.radius || 220;
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(this.player, e) < r + e.radius) {
+              const isCrit = Math.random() < (mods.critChance || 0);
+              const dmg = (isCrit ? cd2.dmg * mods.critMult : cd2.dmg) * mods.dmgMult;
+              const a = e.takeDamage(dmg, { spell: 'lightning_bolt:discharge' });
+              this.totalDamageDealt += a;
+              this.applyStatusesToEnemy(e, { shock: { duration: 4.0, multiplier: 1.5 } }, 1);
+              if (Math.random() < 0.4) this.spawnHitParticles(e.x, e.y, '#5ae5ff', 4);
+            }
+          }
+          this.spawnExplosion(this.player.x, this.player.y, r, '#5ae5ff', 'frost');
+        }
+        // Rank-8 spec: everyNthCast — generic counter that fires a
+        // big effect every Nth cast of a specific spell. Counter is
+        // per-spell so Solar Flare (fireball) and Storm God (lightning)
+        // don't share progress.
+        if (cb.everyNthCast) {
+          const ev = cb.everyNthCast;
+          this.player._castCounters = this.player._castCounters || {};
+          const baseId = s.spellId.split(':')[0];
+          const c = (this.player._castCounters[baseId] || 0) + 1;
+          this.player._castCounters[baseId] = c;
+          if (c % ev.every === 0) {
+            this._fireEveryNthAction(ev, this.player, mods);
+          }
+        }
         this.player.castFlash = 0.2;
         // Track casts for Old Coin ramp + Pact of Hunger / Echoes hooks.
         this._onSpellCast(s.spellId, mods);
@@ -6902,6 +7366,69 @@ class Game {
           }
         }
       }
+    }
+  }
+
+  /*
+   * Dispatch helper for rank-8 spec `everyNthCast` actions. Fires
+   * one of a small set of canned effects keyed by `kind`. Called
+   * from tickSpells once per N casts of the source spell.
+   */
+  _fireEveryNthAction(ev, player, mods) {
+    const kind = ev.kind;
+    if (kind === 'ringBlast') {
+      // Solar Flare — flame ring around the player.
+      const r = ev.radius || 240;
+      const dmg = (ev.dmg || 140) * (mods.dmgMult || 1);
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(player, e) < r + e.radius) {
+          const a = e.takeDamage(dmg, { spell: 'fireball:solarflare' });
+          this.totalDamageDealt += a;
+          this.applyStatusesToEnemy(e, { ignite: { duration: 2.0, dpsRatio: 0.4, critOnHit: false } }, dmg);
+          this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+        }
+      }
+      this.spawnExplosion(player.x, player.y, r, ev.color || '#ff7733', 'pyroclasm');
+      this.addShake(0.3);
+    } else if (kind === 'globalFreeze') {
+      // Ice Age — freeze every live enemy.
+      const dur = ev.dur || 1.5;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        this.applyStatusesToEnemy(e, { freeze: { duration: dur, factor: 0 } }, 0);
+      }
+      this.spawnExplosion(player.x, player.y, 280, '#bce8ff', 'frost');
+      this.addShake(0.4);
+    } else if (kind === 'extraBolts') {
+      // Storm God — fire N free Lightning Bolts at random enemies.
+      const count = ev.count || 3;
+      const spellId = ev.spell || 'lightning_bolt';
+      const spell = SPELLS[spellId];
+      if (!spell) return;
+      for (let i = 0; i < count; i++) {
+        // Re-use base mods at slightly reduced damage so we don't
+        // recursively trigger another extraBolts cycle.
+        const m = computeSpellMods(this.playerState, spellId);
+        m.dmgMult *= 0.7;
+        if (m.behavior) delete m.behavior.everyNthCast;
+        spell.cast(this, this.player, m);
+      }
+    } else if (kind === 'ascensionSlam') {
+      // Ascension — brief iframes + AoE slam around player.
+      player.iframes = Math.max(player.iframes, ev.iframes || 1.5);
+      const r = ev.radius || 200;
+      const dmg = (ev.dmg || 200) * (mods.dmgMult || 1);
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(player, e) < r + e.radius) {
+          const a = e.takeDamage(dmg, { spell: 'gravity_bolt:ascension' });
+          this.totalDamageDealt += a;
+          this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+        }
+      }
+      this.spawnExplosion(player.x, player.y, r, '#a07cff', 'burst');
+      this.addShake(0.5);
     }
   }
 
@@ -7764,7 +8291,7 @@ class Game {
     if (ps.pendingUnlock) {
       UI.showSpellUnlock(ps, ps.pendingUnlock, wave, { heal });
     } else {
-      UI.showAtlas(ps, wave, { isBoss, heal });
+      UI.showSpellRank(ps, wave, { isBoss, heal });
     }
   }
 
@@ -7973,7 +8500,7 @@ class Game {
       const wave = this.waveMgr.wave;
       const isBoss = wave % CONFIG.waves.bossEvery === 0;
       this.state = 'upgrade';
-      UI.showAtlas(ps, wave, { isBoss });
+      UI.showSpellRank(ps, wave, { isBoss });
       return;
     }
     if (ps.pendingItem) {
@@ -10622,6 +11149,159 @@ const UI = {
    * This replaces the old random 3-card pick — picks now COMPOUND
    * because the player can see and plan their next picks ahead of time.
    */
+  /*
+   * Per-spell rank picker — the new clean post-wave UI. Shows ONE
+   * panel per owned spell, with current rank pips (stars at 4 and 8
+   * for spec milestones) and a "Spend 1 SP" button. Click a panel
+   * → opens a 3-card pick modal. Pick → re-render. Continue saves
+   * remaining SP for later. "More cards…" opens the legacy atlas for
+   * universal/path picks the player still wants access to.
+   */
+  showSpellRank(ps, wave, opts = {}) {
+    this._rankArgs = { ps, wave, opts };
+    const isBoss = !!opts.isBoss;
+    const heal = opts.heal ? `+${opts.heal} HP healed.` : '';
+    const sp = ps.skillPoints || 0;
+    this.$('rank-wave-label').textContent = isBoss
+      ? `Wave ${wave} — Boss Cleared`
+      : `Wave ${wave} Cleared`;
+    const spBadge = sp > 0
+      ? `<b style="color: var(--gold);">${sp} SP</b> banked. Click a spell to spend, or save for later.`
+      : `No SP. Click <b>Continue</b> to start wave ${wave + 1}.`;
+    this.$('rank-summary').innerHTML = `${heal} ${spBadge}`;
+    const cont = this.$('rank-spells');
+    cont.innerHTML = '';
+    let anyPanel = false;
+    for (const spellId of ps.spells) {
+      const tree = SPELL_TREES[spellId];
+      if (!tree) continue;
+      anyPanel = true;
+      cont.appendChild(this._renderRankPanel(spellId, tree, ps, sp));
+    }
+    if (!anyPanel) {
+      cont.innerHTML = `<div class="atlas-branch-flavor">No upgradable spells yet — pick one to start.</div>`;
+    }
+    this.$('btn-rank-continue').onclick = () => {
+      this.hideAllOverlays();
+      this.game.afterChoice();
+    };
+    this.$('btn-rank-atlas').onclick = () => {
+      // Bridge to the legacy atlas — same SP balance, same takeCard
+      // path. Useful for universal cards / pacts / synergy hubs that
+      // aren't bound to a single spell.
+      const args = this._rankArgs;
+      if (args) this.showAtlas(args.ps, args.wave, args.opts);
+    };
+    this.hideAllOverlays();
+    this.$('overlay-rank').classList.add('active');
+  },
+
+  _renderRankPanel(spellId, tree, ps, sp) {
+    const rank = pointsInSpell(ps, spellId);
+    const cap = 8;             // visible pip cap; pool may exceed but UI tops out
+    const el = document.createElement('div');
+    el.className = 'rank-panel';
+    const accent = ({
+      fireball: '#ff7733', frost_spike: '#9af0e6', lightning_bolt: '#5ae5ff', gravity_bolt: '#a07cff',
+      aegis_pulse: '#9af0e6', wardroot: '#5a7a3c', soul_anchor: '#d8624c',
+      shadowblade: '#3c352a', battle_hymn: '#c8941a', mark_of_frailty: '#7c3aed',
+      time_dilation: '#5a4a78', doom_sigil: '#a83a2c', berserkers_howl: '#c14e3a',
+      crescent_strike: '#b6332a', shadow_clone: '#5a4a78', crossbow_bolt: '#c14e3a',
+    })[spellId] || '#c8941a';
+    el.style.setProperty('--accent', accent);
+    // Pip strip — 8 pips, with milestone stars at index 3 and 7.
+    const pipsHtml = [];
+    for (let i = 0; i < cap; i++) {
+      const filled = i < rank ? 'filled' : '';
+      const spec = (i === 3 || i === 7) ? 'spec' : '';
+      pipsHtml.push(`<span class="rank-pip ${filled} ${spec}"></span>`);
+    }
+    // Determine "next" copy
+    let nextLabel = '';
+    let specReady = '';
+    if (rank === 4) { nextLabel = '★ Choose 1st Specialization'; specReady = 'is-spec1-ready'; }
+    else if (rank === 8 && tree.rank8Specs.length === 3) { nextLabel = '★★ Choose 2nd Specialization'; specReady = 'is-spec2-ready'; }
+    else if (rank < 4) nextLabel = `Next: filler (${4 - rank} from 1st spec)`;
+    else if (rank < 8 && tree.rank8Specs.length === 3) nextLabel = `Next: filler (${8 - rank} from 2nd spec)`;
+    else nextLabel = `Rank ${rank}`;
+    if (specReady) el.classList.add(specReady);
+    const canSpend = sp > 0;
+    el.innerHTML = `
+      <div class="rp-head">
+        <div class="rp-icon">${tree.icon}</div>
+        <div class="rp-name">${tree.name}</div>
+        <div class="rp-rank-num">R${rank}</div>
+      </div>
+      <div class="rp-pips">${pipsHtml.join('')}</div>
+      <div class="rp-next">${nextLabel}</div>
+      <button class="rp-spend" ${canSpend ? '' : 'disabled'}>${canSpend ? 'Spend 1 SP' : 'No SP'}</button>
+      ${specReady ? '<div class="rp-spec-flag">★ READY</div>' : ''}
+    `;
+    if (canSpend) {
+      el.querySelector('.rp-spend').addEventListener('click', () => {
+        this._showRankPick(spellId, tree, ps);
+      });
+    }
+    return el;
+  },
+
+  _showRankPick(spellId, tree, ps) {
+    const pick = nextRankPick(ps, spellId);
+    if (pick.kind === 'maxed' || !pick.cards || pick.cards.length === 0) {
+      // Nothing to offer — show a brief banner. Keep it simple: just
+      // don't open the modal. Player can pick another spell.
+      return;
+    }
+    const rank = pointsInSpell(ps, spellId);
+    const subtitleText = pick.kind === 'spec1'
+      ? `— ★ Choose your 1st specialization (mutex) —`
+      : pick.kind === 'spec2'
+      ? `— ★★ Choose your 2nd specialization (mutex) —`
+      : `— Pick an upgrade —`;
+    this.$('rank-pick-subtitle').textContent = subtitleText;
+    this.$('rank-pick-heading').textContent = `${tree.name} — Rank ${rank} → ${rank + 1}`;
+    const cont = this.$('rank-pick-choices');
+    cont.innerHTML = '';
+    for (const card of pick.cards) {
+      // Skip cards locked by a sibling already taken (mutex respect).
+      const blocked = cardBlockedReason(card, ps);
+      if (blocked === 'taken') continue;
+      const cardEl = document.createElement('div');
+      cardEl.className = 'card';
+      cardEl.dataset.tree = card.axis;
+      cardEl.style.setProperty('--accent', this.ATLAS_AXIS_COLOR[card.axis] || 'var(--gold)');
+      const tier = card.tier ? `T${card.tier}` : '';
+      const isSpec = (pick.kind === 'spec1' || pick.kind === 'spec2');
+      const tag = isSpec
+        ? `★ ${pick.kind === 'spec1' ? 'SPEC' : 'SPEC II'}`
+        : (this.ATLAS_AXIS_TAG[card.axis] || card.axis);
+      cardEl.innerHTML = `
+        <div class="card-tag">${tag} ${tier}</div>
+        <div class="card-name">${card.name}</div>
+        <div class="card-desc">${card.desc || ''}</div>
+        ${blocked && blocked !== 'taken' ? `<div class="ac-lock">⚿ ${blocked}</div>` : ''}
+      `;
+      if (!blocked) {
+        cardEl.addEventListener('click', () => {
+          // takeCard returns false if the card is somehow blocked
+          // (shouldn't happen here, but defensive — don't burn SP on
+          // a no-op pick).
+          const ok = this.game.takeCard(card);
+          if (!ok) return;
+          ps.skillPoints = Math.max(0, (ps.skillPoints || 0) - 1);
+          this.$('overlay-rank-pick').classList.remove('active');
+          const args = this._rankArgs;
+          if (args) this.showSpellRank(args.ps, args.wave, args.opts);
+        });
+      }
+      cont.appendChild(cardEl);
+    }
+    this.$('btn-rank-pick-cancel').onclick = () => {
+      this.$('overlay-rank-pick').classList.remove('active');
+    };
+    this.$('overlay-rank-pick').classList.add('active');
+  },
+
   showAtlas(ps, wave, opts = {}) {
     // Stash so per-pick re-renders preserve the args (heal text, etc).
     this._atlasArgs = { ps, wave, opts };
