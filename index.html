@@ -2015,6 +2015,17 @@
     </div>
   </div>
 
+  <!-- Forced spell-unlock screen at boss waves 5 / 10 / 15. The player
+       MUST pick one of three new spells to enter the next category
+       (defense at 5, utility at 10, on-use at 15). No skip. -->
+  <div class="overlay" id="overlay-spell-unlock">
+    <div class="overlay-inner">
+      <div class="subtitle" id="spell-unlock-subtitle">— A new dimension of power —</div>
+      <h1 id="spell-unlock-heading">Choose a Spell</h1>
+      <div class="choices" id="spell-unlock-choices"></div>
+    </div>
+  </div>
+
   <!-- Item drop screen — shows what you currently hold so the replace
        isn't surprising, plus an explicit skip button. -->
   <div class="overlay" id="overlay-item">
@@ -2092,15 +2103,20 @@ const CONFIG = {
     // total damage taken across a wave is bounded by hits-that-land. The
     // critical levers are spawn density (how many can reach you) and
     // enemy HP (whether your spells can clear them in time).
-    baseEnemies: 10,         // was 12 — wave 1 less overwhelming
-    perWaveEnemies: 5,       // was 6 — gentler ramp
-    baseSpawnInterval: 1.05,
-    minSpawnInterval: 0.22,
-    spawnIntervalDecay: 0.04,
-    healthScale: 0.08,       // was 0.11 — flatter HP curve, wave-8 husks aren't 1.8×
-    speedScale: 0.035,
-    speedCap: 1.7,
-    bossEvery: 4,
+    //
+    // The tiered SP economy means the player gets meaningful upgrades
+    // every wave; we can afford a steeper enemy curve. Bumped from
+    // 10/5/0.08 → 13/7/0.11: longer waves, more bodies, real HP bloat
+    // by mid-run so the wave-10 utility unlock matters.
+    baseEnemies: 13,
+    perWaveEnemies: 7,
+    baseSpawnInterval: 1.0,
+    minSpawnInterval: 0.20,
+    spawnIntervalDecay: 0.045,
+    healthScale: 0.11,
+    speedScale: 0.04,
+    speedCap: 1.8,
+    bossEvery: 5,            // aligns with the 5/10/15 spell-tier unlock cadence
     itemEvery: 5,
     longAxisSpawnOnly: true,
     clusterSpread: 38,
@@ -2114,6 +2130,20 @@ const CONFIG = {
   spell: {
     baseCritChance: 0.05,
     baseCritMult: 2.0,
+  },
+
+  // Progression — the new tiered SP economy. Player picks one of 4 starter
+  // damage spells, earns 1 SP per wave clear, spends them to rank up owned
+  // spells. Rank 4 on any spell unlocks a 3-way branching choice. New spell
+  // categories (defense / utility / on-use) unlock at fixed boss waves.
+  progression: {
+    spPerWave: 1,
+    defenseUnlockWave: 5,
+    utilityUnlockWave: 10,
+    onuseUnlockWave:   15,
+    branchAtRank: 4,           // the 4th SP into a spell is the branch pick
+    rankCap: 8,                // hard cap; after this no more upgrades
+    starterDamageSpells: ['fireball', 'frost_spike', 'lightning_bolt', 'gravity_bolt'],
   },
 };
 
@@ -3194,6 +3224,336 @@ const SPELLS = {
     },
   },
 
+  /* ===== DEFENSE TIER (unlocks at wave 5) =====
+   * These auto-cast on cooldown like every other spell. They do NOT
+   * deal big numbers — the value is keeping you alive long enough to
+   * compound your damage tree.
+   * ====================================================== */
+
+  aegis_pulse: {
+    id: 'aegis_pulse',
+    name: 'Aegis Pulse',
+    tree: 'defense',
+    color: '#9af0e6',
+    cooldown: 10.0,
+    cast(game, caster, mods) {
+      // Grants the player an absorb shield. While the shield is up, a
+      // hit from any enemy is consumed first (see Player.takeDamage).
+      // Branches: reactive (broken shield bursts), eternal (builds 2nd
+      // layer if untriggered), refractive (reflects damage back).
+      const b = mods.behavior || {};
+      const baseAmount = 28 * (mods.dmgMult || 1);
+      const dur = (b.eternalAegis ? 9.0 : 6.0) * (1 + (b.shieldDurMult || 0));
+      const now = game.runElapsed;
+      const player = caster;
+      const layered = (player._aegisShield > 0 && b.eternalAegis) ? player._aegisShield : 0;
+      player._aegisShield = baseAmount + layered;
+      player._aegisShieldExpires = now + dur;
+      player._aegisBehavior = b;
+      player._aegisRadius = 56 * (mods.radiusMult || 1);
+      game.spawnExplosion(player.x, player.y, player._aegisRadius, '#9af0e6', 'frost');
+    },
+  },
+
+  wardroot: {
+    id: 'wardroot',
+    name: 'Wardroot',
+    tree: 'defense',
+    color: '#5a7a3c',
+    cooldown: 5.5,
+    cast(game, caster, mods) {
+      // Pulsing slow + chip damage in a ring around the player. The
+      // ward hugs you — works like a portable Caltrops field.
+      // Branches: verdant (heals you), thorned (more reflect dmg),
+      // snaring (briefly stuns on entry).
+      const b = mods.behavior || {};
+      const radius = 130 * (mods.radiusMult || 1);
+      const dmg = 8 * mods.dmgMult;
+      let hit = 0;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist(caster, e);
+        if (d <= radius + e.radius) {
+          const isCrit = Math.random() < (mods.critChance || 0);
+          const final = isCrit ? dmg * mods.critMult : dmg;
+          const a = e.takeDamage(final, { spell: 'wardroot' });
+          game.totalDamageDealt += a;
+          game.applyStatusesToEnemy(e, { slow: { duration: 1.6, factor: b.snaringWard ? 0.25 : 0.55 } }, dmg);
+          if (b.snaringWard && Math.random() < 0.18) {
+            game.applyStatusesToEnemy(e, { freeze: { duration: 0.35 } }, 0);
+          }
+          if (b.thornedWard && Math.random() < 0.25) {
+            game.spawnDamageNumber(e.x, e.y - e.radius - 4, Math.round(final * 0.5), false);
+            e.takeDamage(final * 0.5, { spell: 'reflect' });
+          }
+          hit++;
+        }
+      }
+      if (b.verdantWard && hit > 0) game.healPlayer(2 * hit);
+      // Soft halo around the player; reuse aura pulse for the visual.
+      game.auraPulse = 0.3;
+    },
+  },
+
+  soul_anchor: {
+    id: 'soul_anchor',
+    name: 'Soul Anchor',
+    tree: 'defense',
+    color: '#d8624c',
+    cooldown: 8.0,
+    cast(game, caster, mods) {
+      // Heal trigger — only fires if you've taken meaningful damage,
+      // so it doesn't waste at full HP.
+      const player = caster;
+      const b = mods.behavior || {};
+      const missing = player.maxHp - player.hp;
+      const hpRatio = player.hp / player.maxHp;
+      // Phoenix branch: only fires below 50% but heals 60% max HP.
+      // Steady branch: smaller heal, fires above 90% too.
+      // Vampiric branch: also heals based on kills since last cast.
+      const minMissing = 8;
+      if (!b.steadyAnchor && missing < minMissing) return;
+      let amount = (b.phoenixAnchor ? 0.55 : 0.18) * player.maxHp * (mods.dmgMult || 1) * (1 + (mods.burnDmgMult || 0));
+      if (b.phoenixAnchor && hpRatio > 0.5) return;       // phoenix only triggers low
+      if (b.vampiricAnchor) {
+        const killsRecent = Math.min(20, (game.kills - (player._anchorKillsLast || 0)) || 0);
+        amount += killsRecent * 1.2;
+        player._anchorKillsLast = game.kills;
+      }
+      game.healPlayer(amount);
+      // Afterglow filler — temporary +30% damage after a successful heal.
+      const aft = b.afterglowDmg;
+      if (aft) {
+        player._afterglowExpires = game.runElapsed + (aft.dur || 4.0);
+        player._afterglowMult = 1 + (aft.bonus || 0.30);
+      }
+      game.spawnExplosion(player.x, player.y, 42 * (mods.radiusMult || 1), '#d8624c', 'burst');
+    },
+  },
+
+  /* ===== UTILITY TIER (unlocks at wave 10) ====================== */
+
+  shadowblade: {
+    id: 'shadowblade',
+    name: 'Shadowblade',
+    tree: 'utility',
+    color: '#3c352a',
+    cooldown: 1.0,
+    cast(game, caster, mods) {
+      // Auto-summoned dagger that homes the nearest enemy. Faster than
+      // a regular projectile, and tracks turning. Branches: twinEdge
+      // (2 daggers), bloodbound (gains stacks per kill on the player),
+      // reckless (much faster, 50% dmg).
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const b = mods.behavior || {};
+      const baseDmg = 14 * mods.dmgMult * (b.recklessBlade ? 1.4 : 1.0);
+      const speed = 380 * (b.recklessBlade ? 1.6 : 1.0);
+      const count = b.twinEdge ? 2 : 1;
+      const stack = caster._bladeStack || 0;
+      const stackBonus = b.bloodbound ? 1 + Math.min(0.5, 0.04 * stack) : 1;
+      for (let i = 0; i < count; i++) {
+        const off = count > 1 ? (i - 0.5) * 0.55 : 0;
+        const baseDir = Vec.norm(Vec.sub(target, caster));
+        const cos = Math.cos(off), sin = Math.sin(off);
+        const vx = (baseDir.x * cos - baseDir.y * sin) * speed;
+        const vy = (baseDir.x * sin + baseDir.y * cos) * speed;
+        game.spawnProjectile({
+          x: caster.x, y: caster.y, vx, vy,
+          radius: 5 * (mods.sizeMult || 1),
+          damage: baseDmg * stackBonus,
+          color: '#1a1612',
+          life: 1.6,
+          pierce: 0,
+          crit: { chance: mods.critChance, mult: mods.critMult },
+          applyStatus: mods.applyStatus,
+          behavior: { ...b, homing: true },
+          spellBaseDmg: baseDmg,
+          trail: 'steel',
+          spell: 'shadowblade',
+        });
+      }
+    },
+  },
+
+  battle_hymn: {
+    id: 'battle_hymn',
+    name: 'Battle Hymn',
+    tree: 'utility',
+    color: '#c8941a',
+    cooldown: 12.0,
+    cast(game, caster, mods) {
+      // Pulses a damage buff. Stacks (crescendo) gain +X% per refresh,
+      // capped. Battle Cry adds a one-time crit window. Anthem of Iron
+      // adds DR while active.
+      const b = mods.behavior || {};
+      const dur = 5.0;
+      const player = caster;
+      const now = game.runElapsed;
+      const wasActive = (player._hymnExpires || 0) > now;
+      let stacks = wasActive ? (player._hymnStacks || 1) : 1;
+      if (b.crescendo) stacks = Math.min(5, stacks + 1);
+      player._hymnStacks = stacks;
+      player._hymnExpires = now + dur;
+      player._hymnDmgMult = 1 + 0.20 * (b.crescendo ? stacks : 1);
+      player._hymnCritBonus = 0.10 * (b.crescendo ? stacks : 1);
+      if (b.anthemOfIron) player._hymnDR = 0.15;
+      else player._hymnDR = 0;
+      if (b.battleCry && !wasActive) {
+        // One-time crit window — buff next 4s of casts with a guaranteed
+        // crit on the first hit (we use an "ignite-like" tag flag).
+        player._hymnCritWindow = now + 4.0;
+      }
+      game.spawnExplosion(player.x, player.y, 80 * (mods.radiusMult || 1), '#c8941a', 'burst');
+      game.auraPulse = 0.4;
+    },
+  },
+
+  mark_of_frailty: {
+    id: 'mark_of_frailty',
+    name: 'Mark of Frailty',
+    tree: 'utility',
+    color: '#7c3aed',
+    cooldown: 4.5,
+    cast(game, caster, mods) {
+      // Pick the toughest live enemy (highest current HP) and tag it.
+      // While marked, all your spell hits do +25% dmg to it. Branches:
+      // hunter (mark hops on death), doomMark (also bleeds), soulchain
+      // (spreads on kill).
+      const b = mods.behavior || {};
+      let best = null, bestHp = -Infinity;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (e.hp > bestHp) { bestHp = e.hp; best = e; }
+      }
+      if (!best) return;
+      const dur = 4.0;
+      const bonus = 0.25 + (b.doomMark ? 0.10 : 0) + (b.markBonusBonus || 0);
+      best.statuses = best.statuses || {};
+      best.statuses.marked = {
+        duration: dur,
+        expires: game.runElapsed + dur,
+        multiplier: bonus,
+        hunter: !!b.huntersMark,
+        soulchain: !!b.soulchain,
+      };
+      if (b.doomMark) {
+        // Doom Mark bleeds for ~4% max HP/s as ignite-style DoT.
+        const dpsAbs = Math.max(2, (best.maxHp || best.hp) * 0.04);
+        game.applyStatusesToEnemy(best, { ignite: { duration: dur, dpsRatio: dpsAbs / Math.max(1, best.hp), critOnHit: false } }, 1);
+      }
+      game.spawnDamageNumber(best.x, best.y - best.radius - 8, 'MARKED', true);
+      game.spawnHitParticles(best.x, best.y, '#7c3aed', 8);
+    },
+  },
+
+  /* ===== ON-USE TIER (unlocks at wave 15) =======================
+   * Long cooldowns (≈ once per wave). Auto-fire when ready. Designed
+   * as situational power spikes — one big effect per fight.
+   * ====================================================== */
+
+  time_dilation: {
+    id: 'time_dilation',
+    name: 'Time Dilation',
+    tree: 'onuse',
+    color: '#5a4a78',
+    cooldown: 32.0,
+    oncePerWave: true,
+    cast(game, caster, mods) {
+      // Big slow on every visible enemy. Distortion: slow lingers
+      // 2s after; Stasis: brief freeze; Echo: refunds 50% CD if you
+      // take 0 damage during the window (handled in tickSpells).
+      const b = mods.behavior || {};
+      const dur = 4.0 + (b.distortionDilation ? 2.0 : 0);
+      const factor = 0.30;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (b.stasisDilation && Vec.dist(caster, e) < 180 * (mods.radiusMult || 1) + e.radius) {
+          game.applyStatusesToEnemy(e, { freeze: { duration: 1.0 } }, 0);
+        }
+        game.applyStatusesToEnemy(e, { slow: { duration: dur, factor } }, 1);
+      }
+      caster._timeDilationEcho = b.echoDilation ? game.runElapsed + dur : 0;
+      caster._timeDilationCdAt = game.runElapsed;
+      game.spawnExplosion(caster.x, caster.y, 220 * (mods.radiusMult || 1), '#5a4a78', 'frost');
+      game.addShake(0.4);
+    },
+  },
+
+  doom_sigil: {
+    id: 'doom_sigil',
+    name: 'Doom Sigil',
+    tree: 'onuse',
+    color: '#a83a2c',
+    cooldown: 28.0,
+    oncePerWave: true,
+    cast(game, caster, mods) {
+      // Place a delayed AoE on the densest cluster. Big dmg.
+      const b = mods.behavior || {};
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      if (!target) return;
+      const radius = 170 * (mods.radiusMult || 1);
+      const dmg = 140 * mods.dmgMult;
+      const count = b.heavensFall ? 3 : (b.twinSigils ? 2 : 1);
+      const interval = b.heavensFall ? 0.4 : 0.0;
+      for (let i = 0; i < count; i++) {
+        const tx = target.x + (i ? (Math.random() - 0.5) * 100 : 0);
+        const ty = target.y + (i ? (Math.random() - 0.5) * 100 : 0);
+        const delay = 1.6 + i * interval;
+        // A slim flame-patch placeholder marks the danger zone.
+        game.spawnFlamePatch(tx, ty, radius * 0.35, delay, 0);
+        setTimeout(() => {
+          if (game.state !== 'playing') return;
+          const isCrit = Math.random() < (mods.critChance || 0);
+          for (const e of game.enemies) {
+            if (!e.alive) continue;
+            const d = Vec.dist({ x: tx, y: ty }, e);
+            if (d <= radius + e.radius) {
+              const falloff = 1 - (d / (radius + e.radius)) * 0.4;
+              const final = (isCrit ? dmg * mods.critMult : dmg) * falloff;
+              const a = e.takeDamage(final, { spell: 'doom_sigil' });
+              game.totalDamageDealt += a;
+              game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit, e);
+              if (b.imploderSigil) {
+                const dir = Vec.norm(Vec.sub({ x: tx, y: ty }, e));
+                e.x += dir.x * 32; e.y += dir.y * 32;
+              }
+            }
+          }
+          game.spawnExplosion(tx, ty, radius, '#a83a2c', 'fire');
+          game.addShake(0.6);
+        }, delay * 1000);
+      }
+    },
+  },
+
+  berserkers_howl: {
+    id: 'berserkers_howl',
+    name: "Berserker's Howl",
+    tree: 'onuse',
+    color: '#c14e3a',
+    cooldown: 40.0,
+    oncePerWave: true,
+    cast(game, caster, mods) {
+      // Buff window. Bloodlust: more lifesteal. Reckless: also reduces
+      // CDs by 30%. Last Stand: 20s window if HP <20%.
+      const b = mods.behavior || {};
+      const player = caster;
+      let dur = 5.0;
+      if (b.lastStand && (player.hp / player.maxHp) < 0.2) dur = 20.0;
+      const dmgBoost = 0.5;
+      const lifesteal = b.bloodlust ? 0.6 : 0.3;
+      const cdr = b.recklessHowl ? 0.3 : 0;
+      const now = game.runElapsed;
+      player._berserkExpires = now + dur;
+      player._berserkDmg = 1 + dmgBoost;
+      player._berserkLifesteal = lifesteal;
+      player._berserkCdr = cdr;
+      game.spawnExplosion(player.x, player.y, 120 * (mods.radiusMult || 1), '#c14e3a', 'fire');
+      game.addShake(0.5);
+    },
+  },
+
   // ===== UNIVERSAL =====
 
   shuriken_toss: {
@@ -3283,6 +3643,16 @@ const SPELL_DAMAGE_TYPES = {
   spring_trap:       'physical',
   shuriken_toss:     'physical',
   smoke_bomb:        'elemental',
+  // Defense / Utility / On-use (universal — added in the tiered redesign)
+  aegis_pulse:       'arcane',
+  wardroot:          'arcane',
+  soul_anchor:       'arcane',
+  shadowblade:       'physical',
+  battle_hymn:       'arcane',
+  mark_of_frailty:   'arcane',
+  time_dilation:     'arcane',
+  doom_sigil:        'arcane',
+  berserkers_howl:   'physical',
   // Auxiliary spell ids that surface in Enemy.takeDamage source tags.
   // Resists apply to status DoTs the same as direct hits.
   ignite:            'elemental',
@@ -3966,6 +4336,356 @@ const CARDS = {
     pathTag: 'arsenal', classes: ['ninja'],
     desc: '+50% trap duration (Caltrops + Spring Trap stay armed longer).',
     effect: { trapDurationMult: 0.50 } },
+
+  // ============================================================
+  // TIER UNLOCK CARDS — surfaced in the forced unlock screen at
+  // boss waves 5 / 10 / 15. Each tier offers 3 mutex picks.
+  // ============================================================
+  def_aegis_unlock: { id: 'def_aegis_unlock', name: 'Aegis Pulse', axis: 'defense', tier: 2,
+    pathTag: 'defense', bossOnly: true,
+    desc: 'Unlock Aegis Pulse — periodic absorbing shield around you.',
+    effect: { unlockSpell: 'aegis_pulse' } },
+  def_wardroot_unlock: { id: 'def_wardroot_unlock', name: 'Wardroot', axis: 'defense', tier: 2,
+    pathTag: 'defense', bossOnly: true,
+    desc: 'Unlock Wardroot — slow + chip aura that hugs you.',
+    effect: { unlockSpell: 'wardroot' } },
+  def_anchor_unlock: { id: 'def_anchor_unlock', name: 'Soul Anchor', axis: 'defense', tier: 2,
+    pathTag: 'defense', bossOnly: true,
+    desc: 'Unlock Soul Anchor — emergency self-heal when HP is low.',
+    effect: { unlockSpell: 'soul_anchor' } },
+
+  uti_shadowblade_unlock: { id: 'uti_shadowblade_unlock', name: 'Shadowblade', axis: 'utility', tier: 2,
+    pathTag: 'utility', bossOnly: true,
+    desc: 'Unlock Shadowblade — fast homing daggers at nearest enemy.',
+    effect: { unlockSpell: 'shadowblade' } },
+  uti_hymn_unlock: { id: 'uti_hymn_unlock', name: 'Battle Hymn', axis: 'utility', tier: 2,
+    pathTag: 'utility', bossOnly: true,
+    desc: 'Unlock Battle Hymn — pulsing self-buff: +20% damage for 5s.',
+    effect: { unlockSpell: 'battle_hymn' } },
+  uti_mark_unlock: { id: 'uti_mark_unlock', name: 'Mark of Frailty', axis: 'utility', tier: 2,
+    pathTag: 'utility', bossOnly: true,
+    desc: 'Unlock Mark of Frailty — auto-tags toughest enemy for +25% damage from all sources.',
+    effect: { unlockSpell: 'mark_of_frailty' } },
+
+  ou_dilation_unlock: { id: 'ou_dilation_unlock', name: 'Time Dilation', axis: 'utility', tier: 3,
+    pathTag: 'onuse', bossOnly: true,
+    desc: 'Unlock Time Dilation — slow ALL enemies 70% for 4s. Long cooldown.',
+    effect: { unlockSpell: 'time_dilation' } },
+  ou_doomsigil_unlock: { id: 'ou_doomsigil_unlock', name: 'Doom Sigil', axis: 'damage', tier: 3,
+    pathTag: 'onuse', bossOnly: true,
+    desc: 'Unlock Doom Sigil — large delayed AoE on densest cluster.',
+    effect: { unlockSpell: 'doom_sigil' } },
+  ou_howl_unlock: { id: 'ou_howl_unlock', name: "Berserker's Howl", axis: 'damage', tier: 3,
+    pathTag: 'onuse', bossOnly: true,
+    desc: 'Unlock Howl — +50% damage, +30% lifesteal for 5s.',
+    effect: { unlockSpell: 'berserkers_howl' } },
+
+  // ============================================================
+  // AEGIS PULSE — defense / aegis
+  // ============================================================
+  ae_thicker:    { id: 'ae_thicker', name: 'Thicker Plate', axis: 'defense', tier: 1,
+    pathTag: 'defense', spellGate: 'aegis_pulse',
+    desc: '+45% Aegis Pulse shield amount.',
+    effect: { spellId: 'aegis_pulse', dmgMult: 0.45 } },
+  ae_quickseal:  { id: 'ae_quickseal', name: 'Quick Seal', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'aegis_pulse',
+    desc: '−25% Aegis Pulse cooldown.',
+    effect: { spellId: 'aegis_pulse', cdMult: -0.25 } },
+  ae_widefield:  { id: 'ae_widefield', name: 'Wide Field', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'aegis_pulse',
+    desc: '+50% Aegis Pulse radius — reactive burst is wider.',
+    effect: { spellId: 'aegis_pulse', radiusMult: 0.50 } },
+  ae_oversize:   { id: 'ae_oversize', name: 'Oversize', axis: 'defense', tier: 2,
+    pathTag: 'defense', spellGate: 'aegis_pulse',
+    desc: 'Aegis duration +60%.',
+    effect: { spellId: 'aegis_pulse', behavior: { shieldDurMult: 0.60 } } },
+  ae_thornglass: { id: 'ae_thornglass', name: 'Thornglass', axis: 'damage', tier: 1,
+    pathTag: 'defense', spellGate: 'aegis_pulse',
+    desc: 'While shielded, your spells deal +12% damage.',
+    effect: { spellId: 'aegis_pulse', behavior: { shieldedDmgBuff: 0.12 } } },
+  ae_reactive:   { id: 'ae_reactive', name: 'Reactive Aegis', axis: 'damage', tier: 2,
+    pathTag: 'defense', spellGate: 'aegis_pulse', bossOnly: true,
+    lockedBy: ['ae_eternal', 'ae_refractive'],
+    desc: 'Keystone: Broken shield bursts — big damage in shield radius.',
+    effect: { spellId: 'aegis_pulse', keystone: { behavior: { reactiveAegis: true } } } },
+  ae_eternal:    { id: 'ae_eternal', name: 'Eternal Aegis', axis: 'defense', tier: 2,
+    pathTag: 'defense', spellGate: 'aegis_pulse', bossOnly: true,
+    lockedBy: ['ae_reactive', 'ae_refractive'],
+    desc: 'Keystone: If shield expires unbroken, next cast layers a 2nd shield on top.',
+    effect: { spellId: 'aegis_pulse', keystone: { behavior: { eternalAegis: true } } } },
+  ae_refractive: { id: 'ae_refractive', name: 'Refractive Aegis', axis: 'utility', tier: 2,
+    pathTag: 'defense', spellGate: 'aegis_pulse', bossOnly: true,
+    lockedBy: ['ae_reactive', 'ae_eternal'],
+    desc: 'Keystone: Shield refracts 60% of incoming damage back at the attacker.',
+    effect: { spellId: 'aegis_pulse', keystone: { behavior: { refractiveAegis: true } } } },
+
+  // ============================================================
+  // WARDROOT — defense / aura
+  // ============================================================
+  wr_thicken:   { id: 'wr_thicken', name: 'Thicken Roots', axis: 'damage', tier: 1,
+    pathTag: 'defense', spellGate: 'wardroot',
+    desc: '+45% Wardroot chip damage.',
+    effect: { spellId: 'wardroot', dmgMult: 0.45 } },
+  wr_reach:     { id: 'wr_reach', name: 'Long Roots', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'wardroot',
+    desc: '+35% Wardroot radius.',
+    effect: { spellId: 'wardroot', radiusMult: 0.35 } },
+  wr_cdr:       { id: 'wr_cdr', name: 'Forest Tempo', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'wardroot',
+    desc: '−25% Wardroot cooldown.',
+    effect: { spellId: 'wardroot', cdMult: -0.25 } },
+  wr_witherbloom: { id: 'wr_witherbloom', name: 'Witherbloom', axis: 'damage', tier: 2,
+    pathTag: 'defense', spellGate: 'wardroot',
+    desc: 'Slowed enemies take +15% damage from your spells.',
+    effect: { dmgVsSlowed: 0.15 } },
+  wr_grindslow: { id: 'wr_grindslow', name: 'Grinding Slow', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'wardroot',
+    desc: 'Wardroot slow harshens to 35% (longer crawl).',
+    effect: { spellId: 'wardroot', applyStatus: { slow: { duration: 1.6, factor: 0.35 } } } },
+  wr_verdant:   { id: 'wr_verdant', name: 'Verdant', axis: 'defense', tier: 2,
+    pathTag: 'defense', spellGate: 'wardroot', bossOnly: true,
+    lockedBy: ['wr_thorned', 'wr_snaring'],
+    desc: 'Keystone: Wardroot heals you per enemy hit each pulse.',
+    effect: { spellId: 'wardroot', keystone: { behavior: { verdantWard: true } } } },
+  wr_thorned:   { id: 'wr_thorned', name: 'Thorned', axis: 'damage', tier: 2,
+    pathTag: 'defense', spellGate: 'wardroot', bossOnly: true,
+    lockedBy: ['wr_verdant', 'wr_snaring'],
+    desc: 'Keystone: Wardroot reflects extra damage on hit.',
+    effect: { spellId: 'wardroot', keystone: { modAdjust: { dmgMult: 1.5 }, behavior: { thornedWard: true } } } },
+  wr_snaring:   { id: 'wr_snaring', name: 'Snaring', axis: 'utility', tier: 2,
+    pathTag: 'defense', spellGate: 'wardroot', bossOnly: true,
+    lockedBy: ['wr_verdant', 'wr_thorned'],
+    desc: 'Keystone: Harsh slow + brief stun on enemies in the ward.',
+    effect: { spellId: 'wardroot', keystone: { behavior: { snaringWard: true } } } },
+
+  // ============================================================
+  // SOUL ANCHOR — defense / heal
+  // ============================================================
+  sa_resonance:    { id: 'sa_resonance', name: 'Resonance', axis: 'defense', tier: 1,
+    pathTag: 'defense', spellGate: 'soul_anchor',
+    desc: '+45% Soul Anchor heal amount.',
+    effect: { spellId: 'soul_anchor', burnDmgMult: 0.45 } },
+  sa_quickprayer:  { id: 'sa_quickprayer', name: 'Quick Prayer', axis: 'utility', tier: 1,
+    pathTag: 'defense', spellGate: 'soul_anchor',
+    desc: '−20% Soul Anchor cooldown.',
+    effect: { spellId: 'soul_anchor', cdMult: -0.20 } },
+  sa_afterglow:    { id: 'sa_afterglow', name: 'Afterglow', axis: 'damage', tier: 1,
+    pathTag: 'defense', spellGate: 'soul_anchor',
+    desc: 'After Soul Anchor triggers, your damage +30% for 4s.',
+    effect: { spellId: 'soul_anchor', behavior: { afterglowDmg: { bonus: 0.30, dur: 4.0 } } } },
+  sa_phoenix:      { id: 'sa_phoenix', name: 'Phoenix Anchor', axis: 'damage', tier: 2,
+    pathTag: 'defense', spellGate: 'soul_anchor', bossOnly: true,
+    lockedBy: ['sa_vampiric', 'sa_steady'],
+    desc: 'Keystone: Soul Anchor fully heals when you fall below 50% (rare, dramatic).',
+    effect: { spellId: 'soul_anchor', keystone: { behavior: { phoenixAnchor: true } } } },
+  sa_vampiric:     { id: 'sa_vampiric', name: 'Vampiric Anchor', axis: 'utility', tier: 2,
+    pathTag: 'defense', spellGate: 'soul_anchor', bossOnly: true,
+    lockedBy: ['sa_phoenix', 'sa_steady'],
+    desc: 'Keystone: Soul Anchor also heals from kills since last cast.',
+    effect: { spellId: 'soul_anchor', keystone: { behavior: { vampiricAnchor: true } } } },
+  sa_steady:       { id: 'sa_steady', name: 'Steady Anchor', axis: 'defense', tier: 2,
+    pathTag: 'defense', spellGate: 'soul_anchor', bossOnly: true,
+    lockedBy: ['sa_phoenix', 'sa_vampiric'],
+    desc: 'Keystone: Smaller heals but fires almost every cooldown.',
+    effect: { spellId: 'soul_anchor', keystone: { modAdjust: { dmgMult: 0.5 }, behavior: { steadyAnchor: true } } } },
+
+  // ============================================================
+  // SHADOWBLADE — utility / minion
+  // ============================================================
+  sb_keenedge:    { id: 'sb_keenedge', name: 'Keen Edge', axis: 'damage', tier: 1,
+    pathTag: 'utility', spellGate: 'shadowblade',
+    desc: '+45% Shadowblade damage.',
+    effect: { spellId: 'shadowblade', dmgMult: 0.45 } },
+  sb_swift:       { id: 'sb_swift', name: 'Swift Cuts', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'shadowblade',
+    desc: '−25% Shadowblade cooldown.',
+    effect: { spellId: 'shadowblade', cdMult: -0.25 } },
+  sb_punctures:   { id: 'sb_punctures', name: 'Puncture', axis: 'damage', tier: 1,
+    pathTag: 'utility', spellGate: 'shadowblade',
+    desc: 'Shadowblade hits apply 25% slow for 1.2s.',
+    effect: { spellId: 'shadowblade', applyStatus: { slow: { duration: 1.2, factor: 0.75 } } } },
+  sb_widerorbit:  { id: 'sb_widerorbit', name: 'Bigger Blade', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'shadowblade',
+    desc: '+30% blade size.',
+    effect: { spellId: 'shadowblade', sizeMult: 0.30 } },
+  sb_twinedge:    { id: 'sb_twinedge', name: 'Twin Edge', axis: 'utility', tier: 2,
+    pathTag: 'utility', spellGate: 'shadowblade', bossOnly: true,
+    lockedBy: ['sb_bloodbound', 'sb_reckless'],
+    desc: 'Keystone: Shadowblade cast spawns 2 daggers in a spread.',
+    effect: { spellId: 'shadowblade', keystone: { behavior: { twinEdge: true } } } },
+  sb_bloodbound:  { id: 'sb_bloodbound', name: 'Bloodbound Blade', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'shadowblade', bossOnly: true,
+    lockedBy: ['sb_twinedge', 'sb_reckless'],
+    desc: 'Keystone: Each kill scored adds +4% damage to Shadowblade. Caps +50%.',
+    effect: { spellId: 'shadowblade', keystone: { behavior: { bloodbound: true } } } },
+  sb_reckless:    { id: 'sb_reckless', name: 'Reckless Blade', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'shadowblade', bossOnly: true,
+    lockedBy: ['sb_twinedge', 'sb_bloodbound'],
+    desc: 'Keystone: Faster + harder daggers. The blade flickers.',
+    effect: { spellId: 'shadowblade', keystone: { behavior: { recklessBlade: true } } } },
+
+  // ============================================================
+  // BATTLE HYMN — utility / self-buff
+  // ============================================================
+  bh_lyric:    { id: 'bh_lyric', name: 'Bold Lyric', axis: 'damage', tier: 1,
+    pathTag: 'utility', spellGate: 'battle_hymn',
+    desc: '+10% damage bonus while hymn is active.',
+    effect: { spellId: 'battle_hymn', behavior: { dmgBonusAdd: 0.10 } } },
+  bh_metronome:{ id: 'bh_metronome', name: 'Metronome', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'battle_hymn',
+    desc: '−25% Battle Hymn cooldown.',
+    effect: { spellId: 'battle_hymn', cdMult: -0.25 } },
+  bh_legato:   { id: 'bh_legato', name: 'Legato', axis: 'utility', tier: 2,
+    pathTag: 'utility', spellGate: 'battle_hymn',
+    desc: 'Hymn duration +60%.',
+    effect: { spellId: 'battle_hymn', behavior: { hymnDurMult: 0.60 } } },
+  bh_chorus:   { id: 'bh_chorus', name: 'Chorus', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'battle_hymn',
+    desc: '+50% Battle Hymn aura radius.',
+    effect: { spellId: 'battle_hymn', radiusMult: 0.50 } },
+  bh_crescendo:{ id: 'bh_crescendo', name: 'Crescendo', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'battle_hymn', bossOnly: true,
+    lockedBy: ['bh_battlecry', 'bh_anthem'],
+    desc: 'Keystone: Each consecutive cast within window stacks intensity.',
+    effect: { spellId: 'battle_hymn', keystone: { behavior: { crescendo: true } } } },
+  bh_battlecry:{ id: 'bh_battlecry', name: 'Battle Cry', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'battle_hymn', bossOnly: true,
+    lockedBy: ['bh_crescendo', 'bh_anthem'],
+    desc: 'Keystone: First cast in a wave grants a guaranteed crit window.',
+    effect: { spellId: 'battle_hymn', keystone: { behavior: { battleCry: true } } } },
+  bh_anthem:   { id: 'bh_anthem', name: 'Anthem of Iron', axis: 'defense', tier: 2,
+    pathTag: 'utility', spellGate: 'battle_hymn', bossOnly: true,
+    lockedBy: ['bh_crescendo', 'bh_battlecry'],
+    desc: 'Keystone: Hymn also grants +15% damage reduction.',
+    effect: { spellId: 'battle_hymn', keystone: { behavior: { anthemOfIron: true } } } },
+
+  // ============================================================
+  // MARK OF FRAILTY — utility / debuff
+  // ============================================================
+  mf_brand:     { id: 'mf_brand', name: 'Deeper Brand', axis: 'damage', tier: 1,
+    pathTag: 'utility', spellGate: 'mark_of_frailty',
+    desc: 'Mark bonus +10% (25% → 35%).',
+    effect: { spellId: 'mark_of_frailty', behavior: { markBonusBonus: 0.10 } } },
+  mf_quickbrand:{ id: 'mf_quickbrand', name: 'Quick Brand', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'mark_of_frailty',
+    desc: '−20% Mark cooldown.',
+    effect: { spellId: 'mark_of_frailty', cdMult: -0.20 } },
+  mf_critfocus: { id: 'mf_critfocus', name: 'Crit Focus', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'mark_of_frailty',
+    desc: '+15% global crit chance — your spells punch through marked enemies.',
+    effect: { critChanceBonus: 0.15 } },
+  mf_bountypoints: { id: 'mf_bountypoints', name: 'Bounty', axis: 'utility', tier: 1,
+    pathTag: 'utility', spellGate: 'mark_of_frailty',
+    desc: '+3 HP per kill — marked enemies feed you.',
+    effect: { healPerKill: 3 } },
+  mf_hunters:   { id: 'mf_hunters', name: "Hunter's Mark", axis: 'utility', tier: 2,
+    pathTag: 'utility', spellGate: 'mark_of_frailty', bossOnly: true,
+    lockedBy: ['mf_doom', 'mf_soulchain'],
+    desc: 'Keystone: When marked enemy dies, mark jumps to next-toughest.',
+    effect: { spellId: 'mark_of_frailty', keystone: { behavior: { huntersMark: true } } } },
+  mf_doom:      { id: 'mf_doom', name: 'Doom Mark', axis: 'damage', tier: 2,
+    pathTag: 'utility', spellGate: 'mark_of_frailty', bossOnly: true,
+    lockedBy: ['mf_hunters', 'mf_soulchain'],
+    desc: 'Keystone: Marked enemies also bleed for ~4% max HP/s.',
+    effect: { spellId: 'mark_of_frailty', keystone: { behavior: { doomMark: true } } } },
+  mf_soulchain: { id: 'mf_soulchain', name: 'Soulchain', axis: 'utility', tier: 2,
+    pathTag: 'utility', spellGate: 'mark_of_frailty', bossOnly: true,
+    lockedBy: ['mf_hunters', 'mf_doom'],
+    desc: 'Keystone: Killing marked spreads the mark to 3 nearby enemies.',
+    effect: { spellId: 'mark_of_frailty', keystone: { behavior: { soulchain: true } } } },
+
+  // ============================================================
+  // TIME DILATION — on-use / control
+  // ============================================================
+  td_extend:   { id: 'td_extend', name: 'Extended Field', axis: 'utility', tier: 2,
+    pathTag: 'onuse', spellGate: 'time_dilation',
+    desc: '+50% Time Dilation slow duration.',
+    effect: { spellId: 'time_dilation', behavior: { extendSlow: 2.0 } } },
+  td_qcd:      { id: 'td_qcd', name: 'Tempo Tear', axis: 'utility', tier: 2,
+    pathTag: 'onuse', spellGate: 'time_dilation',
+    desc: '−25% Time Dilation cooldown.',
+    effect: { spellId: 'time_dilation', cdMult: -0.25 } },
+  td_brittle:  { id: 'td_brittle', name: 'Time Brittle', axis: 'damage', tier: 2,
+    pathTag: 'onuse', spellGate: 'time_dilation',
+    desc: 'Slowed enemies take +30% damage from your spells.',
+    effect: { dmgVsSlowed: 0.30 } },
+  td_distortion: { id: 'td_distortion', name: 'Distortion', axis: 'utility', tier: 3,
+    pathTag: 'onuse', spellGate: 'time_dilation', bossOnly: true,
+    lockedBy: ['td_stasis', 'td_echo'],
+    desc: 'Keystone: After main slow ends, residual slow lingers 2s longer.',
+    effect: { spellId: 'time_dilation', keystone: { behavior: { distortionDilation: true } } } },
+  td_stasis:   { id: 'td_stasis', name: 'Stasis', axis: 'damage', tier: 3,
+    pathTag: 'onuse', spellGate: 'time_dilation', bossOnly: true,
+    lockedBy: ['td_distortion', 'td_echo'],
+    desc: 'Keystone: Enemies near you are FROZEN instead of slowed.',
+    effect: { spellId: 'time_dilation', keystone: { behavior: { stasisDilation: true } } } },
+  td_echo:     { id: 'td_echo', name: 'Echo of Time', axis: 'utility', tier: 3,
+    pathTag: 'onuse', spellGate: 'time_dilation', bossOnly: true,
+    lockedBy: ['td_distortion', 'td_stasis'],
+    desc: 'Keystone: If you take 0 damage during dilation, refund 50% CD.',
+    effect: { spellId: 'time_dilation', keystone: { behavior: { echoDilation: true } } } },
+
+  // ============================================================
+  // DOOM SIGIL — on-use / nuke
+  // ============================================================
+  ds_potency: { id: 'ds_potency', name: 'Sigil Potency', axis: 'damage', tier: 2,
+    pathTag: 'onuse', spellGate: 'doom_sigil',
+    desc: '+45% Doom Sigil damage.',
+    effect: { spellId: 'doom_sigil', dmgMult: 0.45 } },
+  ds_wider:   { id: 'ds_wider', name: 'Wider Sigil', axis: 'utility', tier: 2,
+    pathTag: 'onuse', spellGate: 'doom_sigil',
+    desc: '+30% Doom Sigil radius.',
+    effect: { spellId: 'doom_sigil', radiusMult: 0.30 } },
+  ds_quickseal: { id: 'ds_quickseal', name: 'Quick Seal', axis: 'utility', tier: 2,
+    pathTag: 'onuse', spellGate: 'doom_sigil',
+    desc: '−25% Doom Sigil cooldown.',
+    effect: { spellId: 'doom_sigil', cdMult: -0.25 } },
+  ds_twin:    { id: 'ds_twin', name: 'Twin Sigils', axis: 'utility', tier: 3,
+    pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
+    lockedBy: ['ds_imploder', 'ds_heavens'],
+    desc: 'Keystone: Place 2 sigils. Each at 85% damage.',
+    effect: { spellId: 'doom_sigil', keystone: { behavior: { twinSigils: true } } } },
+  ds_imploder:{ id: 'ds_imploder', name: 'Imploder', axis: 'damage', tier: 3,
+    pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
+    lockedBy: ['ds_twin', 'ds_heavens'],
+    desc: 'Keystone: Sigil pulls enemies inward before detonating. +30% damage.',
+    effect: { spellId: 'doom_sigil', keystone: { modAdjust: { dmgMult: 1.3 }, behavior: { imploderSigil: true } } } },
+  ds_heavens: { id: 'ds_heavens', name: "Heaven's Fall", axis: 'utility', tier: 3,
+    pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
+    lockedBy: ['ds_twin', 'ds_imploder'],
+    desc: 'Keystone: Place 3 quick mini-sigils staggered.',
+    effect: { spellId: 'doom_sigil', keystone: { behavior: { heavensFall: true } } } },
+
+  // ============================================================
+  // BERSERKER'S HOWL — on-use / buff
+  // ============================================================
+  bk_louder:   { id: 'bk_louder', name: 'Louder Howl', axis: 'damage', tier: 2,
+    pathTag: 'onuse', spellGate: 'berserkers_howl',
+    desc: '+15% damage bonus during Howl.',
+    effect: { spellId: 'berserkers_howl', behavior: { dmgBonusBonus: 0.15 } } },
+  bk_longer:   { id: 'bk_longer', name: 'Sustained Rage', axis: 'utility', tier: 2,
+    pathTag: 'onuse', spellGate: 'berserkers_howl',
+    desc: 'Howl duration +40%.',
+    effect: { spellId: 'berserkers_howl', behavior: { howlDurMult: 0.40 } } },
+  bk_resilient:{ id: 'bk_resilient', name: 'Iron Hide', axis: 'defense', tier: 2,
+    pathTag: 'onuse', spellGate: 'berserkers_howl',
+    desc: '+25% damage reduction during Howl.',
+    effect: { spellId: 'berserkers_howl', behavior: { howlDR: 0.25 } } },
+  bk_bloodlust:{ id: 'bk_bloodlust', name: 'Bloodlust', axis: 'utility', tier: 3,
+    pathTag: 'onuse', spellGate: 'berserkers_howl', bossOnly: true,
+    lockedBy: ['bk_reckless', 'bk_laststand'],
+    desc: 'Keystone: Howl lifesteal raised to 60%.',
+    effect: { spellId: 'berserkers_howl', keystone: { behavior: { bloodlust: true } } } },
+  bk_reckless: { id: 'bk_reckless', name: 'Reckless Howl', axis: 'damage', tier: 3,
+    pathTag: 'onuse', spellGate: 'berserkers_howl', bossOnly: true,
+    lockedBy: ['bk_bloodlust', 'bk_laststand'],
+    desc: 'Keystone: Howl also reduces all spell CDs by 30% during its duration.',
+    effect: { spellId: 'berserkers_howl', keystone: { behavior: { recklessHowl: true } } } },
+  bk_laststand:{ id: 'bk_laststand', name: 'Last Stand', axis: 'defense', tier: 3,
+    pathTag: 'onuse', spellGate: 'berserkers_howl', bossOnly: true,
+    lockedBy: ['bk_bloodlust', 'bk_reckless'],
+    desc: 'Keystone: If HP <20% on trigger, duration is 20s instead of 5s.',
+    effect: { spellId: 'berserkers_howl', keystone: { behavior: { lastStand: true } } } },
 };
 
 
@@ -4400,6 +5120,48 @@ class Player {
   takeDamage(dmg, attacker = null, game = null) {
     if (this.iframes > 0 || !this.alive) return;
     const stats = this._stats || { dodgeChance: 0, dmgReduction: 0, reflectFactor: 0 };
+    // Aegis Pulse shield — eats damage first. Reactive branch bursts
+    // dmg around player when the shield breaks; refractive branch
+    // reflects a portion back to the attacker.
+    const now = game?.runElapsed ?? 0;
+    if (this._aegisShield > 0 && now < (this._aegisShieldExpires || 0)) {
+      const eaten = Math.min(this._aegisShield, dmg);
+      this._aegisShield -= eaten;
+      dmg -= eaten;
+      const b = this._aegisBehavior || {};
+      if (game) {
+        game.spawnDamageNumber(this.x, this.y - this.radius - 8, `−${Math.round(eaten)}`, false);
+        game.spawnHitParticles(this.x, this.y, '#9af0e6', 4);
+      }
+      if (b.refractiveAegis && attacker?.alive && game) {
+        attacker.takeDamage(eaten * 0.6, { spell: 'reflect' });
+        game.totalDamageDealt += eaten * 0.6;
+      }
+      if (this._aegisShield <= 0) {
+        // Reactive: detonate when the last point of shield breaks.
+        if (b.reactiveAegis && game) {
+          for (const e of game.enemies) {
+            if (!e.alive) continue;
+            const d = Vec.dist(this, e);
+            const r = (this._aegisRadius || 60) * 1.6;
+            if (d < r + e.radius) {
+              const burst = (eaten * 1.5);
+              const a = e.takeDamage(burst, { spell: 'aegis_pulse' });
+              game.totalDamageDealt += a;
+              game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+            }
+          }
+          game.spawnExplosion(this.x, this.y, (this._aegisRadius || 60) * 1.6, '#9af0e6', 'frost');
+          game.addShake(0.3);
+        }
+        this._aegisShield = 0;
+        this._aegisShieldExpires = 0;
+      }
+      if (dmg <= 0) {
+        this.iframes = CONFIG.player.iframes * 0.4;
+        return;
+      }
+    }
     // Dodge roll
     if (stats.dodgeChance > 0 && Math.random() < stats.dodgeChance) {
       this.iframes = CONFIG.player.iframes * 0.5;
@@ -4410,8 +5172,12 @@ class Player {
       Logger.event('player_dodge');
       return;
     }
-    // Damage reduction
-    const finalDmg = dmg * (1 - stats.dmgReduction);
+    // Damage reduction. Battle Hymn (anthem of iron) adds a transient DR
+    // window on top of the static stat-derived reduction.
+    let dynamicDR = stats.dmgReduction;
+    if (this._hymnDR && now < (this._hymnExpires || 0)) dynamicDR += this._hymnDR;
+    dynamicDR = Math.min(0.85, dynamicDR);
+    const finalDmg = dmg * (1 - dynamicDR);
     this.hp -= finalDmg;
     this.iframes = CONFIG.player.iframes;
     // Reset Patient Steel's no-hit ramp — the player ate a hit, the
@@ -4974,6 +5740,9 @@ function computeSpellMods(playerState, spellId) {
 function computeConditionalDamageMult(playerState, enemy) {
   let m = 1.0;
   if (!enemy?.statuses) return m;
+  // Mark of Frailty — multiplicative bonus to ALL incoming damage.
+  // The mark itself is set in mark_of_frailty.cast(); we just read here.
+  if (enemy.statuses.marked) m *= (1 + (enemy.statuses.marked.multiplier || 0));
   // Item-driven (Frostbite Lens, Stormcoil, etc.)
   for (const item of playerState.items) {
     if (!item) continue;
@@ -5115,8 +5884,11 @@ function cardAtlasReason(card, ps, wave, isBoss, capstoneEarned = false) {
   if (card.classes && charId && !card.classes.includes(charId)) {
     return `${charId} can't take this`;
   }
-  if (card.pathTag && card.pathTag !== 'universal' && card.pathTag !== 'vigil'
-      && card.pathTag !== ps.pathId) {
+  // pathTags 'defense' / 'utility' / 'onuse' belong to the new tiered
+  // spell categories — those cards are gated by spellGate (you must own
+  // the spell), so they're effectively universal. Allow them.
+  const universalPathTags = new Set(['universal', 'vigil', 'defense', 'utility', 'onuse']);
+  if (card.pathTag && !universalPathTags.has(card.pathTag) && card.pathTag !== ps.pathId) {
     return `Wrong path (${card.pathTag})`;
   }
   const maxTier = wave >= 7 ? 3 : (wave >= 3 ? 2 : 1);
@@ -5274,6 +6046,10 @@ class WaveManager {
     this.alive = true;
     // Reset per-wave item flags (Abyssal Mantle "spared once" cooldown).
     if (this.game.player) this.game.player._mantleUsedThisWave = false;
+    // Re-arm once-per-wave spells (Time Dilation, Doom Sigil, Howl).
+    if (this.game.activeSpells) {
+      for (const s of this.game.activeSpells) s.castThisWave = false;
+    }
     Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
   }
 
@@ -5465,6 +6241,17 @@ class Game {
       items: [null, null],
       craftedFusions: [],
       pendingItem: false,
+      // ---- SP economy (new tiered progression) ----
+      // skillPoints: banked SP (+1 per wave clear). Spent on spell ranks
+      // via the atlas. When the player skips, the SP carries over — lets
+      // them save up for the wave-10 utility unlock or wave-15 on-use.
+      skillPoints: 0,
+      // unlockedTiers: which higher-tier categories the player has been
+      // offered yet. Boss-wave unlock screens at 5/10/15 set these.
+      unlockedTiers: { defense: false, utility: false, onuse: false },
+      // pendingUnlock: when set, the next overlay is the FORCED 3-of-3
+      // category-unlock pick (defense/utility/onuse), not the atlas.
+      pendingUnlock: null,
       // Greed runtime counters — read by Game.tickSpells & friends.
       runStats: {
         casts: 0,
@@ -5930,18 +6717,46 @@ class Game {
     // Combines all the ramp / synergy / pact damage hooks into one
     // multiplier applied at cast time.
     const greedMult = this._computeGreedMult();
+    // ---- Tiered-spell self-buff multipliers ----
+    // Battle Hymn (utility) and Berserker's Howl (on-use) push transient
+    // dmg/CD buffs onto the player. They expire on a timestamp; we read
+    // them here so every spell cast benefits while the buff is up.
+    const now = this.runElapsed;
+    let hymnMult = 1, hymnCritBonus = 0;
+    if (this.player?._hymnExpires > now) {
+      hymnMult *= (this.player._hymnDmgMult || 1);
+      hymnCritBonus = this.player._hymnCritBonus || 0;
+    }
+    let berserkMult = 1, berserkCdr = 1;
+    if (this.player?._berserkExpires > now) {
+      berserkMult *= (this.player._berserkDmg || 1);
+      berserkCdr = (1 - (this.player._berserkCdr || 0));
+    }
+    // Soul Anchor "Afterglow" filler — temporary +30% dmg after a heal.
+    let afterglowMult = 1;
+    if (this.player?._afterglowExpires > now) afterglowMult *= (this.player._afterglowMult || 1);
     // No-hit ramp timer (Patient Steel) — accumulates while the player
     // hasn't been hit. Reset when takeDamage fires (see Player.takeDamage).
     if (this.playerState.runStats) this.playerState.runStats.noHitTimer += dt;
     for (const s of this.activeSpells) {
       if (!SPELLS[s.spellId]) continue;
-      const cd = computeSpellCooldown(this.playerState, s.spellId) * focusCdMult;
+      // Once-per-wave gate: long-CD on-use spells (Time Dilation, Doom
+      // Sigil, Berserker's Howl) lock until the next wave starts.
+      if (SPELLS[s.spellId].oncePerWave && s.castThisWave) continue;
+      const cd = computeSpellCooldown(this.playerState, s.spellId) * focusCdMult * berserkCdr;
       s.cdAcc += dt;
       if (s.cdAcc >= cd) {
         s.cdAcc = 0;
         const mods = computeSpellMods(this.playerState, s.spellId);
-        mods.dmgMult *= focusDmgMult * hexMult * greedMult;
+        mods.dmgMult *= focusDmgMult * hexMult * greedMult * hymnMult * berserkMult * afterglowMult;
+        mods.critChance += hymnCritBonus;
+        // Aegis "Thornglass" filler: while shielded, +12% damage.
+        if (this.player?._aegisShield > 0 && this.player._aegisShieldExpires > now) {
+          const sBoost = mods.behavior?.shieldedDmgBuff || 0;
+          if (sBoost) mods.dmgMult *= (1 + sBoost);
+        }
         SPELLS[s.spellId].cast(this, this.player, mods);
+        if (SPELLS[s.spellId].oncePerWave) s.castThisWave = true;
         this.player.castFlash = 0.2;
         // Track casts for Old Coin ramp + Pact of Hunger / Echoes hooks.
         this._onSpellCast(s.spellId, mods);
@@ -6814,11 +7629,31 @@ class Game {
       this.playerState.pendingItem = true;
     }
 
+    // ---- SP currency: +1 per wave clear. Carries between waves so a
+    // greedy player can save points for the wave-10 utility unlock or
+    // wave-15 on-use unlock and rank one of those spells fast.
+    const ps = this.playerState;
+    ps.skillPoints = (ps.skillPoints || 0) + (CONFIG.progression?.spPerWave || 1);
+
+    // ---- Tier-unlock gates. Wave 5 = defense, 10 = utility, 15 = on-use.
+    // Forced 3-of-3 pick (player MUST take one new spell). The unlock pick
+    // is FREE — does not consume SP. After it, control falls through to
+    // the regular atlas so the wave-clear SP can still be spent.
+    if (wave === CONFIG.progression.defenseUnlockWave && !ps.unlockedTiers.defense) {
+      ps.pendingUnlock = 'defense';
+    } else if (wave === CONFIG.progression.utilityUnlockWave && !ps.unlockedTiers.utility) {
+      ps.pendingUnlock = 'utility';
+    } else if (wave === CONFIG.progression.onuseUnlockWave && !ps.unlockedTiers.onuse) {
+      ps.pendingUnlock = 'onuse';
+    }
+
     this.state = 'upgrade';
-    // 3-card pick. Boss waves draw from the boss pool (spell unlocks,
-    // keystones, capstones, pacts). Otherwise from the regular pool.
     const isBoss = wave % CONFIG.waves.bossEvery === 0;
-    UI.showAtlas(this.playerState, wave, { isBoss, heal });
+    if (ps.pendingUnlock) {
+      UI.showSpellUnlock(ps, ps.pendingUnlock, wave, { heal });
+    } else {
+      UI.showAtlas(ps, wave, { isBoss, heal });
+    }
   }
 
   /*
@@ -7015,10 +7850,24 @@ class Game {
 
   afterChoice() {
     UI.hideAllOverlays();
-    if (this.playerState.pendingItem) {
-      this.playerState.pendingItem = false;
+    const ps = this.playerState;
+    // After a forced spell-unlock pick, the player still has their wave-
+    // clear SP to spend — fall through to the regular atlas before the
+    // next wave starts.
+    if (ps.pendingUnlock) {
+      const cat = ps.pendingUnlock;
+      ps.pendingUnlock = null;
+      ps.unlockedTiers[cat] = true;
+      const wave = this.waveMgr.wave;
+      const isBoss = wave % CONFIG.waves.bossEvery === 0;
+      this.state = 'upgrade';
+      UI.showAtlas(ps, wave, { isBoss });
+      return;
+    }
+    if (ps.pendingItem) {
+      ps.pendingItem = false;
       this.state = 'item';
-      UI.showItemChoices(this.playerState);
+      UI.showItemChoices(ps);
     } else {
       const next = this.waveMgr.wave + 1;
       this.waveMgr.startWave(next);
@@ -9585,6 +10434,16 @@ const UI = {
     crossbow_bolt: '➶',
     caltrops: '✺',
     spring_trap: '✦',
+    // Tiered universal spells (defense / utility / on-use)
+    aegis_pulse: '🛡',
+    wardroot: '☘',
+    soul_anchor: '✚',
+    shadowblade: '🗡',
+    battle_hymn: '♬',
+    mark_of_frailty: '⊹',
+    time_dilation: '⌛',
+    doom_sigil: '🜏',
+    berserkers_howl: '🜨',
   },
 
   /*
@@ -9652,16 +10511,21 @@ const UI = {
    * because the player can see and plan their next picks ahead of time.
    */
   showAtlas(ps, wave, opts = {}) {
+    // Stash so per-pick re-renders preserve the args (heal text, etc).
+    this._atlasArgs = { ps, wave, opts };
     const isBoss = !!opts.isBoss;
     const nextWave = wave + 1;
     const preview = this._waveThreatPreview(nextWave);
     const heal = opts.heal ? `+${opts.heal} HP healed.` : '';
+    const sp = ps.skillPoints || 0;
     this.$('atlas-wave-label').textContent = isBoss
       ? `Wave ${wave} — Boss Cleared`
       : `Wave ${wave} Cleared`;
+    const spBadge = sp > 0
+      ? `<b style="color: var(--gold);">${sp} SP</b> available — pick a card or save points for later.`
+      : `<b>0 SP</b> — Continue to wave ${nextWave}.`;
     this.$('atlas-summary').innerHTML =
-      `${heal} Pick one card to spend on your build. ` +
-      `Wave ${nextWave} brings: <b>${preview}</b>.`;
+      `${heal} ${spBadge} Wave ${nextWave} brings: <b>${preview}</b>.`;
 
     // ---- Path branches ----
     const constellation = ps.pathId ? CONSTELLATIONS[ps.pathId] : null;
@@ -9709,9 +10573,19 @@ const UI = {
     universalEl.innerHTML = '';
     const charId = ps.charDef?.id;
     const universalByAxis = { damage: [], utility: [], defense: [], greed: [] };
+    // Include both classic 'universal' cards and the new tiered-spell
+    // cards (defense/utility/onuse). Cards still filter by spellGate +
+    // bossOnly inside cardAtlasReason, so unowned-spell cards stay
+    // invisible until the player picks the spell up at wave 5/10/15.
+    const railTags = new Set(['universal', 'vigil', 'defense', 'utility', 'onuse']);
     for (const c of Object.values(CARDS)) {
-      if (c.pathTag !== 'universal') continue;
+      if (!railTags.has(c.pathTag)) continue;
       if (c.classes && !c.classes.includes(charId)) continue;
+      // Skip the unlock cards in the rail — they appear ONLY in the
+      // forced spell-unlock overlay at boss waves 5/10/15.
+      if (c.effect?.unlockSpell && (c.pathTag === 'defense' || c.pathTag === 'utility' || c.pathTag === 'onuse')) continue;
+      // Skip cards that gate on a spell the player doesn't have.
+      if (c.spellGate && !ps.spells.includes(c.spellGate)) continue;
       if (universalByAxis[c.axis]) universalByAxis[c.axis].push(c);
     }
     const AXIS_ORDER = ['damage', 'utility', 'defense', 'greed'];
@@ -9728,12 +10602,16 @@ const UI = {
       }
     }
 
-    // ---- Skip ----
+    // ---- Continue / Skip ----
+    // SP carries between waves, so "skip" no longer needs a heal incentive
+    // — saving an SP IS the incentive. We still let the player heal 25%
+    // if they have 0 SP and explicitly skip (mostly a no-op late game).
     const skipBtn = this.$('btn-atlas-skip');
     if (skipBtn) {
+      skipBtn.textContent = sp > 0 ? `Continue — save ${sp} SP` : 'Continue';
       skipBtn.onclick = () => {
-        if (this.game.player) {
-          const h = Math.floor(this.game.player.maxHp * 0.25);
+        if (sp === 0 && this.game.player) {
+          const h = Math.floor(this.game.player.maxHp * 0.10);
           this.game.player.hp = Math.min(this.game.player.maxHp, this.game.player.hp + h);
         }
         this.hideAllOverlays();
@@ -9760,10 +10638,14 @@ const UI = {
       el.innerHTML = `<div class="ac-name">—</div>`;
       return el;
     }
-    const reason = cardAtlasReason(card, ps, wave, isBoss, capstoneEarned);
+    let reason = cardAtlasReason(card, ps, wave, isBoss, capstoneEarned);
+    // SP gate — when the player has no points to spend, takeable cards
+    // become locked with a clear reason. Picks always cost exactly 1 SP.
+    const sp = ps.skillPoints || 0;
     let state = 'takeable';
     if (ps.takenCards.has(card.id)) state = 'taken';
     else if (reason) state = 'locked';
+    else if (sp <= 0) { state = 'locked'; reason = 'No SP — Continue to next wave.'; }
     el.dataset.state = state;
     el.style.setProperty('--accent', this.ATLAS_AXIS_COLOR[card.axis] || 'var(--gold)');
     const tier = card.tier ? `T${card.tier}` : '';
@@ -9776,12 +10658,74 @@ const UI = {
     `;
     if (state === 'takeable') {
       el.addEventListener('click', () => {
+        // Consume 1 SP, take the card, then re-render the atlas so the
+        // player can spend more if they have SP banked. They click
+        // Continue to advance to the next wave / item screen.
+        ps.skillPoints = Math.max(0, (ps.skillPoints || 0) - 1);
+        this.game.takeCard(card);
+        const args = this._atlasArgs;
+        if (args) this.showAtlas(args.ps, args.wave, args.opts);
+      });
+    }
+    return el;
+  },
+
+  /*
+   * Forced spell-unlock screen. Shown at boss waves 5/10/15 when the
+   * player hasn't yet unlocked the next spell category. 3 cards, mutex
+   * pick, no skip. The category-unlock cards are bossOnly + tagged
+   * 'defense' / 'utility' / 'onuse' so we filter the CARDS registry.
+   *
+   * After the player picks, afterChoice() sets unlockedTiers[cat]=true
+   * and falls through to the regular atlas (so the wave-clear SP can
+   * still be spent on a rank).
+   */
+  showSpellUnlock(ps, category, wave, opts = {}) {
+    const HEAD = {
+      defense: { sub: '— A new dimension of power: Defense —', heading: 'Choose a Defense Spell' },
+      utility: { sub: '— A new dimension of power: Utility —', heading: 'Choose a Utility Spell' },
+      onuse:   { sub: '— A new dimension of power: On-Use —',  heading: 'Choose an On-Use Spell' },
+    };
+    const meta = HEAD[category] || HEAD.defense;
+    this.$('spell-unlock-subtitle').textContent = meta.sub;
+    this.$('spell-unlock-heading').textContent  = meta.heading;
+    const cont = this.$('spell-unlock-choices');
+    cont.innerHTML = '';
+    const charId = ps.charDef?.id;
+    const cards = Object.values(CARDS).filter(c =>
+      c.pathTag === category &&
+      c.effect?.unlockSpell &&
+      (!c.classes || c.classes.includes(charId)) &&
+      !ps.takenCards.has(c.id) &&
+      !ps.spells.includes(c.effect.unlockSpell)
+    );
+    if (cards.length === 0) {
+      // Edge case: somehow nothing to offer. Fall through to atlas.
+      this.hideAllOverlays();
+      this.game.afterChoice();
+      return;
+    }
+    for (const card of cards) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.tree = category;
+      el.style.setProperty('--accent', this.ATLAS_AXIS_COLOR[card.axis] || 'var(--gold)');
+      const spellId = card.effect.unlockSpell;
+      const icon = this.SPELL_ICONS?.[spellId] || '✦';
+      el.innerHTML = `
+        <div class="card-tag">${icon} ${card.axis}</div>
+        <div class="card-name">${card.name}</div>
+        <div class="card-desc">${card.desc || ''}</div>
+      `;
+      el.addEventListener('click', () => {
         this.game.takeCard(card);
         this.hideAllOverlays();
         this.game.afterChoice();
       });
+      cont.appendChild(el);
     }
-    return el;
+    this.hideAllOverlays();
+    this.$('overlay-spell-unlock').classList.add('active');
   },
 
   showItemChoices(ps) {
