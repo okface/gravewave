@@ -1893,6 +1893,11 @@
         <span class="label">Time</span>
         <span class="value" id="hud-time">0:00</span>
       </div>
+      <!-- Banked skill points — when >0, the next atlas pick is free. -->
+      <div class="hud-stat hud-sp" id="hud-sp-wrap" style="display:none;">
+        <span class="label">SP</span>
+        <span class="value" id="hud-sp">0</span>
+      </div>
       <!-- Focus stacks — only visible when the active class accumulates them. -->
       <div class="hud-stat hud-focus" id="hud-focus-wrap" style="display:none;">
         <span class="label">Focus</span>
@@ -4686,6 +4691,84 @@ const CARDS = {
     lockedBy: ['bk_bloodlust', 'bk_reckless'],
     desc: 'Keystone: If HP <20% on trigger, duration is 20s instead of 5s.',
     effect: { spellId: 'berserkers_howl', keystone: { behavior: { lastStand: true } } } },
+
+  // ============================================================
+  // FLAVORFUL FILLERS — starter damage spells. Beyond raw +dmg /
+  // +radius, each card adds a small mechanical hook (cast shield,
+  // brief DR window, kill-heal, status synergy) so rank 2-4 picks
+  // shape the build instead of just bumping numbers.
+  // ============================================================
+  // ---- Fireball ----
+  fb_heatshield:  { id: 'fb_heatshield',  name: 'Heatshield', axis: 'defense', tier: 1,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
+    desc: 'Each Fireball cast grants you a brief shield equal to 6% max HP for 2s.',
+    effect: { spellId: 'fireball', behavior: { castShield: { pctMaxHp: 0.06, dur: 2.0 } } } },
+  fb_searing:     { id: 'fb_searing',     name: 'Searing Touch', axis: 'damage', tier: 1,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
+    desc: 'Fireball ignites — 1.6s burn for 35% of impact damage.',
+    effect: { spellId: 'fireball', applyStatus: { ignite: { duration: 1.6, dpsRatio: 0.35, critOnHit: false } } } },
+  fb_pyromancer:  { id: 'fb_pyromancer',  name: "Pyromancer's Mark", axis: 'damage', tier: 2,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
+    desc: '+25% damage to ignited enemies. Fire feeds on fire.',
+    effect: { dmgVsIgnited: 0.25 } },
+  fb_smolder:     { id: 'fb_smolder',     name: 'Smolder', axis: 'utility', tier: 1,
+    pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
+    desc: 'Ignite damage +60%. Burns linger longer in the bones.',
+    effect: { spellId: 'fireball', burnDmgMult: 0.60 } },
+
+  // ---- Frost Spike ----
+  fr_kiteflow:    { id: 'fr_kiteflow',    name: 'Kiteflow', axis: 'defense', tier: 1,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
+    desc: 'For 1.5s after each Frost Spike, you take −20% damage. Stay mobile.',
+    effect: { spellId: 'frost_spike', behavior: { castDR: { factor: 0.20, dur: 1.5 } } } },
+  fr_brittlebone: { id: 'fr_brittlebone', name: 'Brittle Bones', axis: 'damage', tier: 2,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
+    desc: '+20% damage to slowed enemies. Frostbite makes them softer.',
+    effect: { dmgVsSlowed: 0.20 } },
+  fr_chillkeen:   { id: 'fr_chillkeen',   name: 'Chillkeen', axis: 'damage', tier: 1,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
+    desc: '+8% global crit chance. The cold sharpens your aim.',
+    effect: { critChanceBonus: 0.08 } },
+  fr_glacierheart:{ id: 'fr_glacierheart', name: 'Glacier Heart', axis: 'utility', tier: 2,
+    pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
+    desc: '+1 HP per kill. Each death feeds the glacier.',
+    effect: { healPerKill: 1 } },
+
+  // ---- Lightning Bolt ----
+  lb_grounded:    { id: 'lb_grounded',    name: 'Grounded', axis: 'damage', tier: 2,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
+    desc: '+22% damage to slowed or shocked enemies. Conduction.',
+    effect: { dmgVsSlowed: 0.22, dmgVsShocked: 0.22 } },
+  lb_castheal:    { id: 'lb_castheal',    name: 'Static Recharge', axis: 'defense', tier: 1,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
+    desc: 'Each Lightning Bolt cast heals you for 2 HP. Storm sustains.',
+    effect: { spellId: 'lightning_bolt', behavior: { castHeal: 2 } } },
+  lb_critwave:    { id: 'lb_critwave',    name: 'Critwave', axis: 'damage', tier: 1,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
+    desc: '+10% global crit chance and +15% crit damage.',
+    effect: { critChanceBonus: 0.10, critMultBonus: 0.15 } },
+  lb_scorchedearth:{ id: 'lb_scorchedearth', name: 'Scorched Earth', axis: 'utility', tier: 2,
+    pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
+    desc: 'Lightning Bolt also applies a 1.2s slow at 60% factor — pinning the chain.',
+    effect: { spellId: 'lightning_bolt', applyStatus: { slow: { duration: 1.2, factor: 0.60 } } } },
+
+  // ---- Gravity Bolt ----
+  gb_singtax:     { id: 'gb_singtax',     name: 'Singularity Tax', axis: 'damage', tier: 2,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
+    desc: '+22% damage to slowed enemies. Pulled = punished.',
+    effect: { dmgVsSlowed: 0.22 } },
+  gb_castshield:  { id: 'gb_castshield',  name: 'Voidplate', axis: 'defense', tier: 1,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
+    desc: 'Each Gravity Bolt cast grants a 5% max-HP shield for 2.5s.',
+    effect: { spellId: 'gravity_bolt', behavior: { castShield: { pctMaxHp: 0.05, dur: 2.5 } } } },
+  gb_eventreward: { id: 'gb_eventreward', name: 'Event Horizon', axis: 'utility', tier: 1,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
+    desc: '+2 HP per kill. The void gives back what it takes.',
+    effect: { healPerKill: 2 } },
+  gb_density:     { id: 'gb_density',     name: 'Density', axis: 'damage', tier: 1,
+    pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
+    desc: '+12% damage and −10% radius. Mass concentrated.',
+    effect: { spellId: 'gravity_bolt', dmgMult: 0.12, radiusMult: -0.10 } },
 };
 
 
@@ -5176,6 +5259,7 @@ class Player {
     // window on top of the static stat-derived reduction.
     let dynamicDR = stats.dmgReduction;
     if (this._hymnDR && now < (this._hymnExpires || 0)) dynamicDR += this._hymnDR;
+    if (this._castDRFactor && now < (this._castDRExpires || 0)) dynamicDR += this._castDRFactor;
     dynamicDR = Math.min(0.85, dynamicDR);
     const finalDmg = dmg * (1 - dynamicDR);
     this.hp -= finalDmg;
@@ -6757,6 +6841,34 @@ class Game {
         }
         SPELLS[s.spellId].cast(this, this.player, mods);
         if (SPELLS[s.spellId].oncePerWave) s.castThisWave = true;
+        // Centralized cast-time hooks so flavor filler cards work without
+        // editing every spell's cast() body. Cards declare these via
+        // effect.behavior on a spellId-bound card; computeSpellMods folds
+        // them into mods.behavior, and we read them here.
+        const cb = mods.behavior || {};
+        if (cb.castShield && this.player?.alive) {
+          const cs = cb.castShield;
+          const amt = Math.floor((this.player.maxHp || 100) * (cs.pctMaxHp || 0));
+          if (amt > 0) {
+            this.player._aegisShield = (this.player._aegisShield || 0) + amt;
+            this.player._aegisShieldExpires = Math.max(
+              this.player._aegisShieldExpires || 0,
+              this.runElapsed + (cs.dur || 2.0),
+            );
+            this.player._aegisBehavior = this.player._aegisBehavior || {};
+          }
+        }
+        if (cb.castDR && this.player?.alive) {
+          const cd = cb.castDR;
+          this.player._castDRFactor = cd.factor || 0.20;
+          this.player._castDRExpires = Math.max(
+            this.player._castDRExpires || 0,
+            this.runElapsed + (cd.dur || 1.5),
+          );
+        }
+        if (cb.castHeal && this.player?.alive) {
+          this.healPlayer(cb.castHeal);
+        }
         this.player.castFlash = 0.2;
         // Track casts for Old Coin ramp + Pact of Hunger / Echoes hooks.
         this._onSpellCast(s.spellId, mods);
@@ -10903,6 +11015,20 @@ const UI = {
     this.$('hud-wave').textContent = game.waveMgr.wave || '—';
     this.$('hud-hp').textContent = `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`;
     this.$('hud-time').textContent = formatTime(game.runElapsed);
+    // Banked SP — only visible when > 0, since most of the time picks
+    // happen instantly between waves and the readout would just be 0.
+    const spWrap = this.$('hud-sp-wrap');
+    const sp = game.playerState?.skillPoints || 0;
+    if (spWrap) {
+      if (sp > 0) {
+        spWrap.style.display = '';
+        this.$('hud-sp').textContent = String(sp);
+        spWrap.setAttribute('data-tooltip',
+          `Skill Points — banked between waves.\nNext atlas pick costs 1 SP. Save them up\nfor the wave-10 utility / wave-15 on-use unlocks.`);
+      } else {
+        spWrap.style.display = 'none';
+      }
+    }
     // Focus stacks (Ninja-only) — show stack count + cap, hidden for
     // characters that don't generate Focus. Hover the widget to read the
     // mechanic; tooltip surfaces the live numbers so the player knows
