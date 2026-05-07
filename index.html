@@ -2338,7 +2338,7 @@
         <div class="lu-banner">
           <div class="lu-title" id="lu-title">Level —</div>
           <div class="lu-summary">
-            Unspent points: <b id="lu-points">0</b>. Click pips to invest. Pick a spec at 6 invested.
+            Ability pts: <b id="lu-points">0</b> &nbsp;·&nbsp; Companion pts: <b id="lu-minion-points">0</b>. Click pips to invest.
           </div>
         </div>
         <button class="btn-primary" id="btn-lu-continue">Continue</button>
@@ -3541,6 +3541,124 @@ function spellDamageType(spellId) {
 /* FUSIONS — FUSIONS — removed; specs replace fusion as the build-defining picks. */
 
 
+/* ==========================================================================
+ * MINIONS — picked at run start alongside the Tier 1 ability.
+ * --------------------------------------------------------------------------
+ * Lighter shape than abilities: 2 dumps × 3 points (6 max) and 2 specs
+ * (pick 1 at 4 invested). Earn 1 minion point per 2 waves cleared.
+ *
+ * Each minion gets a `kind` discriminator that Game.tickMinion and
+ * Renderer.drawMinion dispatch on. The factory `spawn(game, player)`
+ * returns the entity object; mods come from `Game.computeMinionMods()`.
+ * ========================================================================*/
+const MINIONS = {
+  linker: {
+    id: 'linker', name: 'Sigil Linker', icon: '◇',
+    color: '#a07cff',
+    description: 'A floating sigil that threads nearby enemies together. Damage you deal bleeds to linked enemies. Overkill cascades.',
+    flavor: 'utility · damage redirection',
+    dumps: [
+      { id: 'share', name: 'Bleedover',   desc: '+8% link damage share per point.', stat: 'shareBonus', perPoint: 0.08 },
+      { id: 'reach', name: 'Reach',       desc: '+18% link range per point.',       stat: 'rangeMult',  perPoint: 0.18 },
+    ],
+    specs: [
+      { id: 'echo',     name: 'Echo',     desc: 'Linked enemies slow for 0.7s when struck.',
+        behavior: { linkSlow: 0.7 } },
+      { id: 'wildfire', name: 'Wildfire', desc: 'Statuses (ignite / freeze / shock) propagate along links.',
+        behavior: { linkSpread: true } },
+    ],
+    spawn: (game, player) => ({
+      kind: 'linker',
+      x: player.x + 50, y: player.y - 50,
+      bob: Math.random() * TAU,
+      links: [],            // [enemyA, enemyB, enemyC]
+      relinkAcc: 0,
+    }),
+  },
+
+  decoy: {
+    id: 'decoy', name: 'Decoy Effigy', icon: '☗',
+    color: '#c89aff',
+    description: 'A straw-and-iron effigy. Enemies in range target it instead of you. When destroyed, it explodes for AoE damage and respawns.',
+    flavor: 'utility · taunt',
+    dumps: [
+      { id: 'sturdy', name: 'Sturdy',  desc: '+30 max HP per point.',                stat: 'hpBonus',     perPoint: 30 },
+      { id: 'volatile', name: 'Volatile', desc: '+25% explosion damage per point.', stat: 'boomMult',    perPoint: 0.25 },
+    ],
+    specs: [
+      { id: 'iron_effigy', name: 'Iron Effigy',
+        desc: 'Double max HP, but explosion is half as strong.',
+        behavior: { ironEffigy: true } },
+      { id: 'phoenix',     name: 'Phoenix',
+        desc: 'Respawns instantly the first time it dies each wave.',
+        behavior: { phoenix: true } },
+    ],
+    spawn: (game, player) => ({
+      kind: 'decoy',
+      x: player.x, y: player.y,
+      hp: 80, maxHp: 80,
+      respawnAcc: 0,
+      respawnTime: 6,
+      tauntRange: 260,
+      alive: true,
+      diedThisWave: false,
+    }),
+  },
+
+  mender: {
+    id: 'mender', name: 'Mender Wisp', icon: '✚',
+    color: '#9af0c8',
+    description: 'A wisp that hovers at your shoulder and mends your wounds on a steady cadence.',
+    flavor: 'utility · healing',
+    dumps: [
+      { id: 'flow',  name: 'Healing Flow', desc: '+2 HP healed per pulse per point.', stat: 'healBonus', perPoint: 2 },
+      { id: 'tempo', name: 'Tempo',        desc: '−0.5s between pulses per point (min 1.5s).', stat: 'pulseFaster', perPoint: 0.5 },
+    ],
+    specs: [
+      { id: 'cleanse',   name: 'Cleansing Pulse',
+        desc: 'Each heal also clears your slow / hex statuses.',
+        behavior: { cleanse: true } },
+      { id: 'resurgence', name: 'Resurgence',
+        desc: 'Once per run, save you from a fatal hit and full-heal.',
+        behavior: { resurgence: true } },
+    ],
+    spawn: (game, player) => ({
+      kind: 'mender',
+      x: player.x - 40, y: player.y - 40,
+      bob: 0,
+      pulseAcc: 0,
+      resurgenceUsed: false,
+    }),
+  },
+
+  drummer: {
+    id: 'drummer', name: 'War Drummer', icon: '⌬',
+    color: '#d7a648',
+    description: 'A small drummer that pounds a beat. Each beat cycles the active aura: Vigor (+damage), Ward (−damage taken), Haste (faster cooldowns).',
+    flavor: 'utility · cycling auras',
+    dumps: [
+      { id: 'might', name: 'Might',  desc: '+3% aura strength per point.',     stat: 'auraStrengthBonus', perPoint: 0.03 },
+      { id: 'reach', name: 'Reach',  desc: '+15% aura radius per point.',      stat: 'auraRangeMult',     perPoint: 0.15 },
+    ],
+    specs: [
+      { id: 'triple_time', name: 'Triple Time',
+        desc: 'Aura cycles every 1.0s instead of 2.0s.',
+        behavior: { tripleTime: true } },
+      { id: 'resonance',   name: 'Resonance',
+        desc: 'All three auras are active simultaneously at half strength.',
+        behavior: { resonance: true } },
+    ],
+    spawn: (game, player) => ({
+      kind: 'drummer',
+      x: player.x + 50, y: player.y + 40,
+      bob: 0,
+      beatAcc: 0,
+      beatIdx: 0,           // 0 = vigor, 1 = ward, 2 = pace
+    }),
+  },
+};
+
+
 /* --- Enemies ------------------------------------------------------------ */
 const ENEMIES = {
   // Kamikaze model: each enemy = one decisive hit on contact, then dies.
@@ -3728,6 +3846,10 @@ class Player {
     if (this._safeZoneUntil && (game?.runElapsed ?? 0) < this._safeZoneUntil) {
       dmg = dmg * (1 - (this._safeZoneReduction || 0.5));
     }
+    // Drummer Ward aura — flat % damage reduction while active.
+    if (this._drummerAura?.ward) {
+      dmg = dmg * (1 - this._drummerAura.ward);
+    }
     // Fire Shield — eats one hit per `_shieldCharges`, retaliates.
     if (this._shieldCharges && this._shieldCharges > 0 && (game?.runElapsed ?? 0) < (this._shieldExpires || 0)) {
       this._shieldCharges -= 1;
@@ -3749,6 +3871,18 @@ class Player {
     this.hp -= dmg;
     this.iframes = CONFIG.player.iframes;
     Logger.event('player_hit', { dmg, hp: this.hp });
+    // Mender Resurgence — once per run, save the player from a fatal hit.
+    if (this.hp <= 0 && this._resurgence && game?.minion?.kind === 'mender') {
+      game.minion.resurgenceUsed = true;
+      this._resurgence = false;
+      this.hp = this.maxHp;
+      this.iframes = CONFIG.player.iframes * 1.5;
+      if (game) {
+        game.spawnDamageNumber(this.x, this.y - this.radius - 12, 'RESURGE', true, { verdict: 'heal' });
+        game.spawnExplosion(this.x, this.y, 80, '#9af0c8');
+      }
+      return;
+    }
     if (this.hp <= 0) {
       this.hp = 0;
       this.alive = false;
@@ -3860,6 +3994,33 @@ class Enemy {
     // affinity system can credit it. Updated every hit; on death,
     // tickEnemies reads this to bump playerState.affinity.
     this._lastDamageType = dtype;
+    // ---- Sigil Linker propagation ----
+    // If this enemy is a member of a link group AND the damage was not
+    // already a propagation hop, distribute share% to the other members.
+    // Overkill (excess HP damage) propagates at full magnitude to keep
+    // combos satisfying. Status spread also fires here.
+    const beforeHp = this.hp + actual;
+    const overkill = Math.max(0, actual - beforeHp);
+    if (this._linkGroup && !source?.viaLink) {
+      const grp = this._linkGroup;
+      const share = grp.share ?? 0;
+      const propagated = actual * share + overkill;
+      if (propagated > 0.5) {
+        for (const peer of grp.members) {
+          if (!peer || peer === this || !peer.alive) continue;
+          peer.takeDamage(propagated, { spell: (source?.spell || '') + ':link', viaLink: true });
+          if (grp.slow > 0) {
+            peer.applyStatus('slow', { duration: grp.slow, factor: 0.55 }, peer._linkRunElapsed || 0);
+          }
+          if (grp.spread && this.statuses) {
+            for (const k of ['ignite','freeze','shock']) {
+              const s = this.statuses[k];
+              if (s) peer.applyStatus(k, { ...s }, s.expires);
+            }
+          }
+        }
+      }
+    }
     if (this.hp <= 0) {
       this.alive = false;
       Logger.event('enemy_killed', { type: this.def.id, source: source?.spell || 'unknown' });
@@ -4343,7 +4504,12 @@ class Game {
       tiers: { 1: null, 2: null, 3: null },
       points: {},
       spells: [],
+      // Minion is picked at run start, after the Tier 1 ability.
+      minion: null,                                    // minion id
+      minionPoints: { dumps: [0, 0], spec: null },     // 2 dumps × 3 pts max
+      unspentMinionPoints: 0,                          // earned 1 per 2 waves
     };
+    this.minion = null;
     this.enemies = [];
     this.projectiles = [];
     this.particles = [];
@@ -4414,6 +4580,85 @@ class Game {
     return true;
   }
 
+  /* --------------------------------------------------------------
+   * Minion: chosen at run start, persists across all waves.
+   * Same surface area as ability investment, just smaller (2×3 + 2 specs).
+   * computeMinionMods turns invested points into a mods object the
+   * tickMinion dispatch reads. assignMinion spawns the entity.
+   * -------------------------------------------------------------- */
+  assignMinion(minionId) {
+    const ps = this.playerState;
+    const def = MINIONS[minionId];
+    if (!ps || !def || ps.minion) return false;
+    ps.minion = minionId;
+    ps.minionPoints = { dumps: [0, 0], spec: null };
+    this.minion = def.spawn(this, this.player);
+    Logger.event('minion_assigned', { minion: minionId });
+    return true;
+  }
+
+  investMinionPoint(dumpIdx) {
+    const ps = this.playerState;
+    if (!ps || (ps.unspentMinionPoints || 0) <= 0) return false;
+    if (!ps.minion) return false;
+    if (dumpIdx < 0 || dumpIdx > 1) return false;
+    if ((ps.minionPoints.dumps[dumpIdx] || 0) >= 3) return false;
+    ps.minionPoints.dumps[dumpIdx] += 1;
+    ps.unspentMinionPoints -= 1;
+    Logger.event('minion_point_invested', { minion: ps.minion, dump: dumpIdx });
+    return true;
+  }
+
+  chooseMinionSpec(specId) {
+    const ps = this.playerState;
+    if (!ps || !ps.minion || ps.minionPoints.spec) return false;
+    const def = MINIONS[ps.minion];
+    if (!def) return false;
+    const total = ps.minionPoints.dumps.reduce((a, b) => a + b, 0);
+    if (total < 4) return false;
+    const spec = def.specs.find(s => s.id === specId);
+    if (!spec) return false;
+    ps.minionPoints.spec = specId;
+    Logger.event('minion_spec_chosen', { minion: ps.minion, spec: specId });
+    return true;
+  }
+
+  computeMinionMods() {
+    const base = {
+      shareBonus: 0, rangeMult: 1,
+      hpBonus: 0,    boomMult: 1,
+      healBonus: 0,  pulseFaster: 0,
+      auraStrengthBonus: 0, auraRangeMult: 1,
+      behavior: {},
+    };
+    const ps = this.playerState;
+    if (!ps?.minion) return base;
+    const def = MINIONS[ps.minion];
+    if (!def) return base;
+    const slot = ps.minionPoints || { dumps: [0, 0], spec: null };
+    for (let i = 0; i < def.dumps.length; i++) {
+      const dump = def.dumps[i];
+      const pts  = slot.dumps[i] || 0;
+      if (pts <= 0) continue;
+      const total = (dump.perPoint || 0) * pts;
+      switch (dump.stat) {
+        case 'shareBonus':         base.shareBonus         += total; break;
+        case 'rangeMult':          base.rangeMult          += total; break;
+        case 'hpBonus':            base.hpBonus            += total; break;
+        case 'boomMult':           base.boomMult           += total; break;
+        case 'healBonus':          base.healBonus          += total; break;
+        case 'pulseFaster':        base.pulseFaster        += total; break;
+        case 'auraStrengthBonus':  base.auraStrengthBonus  += total; break;
+        case 'auraRangeMult':      base.auraRangeMult      += total; break;
+      }
+    }
+    if (slot.spec) {
+      const spec = def.specs.find(s => s.id === slot.spec);
+      if (spec?.behavior) Object.assign(base.behavior, spec.behavior);
+    }
+    return base;
+  }
+
   startWaveOne() {
     this.state = 'playing';
     this.waveMgr.startWave(1);
@@ -4439,6 +4684,7 @@ class Game {
     this.tickShockTowers(dt);
     this.tickWormholes(dt);
     this.tickSnowStorms(dt);
+    this.tickMinion(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
@@ -4881,6 +5127,214 @@ class Game {
     }
   }
 
+  /* --------------------------------------------------------------
+   * Minion tick — single dispatch point. Each kind has its own
+   * private behavior helper. Auras / heals / link bookkeeping all
+   * reapply state on the player and enemies as needed.
+   * -------------------------------------------------------------- */
+  tickMinion(dt) {
+    const m = this.minion;
+    if (!m) return;
+    // Cycle the bob phase for floating minions.
+    m.bob = (m.bob || 0) + dt * 2.4;
+    const mods = this.computeMinionMods();
+    switch (m.kind) {
+      case 'linker':  this._tickLinker(m, mods, dt); break;
+      case 'decoy':   this._tickDecoy(m, mods, dt); break;
+      case 'mender':  this._tickMender(m, mods, dt); break;
+      case 'drummer': this._tickDrummer(m, mods, dt); break;
+    }
+  }
+
+  /*
+   * LINKER — settles near the densest cluster of enemies, then every
+   * 1.5s threads the 3 nearest enemies into a link group. Damage
+   * propagation is handled via Enemy.takeDamage's link hook (set
+   * on each member when the group forms).
+   */
+  _tickLinker(m, mods, dt) {
+    // Drift toward player + offset
+    const tgt = this._linkerHoverTarget();
+    m.x += (tgt.x - m.x) * Math.min(1, dt * 2.5);
+    m.y += (tgt.y - m.y) * Math.min(1, dt * 2.5);
+    m.relinkAcc += dt;
+    if (m.relinkAcc < 1.5) return;
+    m.relinkAcc = 0;
+    // Clear old links
+    for (const e of (m.links || [])) {
+      if (e && e._linkGroup === m._curGroup) e._linkGroup = null;
+    }
+    m.links = [];
+    m._curGroup = null;
+    // Pick up to 3 enemies within range
+    const range = 240 * mods.rangeMult;
+    const candidates = this.enemies
+      .filter(e => e.alive && Vec.dist(e, m) < range)
+      .sort((a, b) => Vec.dist(a, m) - Vec.dist(b, m))
+      .slice(0, 3);
+    if (candidates.length < 2) return;
+    const share = 0.20 + (mods.shareBonus || 0);
+    const beh = mods.behavior || {};
+    const group = {
+      members: candidates,
+      share,
+      slow: beh.linkSlow || 0,
+      spread: !!beh.linkSpread,
+    };
+    m._curGroup = group;
+    m.links = candidates.slice();
+    for (const e of candidates) {
+      e._linkGroup = group;
+    }
+  }
+
+  _linkerHoverTarget() {
+    if (!this.enemies?.length || !this.player) {
+      return { x: this.player.x + 50, y: this.player.y - 50 };
+    }
+    // Centroid of nearest 3 enemies, offset by 30u toward the player.
+    const near = this.enemies.filter(e => e.alive)
+      .sort((a, b) => Vec.dist(a, this.player) - Vec.dist(b, this.player))
+      .slice(0, 3);
+    if (!near.length) return { x: this.player.x + 50, y: this.player.y - 50 };
+    let cx = 0, cy = 0;
+    for (const e of near) { cx += e.x; cy += e.y; }
+    cx /= near.length; cy /= near.length;
+    // Lerp 75% toward centroid, 25% toward player.
+    return { x: 0.75 * cx + 0.25 * this.player.x, y: 0.75 * cy + 0.25 * this.player.y };
+  }
+
+  /*
+   * DECOY — taunts enemies in range. Has HP. Detonates on death and
+   * respawns near the player after a cooldown. Phoenix spec gives one
+   * free instant-respawn per wave.
+   */
+  _tickDecoy(m, mods, dt) {
+    const beh = mods.behavior || {};
+    const ironMult = beh.ironEffigy ? 2.0 : 1.0;
+    const boomMult = (beh.ironEffigy ? 0.5 : 1.0) * mods.boomMult;
+    if (m.alive) {
+      // Taunt logic — enemies near the decoy walk toward it instead of player.
+      // Implementation: flag the decoy as the targeted entity; tickEnemies
+      // already routes movement toward this.player by default. We override
+      // by setting enemy._tauntTarget which the movement code reads.
+      const range = m.tauntRange;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(e, m) <= range) e._tauntTarget = m;
+        else if (e._tauntTarget === m) e._tauntTarget = null;
+      }
+      // Decoy is hit by enemies via direct contact (handled in tickEnemies
+      // through the _tauntTarget hook). Recompute max HP if needed.
+      const desiredMax = (80 + mods.hpBonus) * ironMult;
+      if (m.maxHp !== desiredMax) {
+        const ratio = m.hp / m.maxHp;
+        m.maxHp = desiredMax;
+        m.hp = Math.min(m.maxHp, m.hp + (desiredMax - m.maxHp) * ratio);
+      }
+      if (m.hp <= 0) {
+        this._detonateDecoy(m, boomMult);
+        m.alive = false;
+        // Phoenix instant respawn (once per wave)
+        if (beh.phoenix && !m.diedThisWave) {
+          m.diedThisWave = true;
+          this._respawnDecoy(m);
+        } else {
+          m.respawnAcc = 0;
+        }
+      }
+    } else {
+      m.respawnAcc += dt;
+      if (m.respawnAcc >= m.respawnTime) this._respawnDecoy(m);
+    }
+  }
+
+  _detonateDecoy(m, boomMult) {
+    const baseDmg = 60 * boomMult;
+    const radius = 140;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      if (Vec.dist(e, m) < radius + e.radius) {
+        const a = e.takeDamage(baseDmg, { spell: 'decoy:explode', viaLink: true });
+        this.totalDamageDealt += a;
+        this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+      }
+    }
+    this.spawnExplosion(m.x, m.y, radius, '#c89aff');
+    this.addShake(0.20);
+  }
+
+  _respawnDecoy(m) {
+    if (!this.player) return;
+    m.x = this.player.x; m.y = this.player.y;
+    m.hp = m.maxHp;
+    m.alive = true;
+    m.respawnAcc = 0;
+  }
+
+  /*
+   * MENDER — heals on a fixed cadence. Cleansing Pulse spec also
+   * clears slow / hex statuses on each tick. Resurgence saves you
+   * once per run from a fatal hit (consumed in Player.takeDamage).
+   */
+  _tickMender(m, mods, dt) {
+    if (!this.player) return;
+    // Float at the player's left shoulder
+    const tx = this.player.x - 35;
+    const ty = this.player.y - 35 + Math.sin(m.bob) * 4;
+    m.x += (tx - m.x) * Math.min(1, dt * 4);
+    m.y += (ty - m.y) * Math.min(1, dt * 4);
+    const beh = mods.behavior || {};
+    // Tempo: each pulseFaster point shaves 0.5s off the 4s base; min 1.5s.
+    const pulseIv = Math.max(1.5, 4.0 - mods.pulseFaster);
+    m.pulseAcc += dt;
+    if (m.pulseAcc < pulseIv) return;
+    m.pulseAcc = 0;
+    const heal = 6 + mods.healBonus;
+    if (this.player.hp < this.player.maxHp) {
+      this.healPlayer(heal);
+      this.spawnDamageNumber(this.player.x, this.player.y - 30, '+' + heal, false, { verdict: 'heal' });
+    }
+    if (beh.cleanse && this.player) {
+      delete this.player.hex;
+      // status fields may live elsewhere — best-effort
+    }
+    // Surface the resurgence flag for Player.takeDamage to consume.
+    this.player._resurgence = !!beh.resurgence && !m.resurgenceUsed;
+  }
+
+  /*
+   * DRUMMER — pounds a beat. Each beat advances the active aura
+   * through Vigor → Ward → Pace. The active aura's effect is
+   * applied as a per-frame stat tweak on the player (read by
+   * computePlayerAuraMods at cast time). Resonance: all 3 active
+   * at half strength. Triple Time: 1.0s tempo instead of 2.0s.
+   */
+  _tickDrummer(m, mods, dt) {
+    if (!this.player) return;
+    const tx = this.player.x + 40;
+    const ty = this.player.y + 30 + Math.sin(m.bob) * 3;
+    m.x += (tx - m.x) * Math.min(1, dt * 4);
+    m.y += (ty - m.y) * Math.min(1, dt * 4);
+    const beh = mods.behavior || {};
+    const beatIv = beh.tripleTime ? 1.0 : 2.0;
+    m.beatAcc += dt;
+    if (m.beatAcc >= beatIv) {
+      m.beatAcc = 0;
+      m.beatIdx = (m.beatIdx + 1) % 3;
+      m.flashT = 0.25;
+    }
+    if (m.flashT > 0) m.flashT -= dt;
+    // Per-frame aura effect on the player.
+    const strength = 0.12 + mods.auraStrengthBonus;
+    const aura = beh.resonance
+      ? { vigor: strength * 0.5, ward: strength * 0.5, haste: strength * 0.5 }
+      : (m.beatIdx === 0 ? { vigor: strength } :
+         m.beatIdx === 1 ? { ward:  strength } :
+                           { haste: strength });
+    this.player._drummerAura = aura;
+  }
+
   /* ----------------------------------------------------------------
    * Wave clear → +1 level → +1 unspent point. Levels 5 and 10 also
    * open the tier-2 / tier-3 picker before the level-up screen so the
@@ -4891,6 +5345,10 @@ class Game {
     if (!ps) return;
     ps.level = (ps.level || 0) + 1;
     ps.unspentPoints = (ps.unspentPoints || 0) + 1;
+    // Minion point: +1 every 2 waves cleared (waves 2, 4, 6, ...).
+    if (wave % 2 === 0 && ps.minion) {
+      ps.unspentMinionPoints = (ps.unspentMinionPoints || 0) + 1;
+    }
     Logger.event('level_up', { level: ps.level });
     // Wave-end heal — light and predictable so the run doesn't snowball
     // on free heals. 18% of max HP each wave.
@@ -4900,6 +5358,7 @@ class Game {
     if (this.activeSpells) {
       for (const s of this.activeSpells) s.castThisWave = false;
     }
+    if (this.minion?.kind === 'decoy') this.minion.diedThisWave = false;
     this.state = 'choosing';
     // Open the tier picker first if a tier just unlocked.
     if (ps.level === 4 && !ps.tiers[2]) {
@@ -4948,6 +5407,9 @@ class Game {
       if (s.cdAcc >= cd) {
         s.cdAcc = 0;
         const mods = this.computeAbilityMods(s.id);
+        // Drummer Vigor aura — flat % damage bonus to every cast.
+        const vigor = this.player?._drummerAura?.vigor || 0;
+        if (vigor > 0) mods.dmgMult *= (1 + vigor);
         ab.cast(this, this.player, mods);
         this.player.castFlash = 0.2;
       }
@@ -5007,6 +5469,9 @@ class Game {
         cd *= Math.max(0.25, 1 + (dump.perPoint || 0) * pts);
       }
     }
+    // Drummer Haste aura — faster cooldowns while active.
+    const haste = this.player?._drummerAura?.haste || 0;
+    if (haste > 0) cd *= Math.max(0.5, 1 - haste);
     return cd;
   }
 
@@ -5047,7 +5512,11 @@ class Game {
         if (Math.random() < 0.4) this.spawnHitParticles(e.x, e.y, '#ff6633', 1);
         if (!e.alive) continue;
       }
-      const dir = Vec.norm(Vec.sub(player, e));
+      // Decoy taunt — if a decoy is alive and within range, the enemy
+      // walks toward it (and detonates on contact) instead of the player.
+      const taunt = e._tauntTarget;
+      const target = (taunt && taunt.alive) ? taunt : player;
+      const dir = Vec.norm(Vec.sub(target, e));
       const movementSpeed = e.speed * speedFactor;
       let vx = dir.x * movementSpeed;
       let vy = dir.y * movementSpeed;
@@ -5055,12 +5524,19 @@ class Game {
       e.x += vx * dt;
       e.y += vy * dt;
       e.pvx *= 0.88; e.pvy *= 0.88;
-      const d = Vec.dist(player, e);
-      if (d < player.radius + e.radius) {
+      // Contact with the chosen target.
+      const tRadius = target === player ? player.radius : 22;
+      const d = Vec.dist(target, e);
+      if (d < tRadius + e.radius) {
         const baseDmg = e.damage * 0.6;
         const hpDmg = e.hp * 0.08;
         const contactDmg = Math.max(1, Math.round(baseDmg + hpDmg));
-        player.takeDamage(contactDmg, e, this);
+        if (target === player) {
+          player.takeDamage(contactDmg, e, this);
+        } else {
+          // Decoy soaks the hit. Its tickMinion handles death.
+          target.hp -= contactDmg;
+        }
         e.hp = 0;
         e.alive = false;
         const explosionColor = e.boss ? '#c89aff' : (e.color || '#ff5b6e');
@@ -5701,6 +6177,7 @@ const Renderer = {
     this.drawParticles(ctx, game.particles);
     this.drawDamageNumbers(ctx, game.damageNumbers);
     if (game.player) this.drawFireShield(ctx, game.fireShields, game.player, game.runElapsed);
+    if (game.minion)  this.drawMinion(ctx, game.minion, game.runElapsed);
     if (game.player) this.drawPlayer(ctx, game.player, game.runElapsed);
 
     if (game.shake > 0) ctx.restore();
@@ -7736,6 +8213,159 @@ const Renderer = {
     }
   },
 
+  /*
+   * Minion dispatch — switches on kind. Each draw is small and
+   * reads from the entity object directly. The minion sits between
+   * world layers and the player so it stays readable during chaos.
+   */
+  drawMinion(ctx, m, t) {
+    if (!m) return;
+    switch (m.kind) {
+      case 'linker':  this._drawLinker(ctx, m, t); break;
+      case 'decoy':   this._drawDecoy(ctx, m, t); break;
+      case 'mender':  this._drawMender(ctx, m, t); break;
+      case 'drummer': this._drawDrummer(ctx, m, t); break;
+    }
+  },
+
+  _drawLinker(ctx, m, t) {
+    // Threads first (under the sigil)
+    if (m.links && m.links.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(160, 124, 255, ${0.55 + 0.25 * Math.sin(t * 4)})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([3, 4]);
+      // Connect each pair
+      for (let i = 0; i < m.links.length; i++) {
+        const a = m.links[i];
+        if (!a?.alive) continue;
+        for (let j = i + 1; j < m.links.length; j++) {
+          const b = m.links[j];
+          if (!b?.alive) continue;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    // Sigil — rotating triangle inside a circle
+    ctx.save();
+    ctx.translate(m.x, m.y + Math.sin(m.bob || 0) * 3);
+    ctx.rotate(t * 0.9);
+    ctx.fillStyle = 'rgba(28, 12, 50, 0.85)';
+    ctx.strokeStyle = '#a07cff';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0, 0, 9, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * TAU - Math.PI / 2;
+      const px = Math.cos(a) * 5, py = Math.sin(a) * 5;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#a07cff';
+    ctx.fill();
+    ctx.restore();
+  },
+
+  _drawDecoy(ctx, m, t) {
+    if (!m.alive) {
+      // Faint silhouette while respawning
+      ctx.save();
+      const cd = Math.max(0, m.respawnTime - m.respawnAcc);
+      const a = 0.25;
+      ctx.strokeStyle = `rgba(200, 154, 255, ${a})`;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.arc(m.x, m.y, 14, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = `rgba(60, 50, 90, ${a})`;
+      ctx.font = '11px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(cd.toFixed(1) + 's', m.x, m.y + 4);
+      ctx.restore();
+      return;
+    }
+    // Body — short stake with crossbeam, wax-seal accent
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.strokeStyle = '#3a2d1c';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(0, 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-10, -6); ctx.lineTo(10, -6); ctx.stroke();
+    // Head
+    ctx.fillStyle = '#c89aff';
+    ctx.strokeStyle = '#1d150c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
+    // HP bar
+    const w = 26, h = 4;
+    ctx.fillStyle = 'rgba(29, 21, 12, 0.6)';
+    ctx.fillRect(-w / 2, -28, w, h);
+    ctx.fillStyle = '#9af0c8';
+    ctx.fillRect(-w / 2, -28, w * Math.max(0, m.hp / m.maxHp), h);
+    ctx.strokeStyle = '#1d150c';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-w / 2, -28, w, h);
+    // Taunt range halo (very faint)
+    ctx.strokeStyle = 'rgba(200, 154, 255, 0.10)';
+    ctx.beginPath(); ctx.arc(0, 0, m.tauntRange, 0, TAU); ctx.stroke();
+    ctx.restore();
+  },
+
+  _drawMender(ctx, m, t) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    // Soft halo
+    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
+    grad.addColorStop(0, 'rgba(200, 240, 220, 0.85)');
+    grad.addColorStop(1, 'rgba(154, 240, 200, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill();
+    // Cross
+    ctx.strokeStyle = '#3a4a3c';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
+    ctx.moveTo(0, -4); ctx.lineTo(0, 4);
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  _drawDrummer(ctx, m, t) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    // Body
+    ctx.fillStyle = '#3a2d1c';
+    ctx.strokeStyle = '#1d150c';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, -4, 5, 0, TAU); ctx.fill(); ctx.stroke();
+    // Drum
+    ctx.fillStyle = '#d7a648';
+    ctx.beginPath(); ctx.arc(0, 4, 6, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#1d150c';
+    ctx.beginPath(); ctx.arc(0, 4, 6, 0, TAU); ctx.stroke();
+    // Beat indicator — three dots, one lit per beat
+    const labels = ['V', 'W', 'H'];          // Vigor / Ward / Haste
+    const colors = ['#ff7733', '#9af0c8', '#7ec0ff'];
+    for (let i = 0; i < 3; i++) {
+      const px = (i - 1) * 6;
+      ctx.fillStyle = (i === m.beatIdx)
+        ? colors[i]
+        : `rgba(120, 100, 70, 0.4)`;
+      ctx.beginPath(); ctx.arc(px, -14, 2, 0, TAU); ctx.fill();
+    }
+    // Beat flash
+    if (m.flashT > 0) {
+      ctx.strokeStyle = `rgba(255, 230, 160, ${m.flashT / 0.25})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 4, 9, 0, TAU); ctx.stroke();
+    }
+    ctx.restore();
+  },
+
   drawDamageNumbers(ctx, nums) {
     ctx.textAlign = 'center';
     for (const d of nums) {
@@ -7896,9 +8526,10 @@ const UI = {
       card.addEventListener('click', () => {
         this.game.assignTier(tier, ab.id);
         this.hideAllOverlays();
-        // Then proceed to level-up (or directly to next wave for tier 1 = run start)
+        // Tier 1 = run start, jump to minion picker before wave 1.
+        // Tier 2/3 = mid-run pick, fall back to the regular level-up screen.
         if (tier === 1) {
-          this.game.startWaveOne();
+          this.showMinionPicker();
         } else {
           this.showLevelUp(this.game.playerState);
         }
@@ -7914,6 +8545,42 @@ const UI = {
    * pip to spend an unspent point. Click a spec slot when 6+ to choose
    * 1 of 3.
    */
+
+  /*
+   * Minion picker — opens once at run start, after the Tier 1 ability.
+   * Reuses the tier-picker overlay/HTML; just retitles + repopulates.
+   */
+  showMinionPicker() {
+    const overlay = this.$('overlay-tier-picker');
+    if (!overlay) return;
+    this.$('tier-title').textContent = 'Choose Your Companion';
+    this.$('tier-subtitle').textContent = '— A minion that follows you all run. Lighter investment, big personality. —';
+    const cont = this.$('tier-choices');
+    cont.innerHTML = '';
+    for (const def of Object.values(MINIONS)) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.setProperty('--accent', def.color || 'var(--gold)');
+      card.innerHTML = `
+        <div class="card-tier">${def.flavor || 'minion'}</div>
+        <div class="card-tag">${def.icon || '◇'} COMPANION</div>
+        <div class="card-name">${def.name}</div>
+        <div class="card-desc">${def.description || ''}</div>
+        <div class="card-detail" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mid); margin-top: 8px;">
+          Dumps: ${def.dumps.map(d => d.name).join(' · ')}<br>
+          Specs (at 4 pts): ${def.specs.map(s => s.name).join(' / ')}
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        this.game.assignMinion(def.id);
+        this.hideAllOverlays();
+        this.game.startWaveOne();
+      });
+      cont.appendChild(card);
+    }
+    overlay.classList.add('active');
+  },
+
   showLevelUp(ps) {
     const overlay = this.$('overlay-levelup');
     if (!overlay) return;
@@ -7933,6 +8600,8 @@ const UI = {
     const cont = this.$('lu-choices');
     cont.innerHTML = '';
     this.$('lu-points').textContent = String(ps.unspentPoints || 0);
+    const lmp = this.$('lu-minion-points');
+    if (lmp) lmp.textContent = String(ps.unspentMinionPoints || 0);
     const ownedIds = [ps.tiers[1], ps.tiers[2], ps.tiers[3]].filter(Boolean);
     if (ownedIds.length === 0) {
       cont.innerHTML = '<div class="lu-empty">No abilities yet. Pick a tier first.</div>';
@@ -8018,6 +8687,91 @@ const UI = {
       }
       panel.appendChild(specWrap);
       cont.appendChild(panel);
+    }
+
+    // ---- Minion panel ----
+    // Smaller shape: 2 dumps × 3 pts (max 6) + 2 specs (pick 1 at 4 invested).
+    // Uses a separate `unspentMinionPoints` counter so it doesn't fight the
+    // ability point budget. Shows even with 0 points so the player remembers
+    // their companion exists.
+    if (ps.minion) {
+      const def = MINIONS[ps.minion];
+      if (def) {
+        const mpts = ps.minionPoints || { dumps: [0, 0], spec: null };
+        const minvest = mpts.dumps.reduce((a, b) => a + b, 0);
+        const panel = document.createElement('div');
+        panel.className = 'lu-panel';
+        panel.style.setProperty('--accent', def.color || 'var(--gold)');
+        panel.innerHTML = `
+          <div class="lu-panel-head">
+            <div class="lu-icon">${def.icon || '◇'}</div>
+            <div class="lu-name">${def.name}</div>
+            <div class="lu-tag">COMPANION · <b style="font-family:'JetBrains Mono',monospace;color:var(--ink);">${ps.unspentMinionPoints || 0}</b> pts</div>
+          </div>
+        `;
+        const dumpsEl = document.createElement('div');
+        dumpsEl.className = 'lu-dumps';
+        for (let i = 0; i < def.dumps.length; i++) {
+          const dump = def.dumps[i];
+          const filled = mpts.dumps[i] || 0;
+          const row = document.createElement('div');
+          row.className = 'lu-dump-row';
+          row.innerHTML = `
+            <div class="lu-dump-name">${dump.name}</div>
+            <div class="lu-dump-pips" data-dump-idx="${i}"></div>
+            <div class="lu-dump-desc">${dump.desc || ''}</div>
+          `;
+          const pips = row.querySelector('.lu-dump-pips');
+          for (let j = 0; j < 3; j++) {
+            const pip = document.createElement('span');
+            pip.className = 'lu-pip' + (j < filled ? ' filled' : '');
+            if (j === filled && (ps.unspentMinionPoints || 0) > 0 && filled < 3) {
+              pip.classList.add('clickable');
+              pip.addEventListener('click', () => {
+                this.game.investMinionPoint(i);
+                this.renderLevelUpBody(this.game.playerState);
+              });
+            }
+            pips.appendChild(pip);
+          }
+          dumpsEl.appendChild(row);
+        }
+        panel.appendChild(dumpsEl);
+        const specWrap = document.createElement('div');
+        specWrap.className = 'lu-spec-wrap';
+        if (mpts.spec) {
+          const spec = def.specs.find(s => s.id === mpts.spec);
+          specWrap.innerHTML = `
+            <div class="lu-spec-locked">
+              <span class="lu-spec-tag">★ Spec:</span>
+              <span class="lu-spec-name">${spec ? spec.name : mpts.spec}</span>
+              <span class="lu-spec-desc">${spec ? spec.desc : ''}</span>
+            </div>
+          `;
+        } else if (minvest >= 4) {
+          specWrap.innerHTML = '<div class="lu-spec-prompt">★ Companion specialization — pick one:</div>';
+          const specRow = document.createElement('div');
+          specRow.className = 'lu-spec-row';
+          for (const spec of def.specs) {
+            const btn = document.createElement('div');
+            btn.className = 'lu-spec-card';
+            btn.innerHTML = `
+              <div class="lu-spec-card-name">${spec.name}</div>
+              <div class="lu-spec-card-desc">${spec.desc}</div>
+            `;
+            btn.addEventListener('click', () => {
+              this.game.chooseMinionSpec(spec.id);
+              this.renderLevelUpBody(this.game.playerState);
+            });
+            specRow.appendChild(btn);
+          }
+          specWrap.appendChild(specRow);
+        } else {
+          specWrap.innerHTML = `<div class="lu-spec-locked-hint">Companion spec unlocks at 4 invested (now ${minvest}/4)</div>`;
+        }
+        panel.appendChild(specWrap);
+        cont.appendChild(panel);
+      }
     }
   },
 
