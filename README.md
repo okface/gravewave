@@ -1,6 +1,6 @@
 # Gravewave
 
-A single-file HTML5 wave-defense roguelite. Auto-cast spells, branching skill trees, two characters (Magician + Ninja), status effects, talent inheritance via spell fusion.
+A single-file HTML5 wave-defense roguelite. Auto-cast abilities, tiered ability picks, scale your build by spending points across dumps and specs.
 
 The whole game lives in `index.html`. Open it in a browser. There is no build step.
 
@@ -31,10 +31,13 @@ new Function(m[1]); console.log('OK');
 
 Runtime testing is open-the-file-and-play. A visible red error banner traps any uncaught exception so flaky bugs surface their stack on-screen instead of silently breaking the loop.
 
+## Design
+
+See `DESIGN.md` for the canonical design reference — class/tier/ability shape, point economy, and the checklist for adding new classes.
+
 ## Conventions
 
-- **Data-driven content.** Adding a spell, skill node, item, enemy, character, or fusion = one new registry entry. Don't touch the engine.
-- **Two currencies.** Talent Points (TP, +1/wave) buy talent ranks; Skill Points (SP, +1/boss-wave) buy spell unlocks.
-- **Talent trees use Diablo-style tier gates.** A node may declare `treePointsRequired: N` to require N total points spent in its tree before it unlocks.
-- **Fusion = inheritance, not refund.** A fused spell declares `parents: [...]` so all talent investment in consumed parents continues to apply to the fused result. Spending isn't reset.
-- **Comments explain *why*, not *what*.** Existing comments are mostly load-bearing — they document non-obvious design choices. Don't strip them when refactoring.
+- **Data-driven content.** Adding an ability or enemy = one new registry entry. Don't touch the engine.
+- **Uniform ability shape.** Every ability has 3 dumps (5 points each) + 3 specs (pick 1 once 6 invested). See `DESIGN.md`.
+- **One point per level.** Wave clear → +1 level → +1 unspent point. Spend freely.
+- **Levels 1 / 5 / 10** open a tier picker; everything else opens the level-up screen.
