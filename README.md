@@ -40,4 +40,4 @@ See `DESIGN.md` for the canonical design reference — class/tier/ability shape,
 - **Data-driven content.** Adding an ability or enemy = one new registry entry. Don't touch the engine.
 - **Uniform ability shape.** Every ability has 3 dumps (5 points each) + 3 specs (pick 1 once 6 invested). See `DESIGN.md`.
 - **One point per level.** Wave clear → +1 level → +1 unspent point. Spend freely.
-- **Levels 1 / 5 / 10** open a tier picker; everything else opens the level-up screen.
+- **Levels 1 / 4 / 9** open a tier picker; everything else opens the level-up screen.

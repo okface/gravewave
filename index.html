@@ -2321,7 +2321,7 @@
     </div>
   </div>
 
-  <!-- Tier picker — opens at level 1 (start of run), level 5, level 10. -->
+  <!-- Tier picker — opens at level 1 (start of run), level 4, level 9. -->
   <div class="overlay" id="overlay-tier-picker">
     <div class="overlay-inner">
       <div class="subtitle" id="tier-subtitle">— Pick one —</div>
@@ -4902,9 +4902,9 @@ class Game {
     }
     this.state = 'choosing';
     // Open the tier picker first if a tier just unlocked.
-    if (ps.level === 5 && !ps.tiers[2]) {
+    if (ps.level === 4 && !ps.tiers[2]) {
       UI.showTierPicker(2);
-    } else if (ps.level === 10 && !ps.tiers[3]) {
+    } else if (ps.level === 9 && !ps.tiers[3]) {
       UI.showTierPicker(3);
     } else {
       UI.showLevelUp(ps);
@@ -5156,69 +5156,31 @@ class Game {
           const ignited = e.statuses?.ignite?.critOnHit;
           const isCrit = ignited || Math.random() < (p.crit?.chance || 0);
           let dmg = isCrit ? p.damage * (p.crit?.mult || 2) : p.damage;
-          // Conditional item damage — slowed/shocked enemies are softer
-          // targets if the player has the right artifact. Kept here so all
-          // projectile hits benefit, not just one spell tree.
-          dmg *= computeConditionalDamageMult(this.playerState, e);
-          // Execute behavior: instant kill if enemy already below threshold
-          if (p.execBelow && e.hp <= e.maxHp * p.execBelow) {
-            dmg = e.hp + 1;
-            this.spawnHitParticles(e.x, e.y, '#ff5b6e', 14);
-          }
           const actual = e.takeDamage(dmg, { spell: p.spell });
           this.totalDamageDealt += actual;
           this.spawnHitParticles(p.x, p.y, p.color, isCrit ? 12 : 5);
           this.spawnDamageNumber(e.x, e.y - e.radius - 6, actual, isCrit, e);
           this.addShake(isCrit ? 0.18 : 0.06);
           // Apply status effects from spell talents (Slow / Ignite / Shock).
-          // Frost's Glacial path swaps slow → freeze when target was already
+          // Frost's Glacial spec swaps slow → freeze when target was already
           // slowed (handled here, before falling through to applyStatus).
           const beh = p.behavior || {};
           let statusToApply = p.applyStatus;
           if (beh.freezeOnSlow && e.statuses?.slow && !e.statuses?.freeze) {
-            const dur = (beh.freezeOnSlow.duration || 1.5)
-                      + (this._freezeDurationBonus(p.spell) || 0);
+            const dur = beh.freezeOnSlow.duration || 1.5;
             // Apply freeze; remove the existing slow so the visual cleanly
             // upgrades from "blue crust" to "frozen cage".
             e.applyStatus('freeze', { duration: dur, factor: 0 }, this.runElapsed);
             delete e.statuses.slow;
-            // Drop the regular slow payload — we just upgraded it.
             statusToApply = null;
           }
           if (statusToApply) {
             this.applyStatusesToEnemy(e, statusToApply, p.spellBaseDmg ?? p.damage);
           }
-          // Crystal Cascade capstone — hitting a frozen enemy detonates them.
-          if (beh.shatterOnFrozenExplodes && e.statuses?.freeze) {
-            const aoeR = 60;
-            const aoeDmg = (p.spellBaseDmg ?? p.damage) * 2.0;
-            for (const o of this.enemies) {
-              if (!o.alive || o === e) continue;
-              if (Vec.dist({ x: p.x, y: p.y }, o) < aoeR + o.radius) {
-                const a = o.takeDamage(aoeDmg, { spell: p.spell + ':shatter' });
-                this.totalDamageDealt += a;
-                this.spawnDamageNumber(o.x, o.y - o.radius - 6, a, true);
-              }
-            }
-            this.spawnExplosion(e.x, e.y, aoeR, '#9af0e6');
-            this.addShake(0.20);
-          }
-          // Absolute Zero capstone — killing a frozen enemy spreads freeze.
-          if (beh.absoluteZero && !e.alive && e.statuses?.freeze) {
-            const r = beh.absoluteZero.radius || 60;
-            const d2 = beh.absoluteZero.duration || 1.0;
-            for (const o of this.enemies) {
-              if (!o.alive || o === e) continue;
-              if (Vec.dist({ x: e.x, y: e.y }, o) < r + o.radius) {
-                o.applyStatus('freeze', { duration: d2, factor: 0 }, this.runElapsed);
-              }
-            }
-            this.spawnExplosion(e.x, e.y, r, '#bce8ff');
-          }
-          // Shatter Path — first hit splits into 3 fragments.
+          // Shatter spec — first hit splits into 3 fragments at reduced damage.
           if (beh.splitsOnFirstHit && !p._hasSplit) {
             p._hasSplit = true;
-            this._spawnFrostFragments(p, e, beh);
+            this._spawnFrostFragments(p, beh);
           }
           p.hits.add(e);
           if (p.onHit) p.onHit(this, { x: p.x, y: p.y });
@@ -5227,6 +5189,39 @@ class Game {
         }
       }
       if (hit) this.projectiles.splice(i, 1);
+    }
+  }
+
+  /*
+   * Frost Shatter spec — on first impact, split into 3 fragments
+   * fanning out from the original heading at reduced damage. Each
+   * fragment is a small short-lived pierce-1 projectile with the
+   * parent's spell tag preserved.
+   */
+  _spawnFrostFragments(p, beh) {
+    const mult = beh.splitDmgMult ?? 0.65;
+    const headingAng = Math.atan2(p.vy, p.vx);
+    const speed = Math.hypot(p.vx, p.vy) * 0.85;
+    for (let k = -1; k <= 1; k++) {
+      const ang = headingAng + k * 0.45;
+      const frag = {
+        x: p.x, y: p.y,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        radius: Math.max(4, p.radius * 0.7),
+        damage: p.damage * mult,
+        spellBaseDmg: (p.spellBaseDmg ?? p.damage) * mult,
+        spell: p.spell + ':frag',
+        color: p.color,
+        crit: p.crit,
+        applyStatus: p.applyStatus,
+        behavior: {},
+        pierce: 0,
+        hits: new Set(),
+        t: 0, life: 0.55,
+        trail: false, trailPts: [],
+      };
+      this.projectiles.push(frag);
     }
   }
 
@@ -7573,23 +7568,46 @@ const Renderer = {
       const fadeOut = Math.min(1, (f.life - f.t) / 0.5);
       const a = Math.min(fadeIn, fadeOut);
       ctx.save();
-      ctx.fillStyle   = `rgba(180, 220, 240, ${0.18 * a})`;
-      ctx.strokeStyle = `rgba(120, 170, 210, ${0.85 * a})`;
-      ctx.lineWidth = 1.5;
+      // Soft ice fill — radial gradient, brighter centre
+      const grad = ctx.createRadialGradient(f.x, f.y, 4, f.x, f.y, f.radius);
+      grad.addColorStop(0,   `rgba(220, 240, 255, ${0.42 * a})`);
+      grad.addColorStop(0.6, `rgba(170, 210, 240, ${0.30 * a})`);
+      grad.addColorStop(1,   `rgba(120, 170, 210, ${0.05 * a})`);
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      const lobes = 18;
+      const lobes = 22;
       for (let i = 0; i <= lobes; i++) {
         const ang = i / lobes * TAU;
-        const r = f.radius + Math.sin(t * 1.4 + i * 0.6) * 2;
+        const r = f.radius + Math.sin(t * 1.4 + i * 0.6 + (f.seed || 0)) * 2.5;
         const px = f.x + Math.cos(ang) * r;
         const py = f.y + Math.sin(ang) * r;
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath();
       ctx.fill();
-      ctx.setLineDash([5, 4]);
+      // Bold ink-on-vellum perimeter — solid line with crisp edge
+      ctx.strokeStyle = `rgba(60, 120, 170, ${0.95 * a})`;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      // Inner dashed ring — reads as the "safe zone" boundary for the player
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * a})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.radius * 0.78, 0, TAU);
       ctx.stroke();
       ctx.setLineDash([]);
+      // Frost flakes — small static dots scattered inside the perimeter
+      const seed = f.seed || 0;
+      for (let i = 0; i < 12; i++) {
+        const ang = (i * 2.39 + seed) % TAU;
+        const rr = (f.radius * 0.85) * ((i * 17 + Math.floor(seed)) % 100) / 100;
+        const px = f.x + Math.cos(ang) * rr;
+        const py = f.y + Math.sin(ang) * rr;
+        const tw = 0.6 + 0.4 * Math.sin(t * 3 + i);
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * a * tw})`;
+        ctx.beginPath(); ctx.arc(px, py, 1.3, 0, TAU); ctx.fill();
+      }
       ctx.restore();
     }
   },
@@ -7843,7 +7861,7 @@ const UI = {
   },
 
   /*
-   * Tier picker — opens at start of run (T1) and at level 5 / 10 (T2 / T3).
+   * Tier picker — opens at start of run (T1) and at level 4 / 9 (T2 / T3).
    * Shows 4 ability cards for the tier; click one to lock it for this run.
    */
   showTierPicker(tier) {
@@ -7852,8 +7870,8 @@ const UI = {
     const charId = this.game.playerState?.charDef?.id;
     const tierCopy = {
       1: { title: 'Choose Your First Spell', subtitle: '— The thing you cast over and over. Pick the flavour. —' },
-      2: { title: 'Choose Your Defensive Ability', subtitle: '— Level 5: pick your shield, your zone, your sentry. —' },
-      3: { title: 'Choose Your Ultimate', subtitle: '— Level 10: a single big idea that finishes runs. —' },
+      2: { title: 'Choose Your Defensive Ability', subtitle: '— Level 4: pick your shield, your zone, your sentry. —' },
+      3: { title: 'Choose Your Ultimate', subtitle: '— Level 9: a single big idea that finishes runs. —' },
     };
     const c = tierCopy[tier] || { title: 'Choose', subtitle: '' };
     this.$('tier-title').textContent = c.title;

@@ -9,8 +9,8 @@
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
 3. Fight wave 1.
 4. Wave clear → **+1 level → +1 unspent point**.
-5. Levels **1 / 5 / 10** also open a **tier picker** — pick 1 of 4
-   from the next tier. So by level 10 you have exactly **3 abilities**
+5. Levels **1 / 4 / 9** also open a **tier picker** — pick 1 of 4
+   from the next tier. So by level 9 you have exactly **3 abilities**
    (one per tier).
 6. Spend points freely on any owned ability. Points carry over.
 7. Run continues until you die.
@@ -42,8 +42,8 @@ the same way — 4 T1 abilities, 4 T2, 4 T3, each with 3+3 sub-options.
 Class
 ├── id, name, base HP, sprite
 ├── Tier 1 (start)        ← 4 attack abilities
-├── Tier 2 (lvl 5)        ← 4 defensive abilities
-└── Tier 3 (lvl 10)       ← 4 ultimate abilities
+├── Tier 2 (lvl 4)        ← 4 defensive abilities
+└── Tier 3 (lvl 9)        ← 4 ultimate abilities
 ```
 
 Each tier-pick is **mutually exclusive within that tier** — once you
@@ -60,7 +60,7 @@ pick Fireball, you can't pick Chain Lightning this run.
 | **Black Hole** | Stationary singularity at densest cluster. DPS + pulls. |
 | **Frost Bolt** | Piercing slow projectile. Snares enemies in a line. |
 
-### Tier 2 — Defensive (pick 1, level 5)
+### Tier 2 — Defensive (pick 1, level 4)
 
 | ability | core idea |
 |---|---|
@@ -69,7 +69,7 @@ pick Fireball, you can't pick Chain Lightning this run.
 | **Gravital Anomalies** | Periodically spawns small pull wells around you for area control. |
 | **Shock Tower** | Stationary sentry that auto-shocks the nearest enemy on cadence. |
 
-### Tier 3 — Ultimate (pick 1, level 10)
+### Tier 3 — Ultimate (pick 1, level 9)
 
 | ability | core idea |
 |---|---|
