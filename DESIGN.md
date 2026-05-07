@@ -7,13 +7,16 @@
 
 1. Pick a **class** at run start (currently: **Wizard**).
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
-3. Fight wave 1.
-4. Wave clear → **+1 level → +1 unspent point**.
-5. Levels **1 / 4 / 9** also open a **tier picker** — pick 1 of 4
-   from the next tier. So by level 9 you have exactly **3 abilities**
+3. Pick a **Companion** (1 of 4 minions). Stays with you the whole run.
+4. Fight wave 1.
+5. Wave clear → **+1 level → +1 unspent point**. Every 2 cleared waves
+   also award **+1 unspent companion point**.
+6. Levels **1 / 4 / 9** open a **tier picker** — pick 1 of 4 from the
+   next tier. So by level 9 you have exactly **3 abilities**
    (one per tier).
-6. Spend points freely on any owned ability. Points carry over.
-7. Run continues until you die.
+7. Spend points freely on any owned ability or on your companion.
+   Points carry over.
+8. Run continues until you die.
 
 Result: every run has clean, predictable structure. No items, no
 fusions, no random card offers, no synergy hubs.
@@ -157,6 +160,33 @@ the *i*th dump. Sum determines spec eligibility (≥ 6 → spec slot opens).
 That's it. No rebalancing of card pools. No editing of UI. The level
 flow + tier picker + level-up screen all read from `ABILITIES` and
 work for any class.
+
+## Companions (minions)
+
+Picked once at run start, after the Tier 1 ability. Lighter shape
+than abilities so you don't have to micro-manage another full panel:
+
+```
+Companion
+├── 2 dumps × 3 points each       (max 6 invested)
+└── 2 specializations             (pick 1 once total invested ≥ 4)
+```
+
+Companion points are **separate from ability points** — earned at
+**+1 per 2 cleared waves**, so by wave 10 you have ~5 companion points.
+
+### Wizard companions
+
+| companion | role |
+|---|---|
+| **Sigil Linker** | Threads 3 nearby enemies. Damage on one bleeds to the others; overkill cascades. |
+| **Decoy Effigy** | Taunts enemies in range. Detonates on death and respawns after a cooldown. |
+| **Mender Wisp** | Heals you on a steady cadence. |
+| **War Drummer** | Cycles aura: Vigor (+damage), Ward (-damage taken), Haste (-cooldowns). |
+
+Same checklist as abilities — to add a new companion: 1 entry in
+`MINIONS`, a `kind` discriminator, a `_tickXxx` and `_drawXxx`
+behavior pair, and you're done. Mods come from `computeMinionMods()`.
 
 ## What's deprecated
 
