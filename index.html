@@ -4268,10 +4268,6 @@ class Game {
     this.flamePatches = [];      // Conflagration's lingering ground fire
     this.flameWalls = [];        // Wall of Flame
     this.stormClouds = [];       // Storm Cloud spell — hovering shock dispenser
-    this.shadowClones = [];      // Ninja Shadow path — sentry decoys
-    this.smokeBombs = [];        // Ninja Shadow path — slow + DoT clouds
-    this.caltrops = [];          // Ninja Arsenal path — bleed/slow zones
-    this.springTraps = [];       // Ninja Arsenal path — proximity mines
     this.damageNumbers = [];     // floating damage text
     this.explosions = [];        // visual-only expanding ring on impact
 
@@ -5695,21 +5691,21 @@ const Renderer = {
     // World layers
     this.drawFlamePatches(ctx, game.flamePatches, game.runElapsed);
     this.drawFlameWalls(ctx, game.flameWalls, w, game.runElapsed);
-    this.drawCaltrops(ctx, game.caltrops, game.runElapsed);
-    this.drawSpringTraps(ctx, game.springTraps, game.runElapsed);
+    this.drawSnowForts(ctx, game.snowForts, game.runElapsed);
+    this.drawSnowStorms(ctx, game.snowStorms, game.runElapsed);
+    this.drawShockTowers(ctx, game.shockTowers, game.runElapsed);
+    this.drawWormholes(ctx, game.wormholes, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells);
     this.drawAura(ctx, game.player, game.auraPulse, game);
     this.drawEnemies(ctx, game.enemies);
-    this.drawShadowClones(ctx, game.shadowClones, game.runElapsed);
-    if (game.sentinelCrows) this.drawSentinelCrows(ctx, game.sentinelCrows, game.runElapsed);
     this.drawProjectiles(ctx, game.projectiles);
     this.drawStormClouds(ctx, game.stormClouds, game.runElapsed);
-    this.drawSmokeBombs(ctx, game.smokeBombs, game.runElapsed);
     this.drawLightnings(ctx, game.lightnings);
     this.drawExplosions(ctx, game.explosions);
     this.drawParticles(ctx, game.particles);
     this.drawDamageNumbers(ctx, game.damageNumbers);
+    if (game.player) this.drawFireShield(ctx, game.fireShields, game.player, game.runElapsed);
     if (game.player) this.drawPlayer(ctx, game.player, game.runElapsed);
 
     if (game.shake > 0) ctx.restore();
@@ -7569,6 +7565,159 @@ const Renderer = {
       ctx.restore();
     }
   },
+
+  drawSnowForts(ctx, forts, t) {
+    if (!forts) return;
+    for (const f of forts) {
+      const fadeIn  = Math.min(1, f.t / 0.3);
+      const fadeOut = Math.min(1, (f.life - f.t) / 0.5);
+      const a = Math.min(fadeIn, fadeOut);
+      ctx.save();
+      ctx.fillStyle   = `rgba(180, 220, 240, ${0.18 * a})`;
+      ctx.strokeStyle = `rgba(120, 170, 210, ${0.85 * a})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const lobes = 18;
+      for (let i = 0; i <= lobes; i++) {
+        const ang = i / lobes * TAU;
+        const r = f.radius + Math.sin(t * 1.4 + i * 0.6) * 2;
+        const px = f.x + Math.cos(ang) * r;
+        const py = f.y + Math.sin(ang) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  },
+
+  drawSnowStorms(ctx, storms, t) {
+    if (!storms) return;
+    for (const s of storms) {
+      const fadeIn  = Math.min(1, s.t / 0.4);
+      const fadeOut = Math.min(1, (s.life - s.t) / 0.6);
+      const a = Math.min(fadeIn, fadeOut);
+      ctx.save();
+      ctx.fillStyle = `rgba(220, 235, 250, ${0.10 * a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.radius, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(160, 200, 230, ${0.55 * a})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.radius, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // a few drifting flake dots
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8 + t * 0.15) * TAU;
+        const rr = (s.radius * 0.4) + Math.sin(t * 2 + i) * 6;
+        const px = s.x + Math.cos(ang) * rr;
+        const py = s.y + Math.sin(ang) * rr;
+        ctx.fillStyle = `rgba(240, 248, 255, ${0.7 * a})`;
+        ctx.beginPath(); ctx.arc(px, py, 1.4, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+  },
+
+  drawShockTowers(ctx, towers, t) {
+    if (!towers) return;
+    for (const tw of towers) {
+      const fadeIn  = Math.min(1, tw.t / 0.25);
+      const fadeOut = Math.min(1, (tw.life - tw.t) / 0.4);
+      const a = Math.min(fadeIn, fadeOut);
+      ctx.save();
+      // base
+      ctx.fillStyle   = `rgba(80, 90, 110, ${0.85 * a})`;
+      ctx.strokeStyle = `rgba(29, 21, 12, ${a})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(tw.x, tw.y, 8, 0, TAU); ctx.fill(); ctx.stroke();
+      // antenna
+      ctx.beginPath();
+      ctx.moveTo(tw.x, tw.y - 2);
+      ctx.lineTo(tw.x, tw.y - 18);
+      ctx.stroke();
+      // crackling head
+      const flicker = 0.6 + Math.sin(t * 14) * 0.4;
+      ctx.fillStyle = `rgba(255, 235, 120, ${flicker * a})`;
+      ctx.beginPath(); ctx.arc(tw.x, tw.y - 18, 3, 0, TAU); ctx.fill();
+      // range halo
+      ctx.strokeStyle = `rgba(200, 168, 95, ${0.20 * a})`;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.arc(tw.x, tw.y, tw.range || 220, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  },
+
+  drawWormholes(ctx, holes, t) {
+    if (!holes) return;
+    for (const h of holes) {
+      const fadeIn  = Math.min(1, h.t / 0.3);
+      const fadeOut = Math.min(1, (h.life - h.t) / 0.5);
+      const a = Math.min(fadeIn, fadeOut);
+      const portals = [h.portalA, h.portalB].filter(Boolean);
+      for (const p of portals) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(t * 1.6);
+        ctx.strokeStyle = `rgba(160, 124, 255, ${0.85 * a})`;
+        ctx.lineWidth = 1.6;
+        for (let r = 4; r <= 16; r += 4) {
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU * 0.85); ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(28, 12, 50, ${0.8 * a})`;
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      // line connecting the two portals
+      if (portals.length === 2) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(160, 124, 255, ${0.18 * a})`;
+        ctx.setLineDash([2, 6]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(portals[0].x, portals[0].y);
+        ctx.lineTo(portals[1].x, portals[1].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
+  },
+
+  drawFireShield(ctx, shields, player, t) {
+    if (!shields || !shields.length || !player) return;
+    for (const sh of shields) {
+      const fadeIn  = Math.min(1, sh.t / 0.25);
+      const fadeOut = sh.life ? Math.min(1, (sh.life - sh.t) / 0.4) : 1;
+      const a = Math.min(fadeIn, fadeOut);
+      const orbCount = sh.orbCount || 3;
+      const radius = sh.orbitRadius || 38;
+      const spin = (sh.spin || 0) + t * 1.8;
+      for (let i = 0; i < orbCount; i++) {
+        const ang = spin + (i / orbCount) * TAU;
+        const ox = player.x + Math.cos(ang) * radius;
+        const oy = player.y + Math.sin(ang) * radius;
+        ctx.save();
+        const grad = ctx.createRadialGradient(ox, oy, 1, ox, oy, 8);
+        grad.addColorStop(0, `rgba(255, 220, 120, ${0.95 * a})`);
+        grad.addColorStop(0.5, `rgba(255, 130, 60, ${0.65 * a})`);
+        grad.addColorStop(1, `rgba(255, 80, 40, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(ox, oy, 8, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(255, 255, 220, ${0.9 * a})`;
+        ctx.beginPath(); ctx.arc(ox, oy, 2, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+    }
+  },
+
   drawDamageNumbers(ctx, nums) {
     ctx.textAlign = 'center';
     for (const d of nums) {
