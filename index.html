@@ -2064,7 +2064,7 @@
     <!-- Affinity bars — damage type kill counters with milestone markers.
          The Hand-of-Midas ramp visualised so you see the threshold approaching. -->
     <div id="hud-affinity" class="hud-affinity" style="display:none;"
-         data-tooltip="AFFINITY — kills with each damage type stack toward thresholds. T1 (8 kills) +8% type damage. T2 (20 kills) hits apply a baseline status. T3 (40 kills) +20% crit chance + +30% crit damage of that type.">
+         data-tooltip="AFFINITY — kills with each damage type stack toward thresholds. T1 (8 kills) +8% type damage. T2 (20 kills) hits apply a baseline status. T3 (40 kills) +20% crit chance + +15% crit damage of that type.">
       <div class="ha-bar" data-type="physical">
         <span class="ha-label">PHYS</span>
         <div class="ha-track"><div class="ha-fill" id="ha-fill-physical"></div>
@@ -3501,7 +3501,7 @@ const SPELLS = {
         player._anchorKillsLast = game.kills;
       }
       game.healPlayer(amount);
-      // Afterglow filler — temporary +30% damage after a successful heal.
+      // Afterglow filler — temporary +15% damage after a successful heal.
       const aft = b.afterglowDmg;
       if (aft) {
         player._afterglowExpires = game.runElapsed + (aft.dur || 4.0);
@@ -4106,28 +4106,28 @@ const CARDS = {
   // ============================================================
   v_recover:        { id: 'v_recover',     name: 'Recover',           axis: 'defense', tier: 1,
     pathTag: 'universal',
-    desc: '+30% wave-end heal. The vigil archetype.',
-    effect: { waveHealBonus: 0.30 } },
+    desc: '+18% wave-end heal. The vigil archetype.',
+    effect: { waveHealBonus: 0.18 } },
   v_hardened:       { id: 'v_hardened',    name: 'Hardened',          axis: 'defense', tier: 1,
     pathTag: 'universal',
-    desc: '+45 max HP (and heals you for the same).',
-    effect: { hpBonus: 45 } },
+    desc: '+25 max HP (and heals you for the same).',
+    effect: { hpBonus: 25 } },
   v_iron_skin:      { id: 'v_iron_skin',   name: 'Iron Skin',         axis: 'defense', tier: 2,
     pathTag: 'universal',
-    desc: '−15% damage taken from all sources.',
-    effect: { dmgReductionBonus: 0.15 } },
+    desc: '−8% damage taken from all sources.',
+    effect: { dmgReductionBonus: 0.08 } },
   v_phase_shift:    { id: 'v_phase_shift', name: 'Phase Shift',       axis: 'defense', tier: 2,
     pathTag: 'universal', lockedBy: ['v_iron_skin'],
-    desc: '20% chance to dodge any incoming damage.',
-    effect: { dodgeChance: 0.20 } },
+    desc: '12% chance to dodge any incoming damage.',
+    effect: { dodgeChance: 0.12 } },
   v_reflect:        { id: 'v_reflect',     name: 'Reflective Aura',   axis: 'defense', tier: 2,
     pathTag: 'universal',
-    desc: 'Reflect 25% of damage taken back at the attacker.',
-    effect: { reflectFactor: 0.25 } },
+    desc: 'Reflect 15% of damage taken back at the attacker.',
+    effect: { reflectFactor: 0.15 } },
   v_meditation:     { id: 'v_meditation',  name: 'Battle Meditation', axis: 'defense', tier: 1,
     pathTag: 'universal',
-    desc: '+2 HP per kill.',
-    effect: { healPerKill: 2 } },
+    desc: '+1 HP per kill.',
+    effect: { healPerKill: 1 } },
   v_eternal:        { id: 'v_eternal',     name: 'Eternal Vigil',     axis: 'defense', tier: 3,
     pathTag: 'universal', bossOnly: true,
     desc: 'Once per run, revive at 40% HP when killed.',
@@ -4138,12 +4138,12 @@ const CARDS = {
   // ============================================================
   u_jagged:         { id: 'u_jagged',      name: 'Jagged Edge',       axis: 'utility', tier: 1,
     pathTag: 'universal',
-    desc: '+10% global crit chance.',
-    effect: { critChanceBonus: 0.10 } },
+    desc: '+5% global crit chance.',
+    effect: { critChanceBonus: 0.05 } },
   u_lethal:         { id: 'u_lethal',      name: 'Lethal Aim',        axis: 'utility', tier: 2,
     pathTag: 'universal',
-    desc: '+30% global critical damage.',
-    effect: { critMultBonus: 0.30 } },
+    desc: '+15% global critical damage.',
+    effect: { critMultBonus: 0.15 } },
   u_quickcast:      { id: 'u_quickcast',   name: 'Quick Cast',        axis: 'utility', tier: 1,
     pathTag: 'universal',
     desc: '−12% cooldown on ALL spells.',
@@ -4155,35 +4155,35 @@ const CARDS = {
   d_sharper:        { id: 'd_sharper',     name: 'Sharper Mind',      axis: 'damage', tier: 1,
     pathTag: 'universal',
     desc: '+18% damage to all spells.',
-    effect: { globalDmgMult: 1.18 } },
+    effect: { globalDmgMult: 1.10 } },
   d_overcharge:     { id: 'd_overcharge',  name: 'Overcharge',        axis: 'damage', tier: 2,
     pathTag: 'universal', requires: ['d_sharper'],
     desc: '+22% damage to all spells. Stacks with Sharper Mind.',
-    effect: { globalDmgMult: 1.22 } },
+    effect: { globalDmgMult: 1.10 } },
 
   // ============================================================
   // UNIVERSAL GREED CARDS — ramps, synergies, pacts (Hand of Midas vibe)
   // ============================================================
   g_old_coin:       { id: 'g_old_coin',    name: 'Old Coin',          axis: 'greed', tier: 2,
     pathTag: 'universal',
-    desc: 'Each spell cast banks +0.5% damage to all spells. Caps at +35% (70 casts).',
-    effect: { castDmgRamp: { perCast: 0.005, cap: 0.35 } } },
+    desc: 'Each spell cast banks +0.5% damage to all spells. Caps at +25%.',
+    effect: { castDmgRamp: { perCast: 0.005, cap: 0.25 } } },
   g_patient_steel:  { id: 'g_patient_steel', name: 'Patient Steel',   axis: 'greed', tier: 2,
     pathTag: 'universal',
-    desc: 'After 4s without taking damage, gain +8% damage every second (caps +40%, resets on hit).',
-    effect: { noHitDmgRamp: { delay: 4.0, perSecond: 0.08, cap: 0.40 } } },
+    desc: 'After 4s without taking damage, gain +6% damage every second (caps +25%, resets on hit).',
+    effect: { noHitDmgRamp: { delay: 4.0, perSecond: 0.06, cap: 0.25 } } },
   g_iron_discipline:{ id: 'g_iron_discipline', name: 'Iron Discipline', axis: 'greed', tier: 2,
     pathTag: 'universal',
-    desc: '+6% spell damage per Defense card taken this run.',
-    effect: { defenseHubMult: 0.06 } },
+    desc: '+4% spell damage per Defense card taken (caps +24%).',
+    effect: { defenseHubMult: 0.04 } },
   g_bloodbound:     { id: 'g_bloodbound',  name: 'Bloodbound Ledger', axis: 'greed', tier: 2,
     pathTag: 'universal',
-    desc: '+7% damage per 10% of missing HP. Hurts more, hits harder.',
-    effect: { missingHpMult: 0.07 } },
+    desc: '+5% damage per 10% of missing HP (caps +30% at low HP). Hurt more, hit harder.',
+    effect: { missingHpMult: 0.05 } },
   g_warden_mantra:  { id: 'g_warden_mantra', name: "Warden's Mantra", axis: 'greed', tier: 2,
     pathTag: 'universal',
-    desc: '+3% damage reduction per Utility card taken.',
-    effect: { utilityReductionHub: 0.03 } },
+    desc: '+2% damage reduction per Utility card taken (caps −10%).',
+    effect: { utilityReductionHub: 0.02 } },
   g_sentinel_crow:  { id: 'g_sentinel_crow', name: 'Sentinel Crow',   axis: 'greed', tier: 2,
     pathTag: 'universal',
     desc: 'Spawn an immortal stationary ally. It throws a slow projectile every 2s — damage scales +4% per kill you score.',
@@ -4191,7 +4191,7 @@ const CARDS = {
   // Pacts — boss-wave-only one-shots with a real cost
   p_glass:          { id: 'p_glass',       name: 'Pact of Glass',     axis: 'greed', tier: 3,
     pathTag: 'universal', bossOnly: true,
-    desc: 'Halve your max HP permanently. +60% damage to all spells.',
+    desc: 'Halve your max HP permanently. +30% damage to all spells.',
     effect: { pact: 'glass' } },
   p_hunger:         { id: 'p_hunger',      name: 'Pact of Hunger',    axis: 'greed', tier: 3,
     pathTag: 'universal', bossOnly: true, classes: ['ninja'],
@@ -4211,12 +4211,12 @@ const CARDS = {
     effect: { unlockSpell: 'gravity_well' } },
   g_grav_crush:     { id: 'g_grav_crush',  name: 'Crushing Force',    axis: 'damage', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
-    desc: '+45% Gravity Bolt damage.',
-    effect: { spellId: 'gravity_bolt', dmgMult: 0.45 } },
+    desc: '+18% Gravity Bolt damage.',
+    effect: { spellId: 'gravity_bolt', dmgMult: 0.18 } },
   g_grav_wider:     { id: 'g_grav_wider',  name: 'Wider Pull',        axis: 'utility', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
-    desc: '+30% Gravity Bolt radius.',
-    effect: { spellId: 'gravity_bolt', radiusMult: 0.30 } },
+    desc: '+18% Gravity Bolt radius.',
+    effect: { spellId: 'gravity_bolt', radiusMult: 0.18 } },
   g_grav_glacial:   { id: 'g_grav_glacial', name: 'Glacial Pull',     axis: 'utility', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
     desc: 'Gravity Bolt slows enemies inside by 45% for 2s.',
@@ -4224,8 +4224,8 @@ const CARDS = {
   g_grav_annihil:   { id: 'g_grav_annihil', name: 'Annihilation',     axis: 'damage', tier: 2,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
     lockedBy: ['g_grav_collapse'],
-    desc: 'Keystone: Gravity Bolt becomes a sharp burst — ×2.2 dps, no pull, 0.55s. Single-spot annihilation.',
-    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 2.2 }, behavior: { noPull: true } } } },
+    desc: 'Keystone: Gravity Bolt becomes a sharp burst — ×1.6 dps, no pull, 0.55s. Single-spot annihilation.',
+    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 1.6 }, behavior: { noPull: true } } } },
   g_grav_collapse:  { id: 'g_grav_collapse', name: 'Collapse',        axis: 'utility', tier: 2,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
     lockedBy: ['g_grav_annihil'],
@@ -4233,24 +4233,24 @@ const CARDS = {
     effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 0.7, radiusMult: 1.6 }, behavior: { explodeOnHit: true } } } },
   g_grav_cdr:       { id: 'g_grav_cdr',    name: 'Quickened Mind',    axis: 'utility', tier: 2,
     pathTag: 'gravity', classes: ['magician'],
-    desc: '−18% cooldown on all gravity spells.',
+    desc: '−12% cooldown on all gravity spells.',
     effect: { treeCdrMult: { gravity: 0.82 } } },
   g_grav_void:      { id: 'g_grav_void',   name: 'Voidcurrent',       axis: 'damage', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
-    desc: '+35% Gravity Bolt damage and +15% radius. The void widens.',
-    effect: { spellId: 'gravity_bolt', dmgMult: 0.35, radiusMult: 0.15 } },
+    desc: '+18% Gravity Bolt damage and +15% radius. The void widens.',
+    effect: { spellId: 'gravity_bolt', dmgMult: 0.18, radiusMult: 0.15 } },
 
   // ============================================================
   // ELECTRICITY (magician)
   // ============================================================
   e_voltage:        { id: 'e_voltage',     name: 'Voltage',           axis: 'damage', tier: 1,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
-    desc: '+45% Lightning Bolt damage.',
-    effect: { spellId: 'lightning_bolt', dmgMult: 0.45 } },
+    desc: '+18% Lightning Bolt damage.',
+    effect: { spellId: 'lightning_bolt', dmgMult: 0.18 } },
   e_forking:        { id: 'e_forking',     name: 'Forking',           axis: 'utility', tier: 1,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
-    desc: '+2 chain targets on Lightning Bolt.',
-    effect: { spellId: 'lightning_bolt', chainBonus: 2 } },
+    desc: '+1 chain target on Lightning Bolt.',
+    effect: { spellId: 'lightning_bolt', chainBonus: 1 } },
   e_shock:          { id: 'e_shock',       name: 'Shock',             axis: 'utility', tier: 1,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
     desc: 'Lightning Bolt shocks targets — next hit on a shocked enemy +50%.',
@@ -4258,14 +4258,14 @@ const CARDS = {
   e_pinpoint:       { id: 'e_pinpoint',    name: 'Pinpoint',          axis: 'damage', tier: 2,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
     lockedBy: ['e_storm_sat'],
-    desc: 'Keystone: Lightning Bolt ×2.0 damage, +10% crit, no chain. Single-target burst.',
-    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 2.0, critChance: 0.10 }, behavior: { noChain: true } } } },
+    desc: 'Keystone: Lightning Bolt ×1.5 damage, +5% crit, no chain. Single-target burst.',
+    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 1.5, critChance: 0.05 }, behavior: { noChain: true } } } },
   e_storm_sat:      { id: 'e_storm_sat',   name: 'Storm Saturation',  axis: 'utility', tier: 2,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
     lockedBy: ['e_pinpoint'],
     desc: 'Keystone: Lightning Bolt arcs through 4 foes total at ×0.65 dmg. Static Field ×1.5 dmg+radius.',
     effect: { keystone: { multiSpell: [
-      { spellId: 'lightning_bolt', modAdjust: { dmgMult: 0.65, chainBonus: 2 } },
+      { spellId: 'lightning_bolt', modAdjust: { dmgMult: 0.65, chainBonus: 1 } },
       { spellId: 'static_field',   modAdjust: { dmgMult: 1.5, radiusMult: 1.5 } },
     ] } } },
   e_unlock_cloud:   { id: 'e_unlock_cloud', name: 'Storm Cloud',      axis: 'utility', tier: 2,
@@ -4278,7 +4278,7 @@ const CARDS = {
     effect: { unlockSpell: 'static_field' } },
   e_cdr:            { id: 'e_cdr',         name: 'Quick Reflex',      axis: 'utility', tier: 2,
     pathTag: 'electricity', classes: ['magician'],
-    desc: '−18% cooldown on all storm spells.',
+    desc: '−12% cooldown on all storm spells.',
     effect: { treeCdrMult: { electricity: 0.82 } } },
 
   // ============================================================
@@ -4286,16 +4286,16 @@ const CARDS = {
   // ============================================================
   f_heat:           { id: 'f_heat',        name: 'Heat',              axis: 'damage', tier: 1,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
-    desc: '+45% Fireball damage.',
-    effect: { spellId: 'fireball', dmgMult: 0.45 } },
+    desc: '+18% Fireball damage.',
+    effect: { spellId: 'fireball', dmgMult: 0.18 } },
   f_spread:         { id: 'f_spread',      name: 'Spread',            axis: 'utility', tier: 1,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
-    desc: '+35% Fireball blast radius.',
-    effect: { spellId: 'fireball', radiusMult: 0.35 } },
+    desc: '+18% Fireball blast radius.',
+    effect: { spellId: 'fireball', radiusMult: 0.18 } },
   f_quickcast:      { id: 'f_quickcast',   name: 'Quick Cast',        axis: 'utility', tier: 1,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
-    desc: '−20% Fireball cooldown.',
-    effect: { spellId: 'fireball', cdMult: -0.20 } },
+    desc: '−12% Fireball cooldown.',
+    effect: { spellId: 'fireball', cdMult: -0.12 } },
   f_ignite:         { id: 'f_ignite',      name: 'Ignite',            axis: 'utility', tier: 2,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball',
     desc: 'Fireball ignites — ALL your spells crit ignited enemies for 3s.',
@@ -4308,8 +4308,8 @@ const CARDS = {
   f_detonation:     { id: 'f_detonation',  name: 'Detonation',        axis: 'damage', tier: 2,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
     lockedBy: ['f_conflag'],
-    desc: 'Keystone: Fireball hits a single target with ×1.9 dmg, no splash, 1.5× speed.',
-    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 1.9 }, behavior: { noSplash: true, projectileBoost: 1.5 } } } },
+    desc: 'Keystone: Fireball hits a single target with ×1.5 dmg, no splash, 1.5× speed.',
+    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 1.5 }, behavior: { noSplash: true, projectileBoost: 1.5 } } } },
   f_unlock_wall:    { id: 'f_unlock_wall', name: 'Wall of Flame',     axis: 'utility', tier: 2,
     pathTag: 'fire', classes: ['magician'],
     desc: 'Unlock Wall of Flame — sweeping horizontal fire band that chips lanes.',
@@ -4324,8 +4324,8 @@ const CARDS = {
   // ============================================================
   fr_cold:          { id: 'fr_cold',       name: 'Cold Bite',         axis: 'damage', tier: 1,
     pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
-    desc: '+45% Frost Spike damage.',
-    effect: { spellId: 'frost_spike', dmgMult: 0.45 } },
+    desc: '+18% Frost Spike damage.',
+    effect: { spellId: 'frost_spike', dmgMult: 0.18 } },
   fr_pierce:        { id: 'fr_pierce',     name: 'Multi-Spike',       axis: 'utility', tier: 1,
     pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
     desc: 'Frost Spike pierces +2 enemies.',
@@ -4346,28 +4346,28 @@ const CARDS = {
     effect: { spellId: 'frost_spike', keystone: { behavior: { splitsOnFirstHit: true, splitDmgMult: 0.65 } } } },
   fr_hypothermia:   { id: 'fr_hypothermia', name: 'Hypothermia',      axis: 'damage', tier: 2,
     pathTag: 'frost', classes: ['magician'],
-    desc: '+50% damage to frozen enemies.',
-    effect: { spellId: 'frost_spike', dmgVsFrozen: 0.50 } },
+    desc: '+30% damage to frozen enemies.',
+    effect: { spellId: 'frost_spike', dmgVsFrozen: 0.30 } },
   fr_winter:        { id: 'fr_winter',     name: 'Deep Winter',       axis: 'utility', tier: 2,
     pathTag: 'frost', classes: ['magician'],
-    desc: '−25% Frost Spike cooldown. The cold comes faster.',
-    effect: { spellId: 'frost_spike', cdMult: -0.25 } },
+    desc: '−15% Frost Spike cooldown. The cold comes faster.',
+    effect: { spellId: 'frost_spike', cdMult: -0.15 } },
   fr_splinter:      { id: 'fr_splinter',   name: 'Brittle',           axis: 'damage', tier: 2,
     pathTag: 'frost', classes: ['magician'],
-    desc: '+30% Frost Spike damage. Shards fly cleaner.',
-    effect: { spellId: 'frost_spike', dmgMult: 0.30 } },
+    desc: '+15% Frost Spike damage. Shards fly cleaner.',
+    effect: { spellId: 'frost_spike', dmgMult: 0.15 } },
 
   // ============================================================
   // STEEL (ninja) — close-range cleave + life-steal
   // ============================================================
   st_honed:         { id: 'st_honed',      name: 'Honed Edge',        axis: 'damage', tier: 1,
     pathTag: 'steel', classes: ['ninja'], spellGate: 'crescent_strike',
-    desc: '+45% Crescent Strike damage.',
-    effect: { spellId: 'crescent_strike', dmgMult: 0.45 } },
+    desc: '+18% Crescent Strike damage.',
+    effect: { spellId: 'crescent_strike', dmgMult: 0.18 } },
   st_long:          { id: 'st_long',       name: 'Long Reach',        axis: 'utility', tier: 1,
     pathTag: 'steel', classes: ['ninja'], spellGate: 'crescent_strike',
     desc: '+25% Crescent Strike radius.',
-    effect: { spellId: 'crescent_strike', radiusMult: 0.25 } },
+    effect: { spellId: 'crescent_strike', radiusMult: 0.15 } },
   st_cluster:       { id: 'st_cluster',    name: 'Cluster Strike',    axis: 'utility', tier: 1,
     pathTag: 'steel', classes: ['ninja'], spellGate: 'crescent_strike',
     desc: 'Crescent Strike auto-aims the densest enemy cluster instead of staying on you.',
@@ -4379,7 +4379,7 @@ const CARDS = {
   st_whirl:         { id: 'st_whirl',      name: 'Whirlwind',         axis: 'utility', tier: 2,
     pathTag: 'steel', classes: ['ninja'], spellGate: 'crescent_strike', bossOnly: true,
     lockedBy: ['st_exec'],
-    desc: 'Keystone: Crescent Strike sweeps wider, hits twice (75% + 60% damage). +30% radius.',
+    desc: 'Keystone: Crescent Strike sweeps wider, hits twice (75% + 60% damage). +18% radius.',
     effect: { spellId: 'crescent_strike', keystone: { modAdjust: { radiusMult: 1.30 }, behavior: { whirlwind: true } } } },
   st_exec:          { id: 'st_exec',       name: 'Executioner',       axis: 'damage', tier: 2,
     pathTag: 'steel', classes: ['ninja'], spellGate: 'crescent_strike', bossOnly: true,
@@ -4404,8 +4404,8 @@ const CARDS = {
   // ============================================================
   sh_sharper:       { id: 'sh_sharper',    name: 'Sharper Mirror',    axis: 'damage', tier: 1,
     pathTag: 'shadow', classes: ['ninja'], spellGate: 'shadow_clone',
-    desc: '+45% clone shuriken damage.',
-    effect: { spellId: 'shadow_clone', dmgMult: 0.45 } },
+    desc: '+18% clone shuriken damage.',
+    effect: { spellId: 'shadow_clone', dmgMult: 0.18 } },
   sh_rhythm:        { id: 'sh_rhythm',     name: 'Phantom Rhythm',    axis: 'utility', tier: 1,
     pathTag: 'shadow', classes: ['ninja'], spellGate: 'shadow_clone',
     desc: '+35% clone attack speed.',
@@ -4430,8 +4430,8 @@ const CARDS = {
     effect: { unlockSpell: 'flicker_step' } },
   sh_flicker_dmg:   { id: 'sh_flicker_dmg', name: 'Killing Edge',     axis: 'damage', tier: 2,
     pathTag: 'shadow', classes: ['ninja'], spellGate: 'flicker_step',
-    desc: '+45% Flicker Step damage.',
-    effect: { spellId: 'flicker_step', dmgMult: 0.45 } },
+    desc: '+18% Flicker Step damage.',
+    effect: { spellId: 'flicker_step', dmgMult: 0.18 } },
   sh_flicker_cold:  { id: 'sh_flicker_cold', name: 'Cold Trail',      axis: 'utility', tier: 2,
     pathTag: 'shadow', classes: ['ninja'], spellGate: 'flicker_step',
     desc: 'Flicker Step slow-tags enemies for 45% / 2s.',
@@ -4462,20 +4462,20 @@ const CARDS = {
   // ============================================================
   ar_tempered:      { id: 'ar_tempered',   name: 'Tempered Bolts',    axis: 'damage', tier: 1,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'crossbow_bolt',
-    desc: '+45% Crossbow Bolt damage.',
-    effect: { spellId: 'crossbow_bolt', dmgMult: 0.45 } },
+    desc: '+18% Crossbow Bolt damage.',
+    effect: { spellId: 'crossbow_bolt', dmgMult: 0.18 } },
   ar_pierce:        { id: 'ar_pierce',     name: 'Penetration',       axis: 'utility', tier: 1,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'crossbow_bolt',
-    desc: '+4 pierce on Crossbow Bolt.',
-    effect: { spellId: 'crossbow_bolt', pierceBonus: 4 } },
+    desc: '+2 pierce on Crossbow Bolt.',
+    effect: { spellId: 'crossbow_bolt', pierceBonus: 2 } },
   ar_quickdraw:     { id: 'ar_quickdraw',  name: 'Quickdraw',         axis: 'utility', tier: 1,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'crossbow_bolt',
-    desc: '−25% Crossbow Bolt cooldown.',
-    effect: { spellId: 'crossbow_bolt', cdMult: -0.25 } },
+    desc: '−15% Crossbow Bolt cooldown.',
+    effect: { spellId: 'crossbow_bolt', cdMult: -0.15 } },
   ar_marks:         { id: 'ar_marks',      name: 'Marksman',          axis: 'damage', tier: 2,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'crossbow_bolt', bossOnly: true,
     lockedBy: ['ar_volley'],
-    desc: 'Keystone: Crossbow Bolt +20% crit, +40% crit damage, executes <12% HP.',
+    desc: 'Keystone: Crossbow Bolt +20% crit, +18% crit damage, executes <12% HP.',
     effect: { spellId: 'crossbow_bolt', keystone: { behavior: { marksman: true } } } },
   ar_volley:        { id: 'ar_volley',     name: 'Volley',            axis: 'utility', tier: 2,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'crossbow_bolt', bossOnly: true,
@@ -4488,8 +4488,8 @@ const CARDS = {
     effect: { unlockSpell: 'caltrops' } },
   ar_caltrops_dmg:  { id: 'ar_caltrops_dmg', name: 'Razor Spikes',    axis: 'damage', tier: 2,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'caltrops',
-    desc: '+45% Caltrops damage.',
-    effect: { spellId: 'caltrops', dmgMult: 0.45 } },
+    desc: '+18% Caltrops damage.',
+    effect: { spellId: 'caltrops', dmgMult: 0.18 } },
   ar_caltrops_bleed:{ id: 'ar_caltrops_bleed', name: 'Deep Bleed',    axis: 'utility', tier: 2,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'caltrops',
     desc: 'Caltrops bleed for 60% of damage over 3s (was 35%).',
@@ -4506,7 +4506,7 @@ const CARDS = {
   ar_spring_chain:  { id: 'ar_spring_chain', name: 'Chain Reaction',  axis: 'damage', tier: 3,
     pathTag: 'arsenal', classes: ['ninja'], spellGate: 'spring_trap', bossOnly: true,
     lockedBy: ['ar_spring_trapper'],
-    desc: 'Keystone: Spring Trap +30% damage and +40% radius. The blast is what matters.',
+    desc: 'Keystone: Spring Trap +15% damage and +40% radius. The blast is what matters.',
     effect: { spellId: 'spring_trap', keystone: { modAdjust: { radiusMult: 1.4, dmgMult: 1.3 } } } },
   ar_unlock_shuriken:{ id: 'ar_unlock_shuriken', name: 'Shuriken Toss', axis: 'utility', tier: 2,
     pathTag: 'arsenal', classes: ['ninja'], bossOnly: true,
@@ -4565,16 +4565,16 @@ const CARDS = {
   // ============================================================
   ae_thicker:    { id: 'ae_thicker', name: 'Thicker Plate', axis: 'defense', tier: 1,
     pathTag: 'defense', spellGate: 'aegis_pulse',
-    desc: '+45% Aegis Pulse shield amount.',
-    effect: { spellId: 'aegis_pulse', dmgMult: 0.45 } },
+    desc: '+18% Aegis Pulse shield amount.',
+    effect: { spellId: 'aegis_pulse', dmgMult: 0.18 } },
   ae_quickseal:  { id: 'ae_quickseal', name: 'Quick Seal', axis: 'utility', tier: 1,
     pathTag: 'defense', spellGate: 'aegis_pulse',
-    desc: '−25% Aegis Pulse cooldown.',
-    effect: { spellId: 'aegis_pulse', cdMult: -0.25 } },
+    desc: '−15% Aegis Pulse cooldown.',
+    effect: { spellId: 'aegis_pulse', cdMult: -0.15 } },
   ae_widefield:  { id: 'ae_widefield', name: 'Wide Field', axis: 'utility', tier: 1,
     pathTag: 'defense', spellGate: 'aegis_pulse',
-    desc: '+50% Aegis Pulse radius — reactive burst is wider.',
-    effect: { spellId: 'aegis_pulse', radiusMult: 0.50 } },
+    desc: '+20% Aegis Pulse radius — reactive burst is wider.',
+    effect: { spellId: 'aegis_pulse', radiusMult: 0.20 } },
   ae_oversize:   { id: 'ae_oversize', name: 'Oversize', axis: 'defense', tier: 2,
     pathTag: 'defense', spellGate: 'aegis_pulse',
     desc: 'Aegis duration +60%.',
@@ -4604,16 +4604,16 @@ const CARDS = {
   // ============================================================
   wr_thicken:   { id: 'wr_thicken', name: 'Thicken Roots', axis: 'damage', tier: 1,
     pathTag: 'defense', spellGate: 'wardroot',
-    desc: '+45% Wardroot chip damage.',
-    effect: { spellId: 'wardroot', dmgMult: 0.45 } },
+    desc: '+18% Wardroot chip damage.',
+    effect: { spellId: 'wardroot', dmgMult: 0.18 } },
   wr_reach:     { id: 'wr_reach', name: 'Long Roots', axis: 'utility', tier: 1,
     pathTag: 'defense', spellGate: 'wardroot',
-    desc: '+35% Wardroot radius.',
-    effect: { spellId: 'wardroot', radiusMult: 0.35 } },
+    desc: '+18% Wardroot radius.',
+    effect: { spellId: 'wardroot', radiusMult: 0.18 } },
   wr_cdr:       { id: 'wr_cdr', name: 'Forest Tempo', axis: 'utility', tier: 1,
     pathTag: 'defense', spellGate: 'wardroot',
-    desc: '−25% Wardroot cooldown.',
-    effect: { spellId: 'wardroot', cdMult: -0.25 } },
+    desc: '−15% Wardroot cooldown.',
+    effect: { spellId: 'wardroot', cdMult: -0.15 } },
   wr_witherbloom: { id: 'wr_witherbloom', name: 'Witherbloom', axis: 'damage', tier: 2,
     pathTag: 'defense', spellGate: 'wardroot',
     desc: 'Slowed enemies take +15% damage from your spells.',
@@ -4647,8 +4647,8 @@ const CARDS = {
     effect: { spellId: 'soul_anchor', burnDmgMult: 0.45 } },
   sa_quickprayer:  { id: 'sa_quickprayer', name: 'Quick Prayer', axis: 'utility', tier: 1,
     pathTag: 'defense', spellGate: 'soul_anchor',
-    desc: '−20% Soul Anchor cooldown.',
-    effect: { spellId: 'soul_anchor', cdMult: -0.20 } },
+    desc: '−12% Soul Anchor cooldown.',
+    effect: { spellId: 'soul_anchor', cdMult: -0.12 } },
   sa_afterglow:    { id: 'sa_afterglow', name: 'Afterglow', axis: 'damage', tier: 1,
     pathTag: 'defense', spellGate: 'soul_anchor',
     desc: 'After Soul Anchor triggers, your damage +30% for 4s.',
@@ -4674,12 +4674,12 @@ const CARDS = {
   // ============================================================
   sb_keenedge:    { id: 'sb_keenedge', name: 'Keen Edge', axis: 'damage', tier: 1,
     pathTag: 'utility', spellGate: 'shadowblade',
-    desc: '+45% Shadowblade damage.',
-    effect: { spellId: 'shadowblade', dmgMult: 0.45 } },
+    desc: '+18% Shadowblade damage.',
+    effect: { spellId: 'shadowblade', dmgMult: 0.18 } },
   sb_swift:       { id: 'sb_swift', name: 'Swift Cuts', axis: 'utility', tier: 1,
     pathTag: 'utility', spellGate: 'shadowblade',
-    desc: '−25% Shadowblade cooldown.',
-    effect: { spellId: 'shadowblade', cdMult: -0.25 } },
+    desc: '−15% Shadowblade cooldown.',
+    effect: { spellId: 'shadowblade', cdMult: -0.15 } },
   sb_punctures:   { id: 'sb_punctures', name: 'Puncture', axis: 'damage', tier: 1,
     pathTag: 'utility', spellGate: 'shadowblade',
     desc: 'Shadowblade hits apply 25% slow for 1.2s.',
@@ -4713,16 +4713,16 @@ const CARDS = {
     effect: { spellId: 'battle_hymn', behavior: { dmgBonusAdd: 0.10 } } },
   bh_metronome:{ id: 'bh_metronome', name: 'Metronome', axis: 'utility', tier: 1,
     pathTag: 'utility', spellGate: 'battle_hymn',
-    desc: '−25% Battle Hymn cooldown.',
-    effect: { spellId: 'battle_hymn', cdMult: -0.25 } },
+    desc: '−15% Battle Hymn cooldown.',
+    effect: { spellId: 'battle_hymn', cdMult: -0.15 } },
   bh_legato:   { id: 'bh_legato', name: 'Legato', axis: 'utility', tier: 2,
     pathTag: 'utility', spellGate: 'battle_hymn',
     desc: 'Hymn duration +60%.',
     effect: { spellId: 'battle_hymn', behavior: { hymnDurMult: 0.60 } } },
   bh_chorus:   { id: 'bh_chorus', name: 'Chorus', axis: 'utility', tier: 1,
     pathTag: 'utility', spellGate: 'battle_hymn',
-    desc: '+50% Battle Hymn aura radius.',
-    effect: { spellId: 'battle_hymn', radiusMult: 0.50 } },
+    desc: '+20% Battle Hymn aura radius.',
+    effect: { spellId: 'battle_hymn', radiusMult: 0.20 } },
   bh_crescendo:{ id: 'bh_crescendo', name: 'Crescendo', axis: 'damage', tier: 2,
     pathTag: 'utility', spellGate: 'battle_hymn', bossOnly: true,
     lockedBy: ['bh_battlecry', 'bh_anthem'],
@@ -4748,16 +4748,16 @@ const CARDS = {
     effect: { spellId: 'mark_of_frailty', behavior: { markBonusBonus: 0.10 } } },
   mf_quickbrand:{ id: 'mf_quickbrand', name: 'Quick Brand', axis: 'utility', tier: 1,
     pathTag: 'utility', spellGate: 'mark_of_frailty',
-    desc: '−20% Mark cooldown.',
-    effect: { spellId: 'mark_of_frailty', cdMult: -0.20 } },
+    desc: '−12% Mark cooldown.',
+    effect: { spellId: 'mark_of_frailty', cdMult: -0.12 } },
   mf_critfocus: { id: 'mf_critfocus', name: 'Crit Focus', axis: 'damage', tier: 2,
     pathTag: 'utility', spellGate: 'mark_of_frailty',
-    desc: '+15% global crit chance — your spells punch through marked enemies.',
-    effect: { critChanceBonus: 0.15 } },
+    desc: '+5% global crit chance — your spells punch through marked enemies.',
+    effect: { critChanceBonus: 0.05 } },
   mf_bountypoints: { id: 'mf_bountypoints', name: 'Bounty', axis: 'utility', tier: 1,
     pathTag: 'utility', spellGate: 'mark_of_frailty',
-    desc: '+3 HP per kill — marked enemies feed you.',
-    effect: { healPerKill: 3 } },
+    desc: '+1 HP per kill — marked enemies feed you.',
+    effect: { healPerKill: 1 } },
   mf_hunters:   { id: 'mf_hunters', name: "Hunter's Mark", axis: 'utility', tier: 2,
     pathTag: 'utility', spellGate: 'mark_of_frailty', bossOnly: true,
     lockedBy: ['mf_doom', 'mf_soulchain'],
@@ -4783,11 +4783,11 @@ const CARDS = {
     effect: { spellId: 'time_dilation', behavior: { extendSlow: 2.0 } } },
   td_qcd:      { id: 'td_qcd', name: 'Tempo Tear', axis: 'utility', tier: 2,
     pathTag: 'onuse', spellGate: 'time_dilation',
-    desc: '−25% Time Dilation cooldown.',
-    effect: { spellId: 'time_dilation', cdMult: -0.25 } },
+    desc: '−15% Time Dilation cooldown.',
+    effect: { spellId: 'time_dilation', cdMult: -0.15 } },
   td_brittle:  { id: 'td_brittle', name: 'Time Brittle', axis: 'damage', tier: 2,
     pathTag: 'onuse', spellGate: 'time_dilation',
-    desc: 'Slowed enemies take +30% damage from your spells.',
+    desc: 'Slowed enemies take +15% damage from your spells.',
     effect: { dmgVsSlowed: 0.30 } },
   td_distortion: { id: 'td_distortion', name: 'Distortion', axis: 'utility', tier: 3,
     pathTag: 'onuse', spellGate: 'time_dilation', bossOnly: true,
@@ -4810,16 +4810,16 @@ const CARDS = {
   // ============================================================
   ds_potency: { id: 'ds_potency', name: 'Sigil Potency', axis: 'damage', tier: 2,
     pathTag: 'onuse', spellGate: 'doom_sigil',
-    desc: '+45% Doom Sigil damage.',
-    effect: { spellId: 'doom_sigil', dmgMult: 0.45 } },
+    desc: '+18% Doom Sigil damage.',
+    effect: { spellId: 'doom_sigil', dmgMult: 0.18 } },
   ds_wider:   { id: 'ds_wider', name: 'Wider Sigil', axis: 'utility', tier: 2,
     pathTag: 'onuse', spellGate: 'doom_sigil',
-    desc: '+30% Doom Sigil radius.',
-    effect: { spellId: 'doom_sigil', radiusMult: 0.30 } },
+    desc: '+18% Doom Sigil radius.',
+    effect: { spellId: 'doom_sigil', radiusMult: 0.18 } },
   ds_quickseal: { id: 'ds_quickseal', name: 'Quick Seal', axis: 'utility', tier: 2,
     pathTag: 'onuse', spellGate: 'doom_sigil',
-    desc: '−25% Doom Sigil cooldown.',
-    effect: { spellId: 'doom_sigil', cdMult: -0.25 } },
+    desc: '−15% Doom Sigil cooldown.',
+    effect: { spellId: 'doom_sigil', cdMult: -0.15 } },
   ds_twin:    { id: 'ds_twin', name: 'Twin Sigils', axis: 'utility', tier: 3,
     pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
     lockedBy: ['ds_imploder', 'ds_heavens'],
@@ -4828,7 +4828,7 @@ const CARDS = {
   ds_imploder:{ id: 'ds_imploder', name: 'Imploder', axis: 'damage', tier: 3,
     pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
     lockedBy: ['ds_twin', 'ds_heavens'],
-    desc: 'Keystone: Sigil pulls enemies inward before detonating. +30% damage.',
+    desc: 'Keystone: Sigil pulls enemies inward before detonating. +15% damage.',
     effect: { spellId: 'doom_sigil', keystone: { modAdjust: { dmgMult: 1.3 }, behavior: { imploderSigil: true } } } },
   ds_heavens: { id: 'ds_heavens', name: "Heaven's Fall", axis: 'utility', tier: 3,
     pathTag: 'onuse', spellGate: 'doom_sigil', bossOnly: true,
@@ -4903,7 +4903,7 @@ const CARDS = {
   fr_chillkeen:   { id: 'fr_chillkeen',   name: 'Chillkeen', axis: 'damage', tier: 1,
     pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
     desc: '+8% global crit chance. The cold sharpens your aim.',
-    effect: { critChanceBonus: 0.08 } },
+    effect: { critChanceBonus: 0.05 } },
   fr_glacierheart:{ id: 'fr_glacierheart', name: 'Glacier Heart', axis: 'utility', tier: 2,
     pathTag: 'frost', classes: ['magician'], spellGate: 'frost_spike',
     desc: '+1 HP per kill. Each death feeds the glacier.',
@@ -4920,8 +4920,8 @@ const CARDS = {
     effect: { spellId: 'lightning_bolt', behavior: { castHeal: 2 } } },
   lb_critwave:    { id: 'lb_critwave',    name: 'Critwave', axis: 'damage', tier: 1,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
-    desc: '+10% global crit chance and +15% crit damage.',
-    effect: { critChanceBonus: 0.10, critMultBonus: 0.15 } },
+    desc: '+5% global crit chance and +15% crit damage.',
+    effect: { critChanceBonus: 0.05, critMultBonus: 0.15 } },
   lb_scorchedearth:{ id: 'lb_scorchedearth', name: 'Scorched Earth', axis: 'utility', tier: 2,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt',
     desc: 'Lightning Bolt also applies a 1.2s slow at 60% factor — pinning the chain.',
@@ -4938,8 +4938,8 @@ const CARDS = {
     effect: { spellId: 'gravity_bolt', behavior: { castShield: { pctMaxHp: 0.05, dur: 2.5 } } } },
   gb_eventreward: { id: 'gb_eventreward', name: 'Event Horizon', axis: 'utility', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
-    desc: '+2 HP per kill. The void gives back what it takes.',
-    effect: { healPerKill: 2 } },
+    desc: '+1 HP per kill. The void gives back what it takes.',
+    effect: { healPerKill: 1 } },
   gb_density:     { id: 'gb_density',     name: 'Density', axis: 'damage', tier: 1,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt',
     desc: '+12% damage and −10% radius. Mass concentrated.',
@@ -4983,8 +4983,8 @@ const CARDS = {
   fb_meteor: { id: 'fb_meteor', name: 'Meteor', axis: 'damage', tier: 3,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
     lockedBy: ['fb_hydra', 'fb_solarflare'],
-    desc: 'Rank-8 Spec: Fireball becomes a falling Meteor — slower travel, ×2.4 damage, ×1.6 radius. Crater stuns 0.5s.',
-    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 2.4, radiusMult: 1.6 }, behavior: { meteor: true, projectileBoost: 0.55 } } } },
+    desc: 'Rank-8 Spec: Fireball becomes a falling Meteor — slower travel, ×1.8 damage, ×1.4 radius. Crater stuns 0.5s.',
+    effect: { spellId: 'fireball', keystone: { modAdjust: { dmgMult: 1.8, radiusMult: 1.4 }, behavior: { meteor: true, projectileBoost: 0.55 } } } },
   fb_hydra: { id: 'fb_hydra', name: 'Hydra Sigil', axis: 'utility', tier: 3,
     pathTag: 'fire', classes: ['magician'], spellGate: 'fireball', bossOnly: true,
     lockedBy: ['fb_meteor', 'fb_solarflare'],
@@ -5022,8 +5022,8 @@ const CARDS = {
   lb_plasma: { id: 'lb_plasma', name: 'Plasma', axis: 'damage', tier: 3,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
     lockedBy: ['lb_stormgod', 'lb_discharge'],
-    desc: 'Rank-8 Spec: Lightning Bolt becomes a piercing plasma — ×1.8 dmg, +3 chains, all chained enemies shocked.',
-    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 1.8, chainBonus: 3 }, behavior: { plasma: true } } } },
+    desc: 'Rank-8 Spec: Lightning Bolt becomes a piercing plasma — ×1.5 dmg, +1 chain, all chained enemies shocked.',
+    effect: { spellId: 'lightning_bolt', keystone: { modAdjust: { dmgMult: 1.5, chainBonus: 1 }, behavior: { plasma: true } } } },
   lb_discharge: { id: 'lb_discharge', name: 'Discharge', axis: 'utility', tier: 3,
     pathTag: 'electricity', classes: ['magician'], spellGate: 'lightning_bolt', bossOnly: true,
     lockedBy: ['lb_stormgod', 'lb_plasma'],
@@ -5034,8 +5034,8 @@ const CARDS = {
   gb_blacksun: { id: 'gb_blacksun', name: 'Black Sun', axis: 'damage', tier: 3,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
     lockedBy: ['gb_fracture', 'gb_ascension'],
-    desc: 'Rank-8 Spec: Gravity Bolt becomes a slow Black Sun — ×3 life, ×2.5 dmg, pulls everything in 320u.',
-    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 2.5, radiusMult: 1.5 }, behavior: { blackSun: { lifeMult: 3.0, pull: 320 } } } } },
+    desc: 'Rank-8 Spec: Gravity Bolt becomes a slow Black Sun — ×2.5 life, ×1.8 dmg, pulls everything in 280u.',
+    effect: { spellId: 'gravity_bolt', keystone: { modAdjust: { dmgMult: 1.8, radiusMult: 1.4 }, behavior: { blackSun: { lifeMult: 2.5, pull: 280 } } } } },
   gb_fracture: { id: 'gb_fracture', name: 'Fracture', axis: 'utility', tier: 3,
     pathTag: 'gravity', classes: ['magician'], spellGate: 'gravity_bolt', bossOnly: true,
     lockedBy: ['gb_blacksun', 'gb_ascension'],
@@ -5278,7 +5278,7 @@ const ITEMS = {
     icon: '✧',
     rarity: 'rare',
     description: '+8% global critical strike chance and +20% critical damage.',
-    effect: { critChanceBonus: 0.08, critMultBonus: 0.20 },
+    effect: { critChanceBonus: 0.05, critMultBonus: 0.20 },
   },
   voidstone: {
     id: 'voidstone',
@@ -5286,7 +5286,7 @@ const ITEMS = {
     icon: '◉',
     rarity: 'rare',
     description: '+18% damage to all spells, but cooldowns are 6% longer.',
-    effect: { globalDmgMult: 1.18, globalCdrMult: 1.06 },
+    effect: { globalDmgMult: 1.10, globalCdrMult: 1.06 },
   },
   stormcaller: {
     id: 'stormcaller',
@@ -5330,8 +5330,8 @@ const ITEMS = {
     icon: '◑',
     rarity: 'rare',
     classes: ['ninja'],
-    description: '+10% global crit chance. Projectiles travel 25% faster.',
-    effect: { critChanceBonus: 0.10, projSpeedMult: 1.25 },
+    description: '+5% global crit chance. Projectiles travel 25% faster.',
+    effect: { critChanceBonus: 0.05, projSpeedMult: 1.25 },
   },
   mempo_mask: {
     id: 'mempo_mask',
@@ -5878,7 +5878,7 @@ class Enemy {
 const AFFINITY_TIERS = [
   { kills: 8,  bonus: 'tier1' },     // +8% damage of that type
   { kills: 20, bonus: 'tier2' },     // applies status on hit
-  { kills: 40, bonus: 'tier3' },     // +20% crit, +30% crit damage of that type
+  { kills: 40, bonus: 'tier3' },     // +20% crit, +15% crit damage of that type
 ];
 function affinityTierAt(kills) {
   let tier = 0;
@@ -6210,7 +6210,7 @@ function computeSpellMods(playerState, spellId) {
   // ===== Damage-type affinity =====
   // Auto-applied per-type buffs from kill thresholds. T1 = +8% damage,
   // T2 = baseline status payload (bleed/burn/slow), T3 = +20% crit
-  // chance + +30% crit damage of the matching type. The "Hand of Midas"
+  // chance + +15% crit damage of the matching type. The "Hand of Midas"
   // ramp — the more you commit to a damage type by killing with it,
   // the harder you hit.
   const dt = damageType;
@@ -6467,7 +6467,9 @@ function computePlayerStats(playerState) {
   if (taken.has('g_warden_mantra')) {
     let utilCount = 0;
     for (const id of taken) if (CARDS[id]?.axis === 'utility') utilCount++;
-    stats.dmgReduction += 0.03 * utilCount;
+    // Cap at +10% so a utility-heavy build doesn't compound into
+    // near-invulnerability stacked with other defense cards.
+    stats.dmgReduction += Math.min(0.10, 0.02 * utilCount);
   }
   // Cap so it can't compound into invulnerability.
   stats.dmgReduction = Math.min(stats.dmgReduction, 0.65);
@@ -7440,30 +7442,46 @@ class Game {
    * runtime damage). Returns a single multiplier ≥ 1 applied at cast.
    */
   _computeGreedMult() {
+    // ---- Hub caps ----
+    // Each greed hub now has an explicit hard cap, so a player can't
+    // stack 6 defense cards into +36% damage on a whim. Past the cap
+    // additional cards still help defensively but stop feeding damage.
+    // Pact of Glass also nerfed (was +60% before — too OP given hubs).
     let mult = 1;
     const taken = this.playerState.takenCards || new Set();
     const rs = this.playerState.runStats;
-    // Old Coin — small per-cast bank, capped.
-    if (taken.has('g_old_coin') && rs) mult *= (1 + Math.min(0.35, rs.oldCoinPct));
-    // Patient Steel — accrues 8% per second after a 4s grace. Caps 40%.
+    // Old Coin — slow ramp per cast. Cap +25% (was 35%).
+    if (taken.has('g_old_coin') && rs) mult *= (1 + Math.min(0.25, rs.oldCoinPct));
+    // Patient Steel — no-hit accrual. Cap +25% (was 40%).
     if (taken.has('g_patient_steel') && rs) {
       const since = Math.max(0, rs.noHitTimer - 4.0);
-      mult *= (1 + Math.min(0.40, since * 0.08));
+      mult *= (1 + Math.min(0.25, since * 0.06));
     }
-    // Iron Discipline — +6% per defense card taken.
+    // Iron Discipline — +4% per Defense card. Hard cap +24% (6 cards).
     if (taken.has('g_iron_discipline')) {
       let defCount = 0;
       for (const id of taken) if (CARDS[id]?.axis === 'defense') defCount++;
-      mult *= (1 + 0.06 * defCount);
+      mult *= (1 + Math.min(0.24, 0.04 * defCount));
     }
-    // Bloodbound Ledger — +7% per 10% missing HP.
+    // Bloodbound Ledger — +5% per 10% missing HP. Cap +30% (was +63%
+    // at 10% HP — the "feels ridiculous" stack the user flagged).
     if (taken.has('g_bloodbound') && this.player?.alive) {
       const missingPct = 1 - (this.player.hp / Math.max(1, this.player.maxHp));
       const tens = Math.floor(missingPct * 10);
-      mult *= (1 + 0.07 * tens);
+      mult *= (1 + Math.min(0.30, 0.05 * tens));
     }
-    // Pact of Glass — flat +60% damage.
-    if (taken.has('p_glass')) mult *= 1.60;
+    // Resonance — +4% per OTHER greed card. Cap +20%.
+    if (taken.has('g_resonance')) {
+      let greedCount = 0;
+      for (const id of taken) {
+        if (CARDS[id]?.axis === 'greed' && id !== 'g_resonance') greedCount++;
+      }
+      mult *= (1 + Math.min(0.20, 0.04 * greedCount));
+    }
+    // Pact of Glass — flat +30% damage now (was +60% / +40%). Pacts
+    // are mutually exclusive: only the FIRST taken pact's bonus applies,
+    // so stacking glass + hunger + echoes is no longer a strategy.
+    if (taken.has('p_glass')) mult *= 1.30;
     return mult;
   }
 
@@ -8323,7 +8341,7 @@ class Game {
     const PERKS = {
       tier1: { perk: '+8% damage of this type' },
       tier2: { perk: 'Hits apply a baseline status (bleed/burn/slow)' },
-      tier3: { perk: '+20% crit chance, +30% crit damage of this type' },
+      tier3: { perk: '+20% crit chance, +15% crit damage of this type' },
     };
     const tierKey = ['tier1','tier2','tier3'][tier - 1];
     const perk = PERKS[tierKey]?.perk || '';
