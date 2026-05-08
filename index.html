@@ -2193,6 +2193,25 @@
     color: var(--ink-mid);
     line-height: 1.35;
   }
+  .lu-dump-progress {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    margin-top: 3px;
+    color: var(--ink-mid);
+    letter-spacing: 0.02em;
+  }
+  .lu-dump-progress b {
+    color: var(--ink);
+  }
+  .lu-dump-now b { color: var(--ink); }
+  .lu-dump-next b { color: var(--accent, var(--gold)); }
+  .lu-dump-max {
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
 
   .lu-spec-wrap {
     margin-top: 12px;
@@ -2338,7 +2357,7 @@
         <div class="lu-banner">
           <div class="lu-title" id="lu-title">Level —</div>
           <div class="lu-summary">
-            Ability pts: <b id="lu-points">0</b> &nbsp;·&nbsp; Companion pts: <b id="lu-minion-points">0</b>. Click pips to invest.
+            Unspent points: <b id="lu-points">0</b>. Spend on abilities or your companion. Specs unlock at 6 (ability) / 4 (companion).
           </div>
         </div>
         <button class="btn-primary" id="btn-lu-continue">Continue</button>
@@ -2661,6 +2680,7 @@ const SPELLS = {
         radius, pull, dps, life,
         spell: 'gravity_bolt',
         applyStatus: mods.applyStatus,       // Glacial Pull etc. propagate via well damage
+        fractureExpire: b.fractureExpire,    // Black Hole "Fracture" spec
       });
 
       // Visual hit when the well lands — gives Gravity Bolt a real "thump"
@@ -3063,20 +3083,20 @@ const ABILITIES = {
       game.addShake(0.06);
     },
     dumps: [
-      { id: 'chill',   name: 'Deeper Chill', desc: '+10% slow strength + DoT damage per point.', stat: 'dmgMult', perPoint: 0.10 },
-      { id: 'wider',   name: 'Wider Wall',   desc: '+5% radius per point.',     stat: 'radiusMult',  perPoint: 0.05 },
-      { id: 'longer',  name: 'Longer Frost', desc: '+10% duration per point.',  stat: 'durationMult', perPoint: 0.10 },
+      { id: 'chill',   name: 'Deeper Chill', desc: '+15% slow strength and chip damage per point.', stat: 'dmgMult', perPoint: 0.15 },
+      { id: 'wider',   name: 'Wider Wall',   desc: '+8% radius per point.',  stat: 'radiusMult',  perPoint: 0.08 },
+      { id: 'longer',  name: 'Longer Frost', desc: '+15% duration per point.', stat: 'durationMult', perPoint: 0.15 },
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
         desc: 'When the fort expires, an icy patch lingers for 3s applying slow.',
         behavior: { permafrost: true } },
       { id: 'avalanche',  name: 'Avalanche',
-        desc: 'When the fort expires, it collapses for 120 damage to all enemies inside.',
-        behavior: { avalancheExpire: 120 } },
+        desc: 'When the fort expires, it collapses for 180 damage to all enemies inside.',
+        behavior: { avalancheExpire: 180 } },
       { id: 'crystal',    name: 'Crystalline',
-        desc: 'While inside the fort, your spells get +20% crit chance.',
-        behavior: { crystalCrit: 0.20 } },
+        desc: 'While inside the fort, your spells get +25% crit chance.',
+        behavior: { crystalCrit: 0.25 } },
     ],
   },
 
@@ -3091,7 +3111,9 @@ const ABILITIES = {
       const dps = 24 * mods.dmgMult;
       const radius = 70 * mods.radiusMult;
       const life = 6 * mods.durationMult;
-      const blockCharges = Math.floor(1 * mods.shieldMult);
+      // Base: 2 block charges. +1 from Aegis spec. Shield reads as a real wall.
+      const beh = mods.behavior || {};
+      const blockCharges = Math.floor(2 * mods.shieldMult) + (beh.extraBlock || 0);
       game.fireShields = game.fireShields || [];
       // Replace any existing shield (single-instance defensive)
       game.fireShields.length = 0;
@@ -3100,24 +3122,25 @@ const ABILITIES = {
         blockCharges, spec: mods.behavior || {},
       }));
       caster._shieldCharges = blockCharges;
+      caster._shieldChargesMax = blockCharges;
       caster._shieldExpires = (game.runElapsed || 0) + life;
-      caster._shieldBurnDamage = 40 * mods.dmgMult;
+      caster._shieldBurnDamage = 50 * mods.dmgMult;
       game.spawnExplosion(caster.x, caster.y, radius, '#ff7733', 'fire');
     },
     dumps: [
-      { id: 'flare',    name: 'Flare',     desc: '+10% orb damage per point.',  stat: 'dmgMult',    perPoint: 0.10 },
-      { id: 'orbit',    name: 'Wide Orbit', desc: '+8% orbit radius per point.', stat: 'radiusMult', perPoint: 0.08 },
-      { id: 'persist',  name: 'Persistence', desc: '+10% duration per point.',  stat: 'durationMult', perPoint: 0.10 },
+      { id: 'flare',    name: 'Flare',     desc: '+15% orb damage and retaliation per point.',  stat: 'dmgMult',    perPoint: 0.15 },
+      { id: 'orbit',    name: 'Wide Orbit', desc: '+12% orbit radius per point.', stat: 'radiusMult', perPoint: 0.12 },
+      { id: 'persist',  name: 'Persistence', desc: '+15% duration per point.',  stat: 'durationMult', perPoint: 0.15 },
     ],
     specs: [
       { id: 'phoenix',  name: 'Phoenix',
-        desc: 'When the shield expires, it explodes for 200 damage in 120u.',
-        behavior: { phoenixExpire: { dmg: 200, radius: 120 } } },
+        desc: 'When the shield expires, it explodes for 240 damage in 130u.',
+        behavior: { phoenixExpire: { dmg: 240, radius: 130 } } },
       { id: 'inferno',  name: 'Inferno',
         desc: 'Each orb leaves a small flame patch on the ground every 0.5s.',
         behavior: { infernoTrail: true } },
       { id: 'aegis',    name: 'Aegis',
-        desc: 'Block 2 hits instead of 1; each retaliation hits a wider area.',
+        desc: 'Block 3 hits instead of 2; each retaliation hits a wider area.',
         behavior: { extraBlock: 1, retalRadius: 90 } },
     ],
   },
@@ -3579,11 +3602,11 @@ const MINIONS = {
   decoy: {
     id: 'decoy', name: 'Decoy Effigy', icon: '☗',
     color: '#c89aff',
-    description: 'A straw-and-iron effigy. Enemies in range target it instead of you. When destroyed, it explodes for AoE damage and respawns.',
+    description: 'A straw-and-iron effigy. Base 120 HP. Enemies in range target it instead of you. When destroyed, it explodes for AoE damage and respawns.',
     flavor: 'utility · taunt',
     dumps: [
-      { id: 'sturdy', name: 'Sturdy',  desc: '+30 max HP per point.',                stat: 'hpBonus',     perPoint: 30 },
-      { id: 'volatile', name: 'Volatile', desc: '+25% explosion damage per point.', stat: 'boomMult',    perPoint: 0.25 },
+      { id: 'sturdy', name: 'Sturdy',  desc: '+50 max HP per point.',                stat: 'hpBonus',     perPoint: 50 },
+      { id: 'volatile', name: 'Volatile', desc: '+35% explosion damage per point.', stat: 'boomMult',    perPoint: 0.35 },
     ],
     specs: [
       { id: 'iron_effigy', name: 'Iron Effigy',
@@ -3596,7 +3619,7 @@ const MINIONS = {
     spawn: (game, player) => ({
       kind: 'decoy',
       x: player.x, y: player.y,
-      hp: 80, maxHp: 80,
+      hp: 120, maxHp: 120,
       respawnAcc: 0,
       respawnTime: 6,
       tauntRange: 260,
@@ -3608,11 +3631,11 @@ const MINIONS = {
   mender: {
     id: 'mender', name: 'Mender Wisp', icon: '✚',
     color: '#9af0c8',
-    description: 'A wisp that hovers at your shoulder and mends your wounds on a steady cadence.',
+    description: 'A wisp that hovers at your shoulder and mends your wounds on a steady cadence. Heals 12 HP every 4s.',
     flavor: 'utility · healing',
     dumps: [
-      { id: 'flow',  name: 'Healing Flow', desc: '+2 HP healed per pulse per point.', stat: 'healBonus', perPoint: 2 },
-      { id: 'tempo', name: 'Tempo',        desc: '−0.5s between pulses per point (min 1.5s).', stat: 'pulseFaster', perPoint: 0.5 },
+      { id: 'flow',  name: 'Healing Flow', desc: '+5 HP healed per pulse per point.', stat: 'healBonus', perPoint: 5 },
+      { id: 'tempo', name: 'Tempo',        desc: '−0.6s between pulses per point (min 1.4s).', stat: 'pulseFaster', perPoint: 0.6 },
     ],
     specs: [
       { id: 'cleanse',   name: 'Cleansing Pulse',
@@ -3853,9 +3876,20 @@ class Player {
     // Fire Shield — eats one hit per `_shieldCharges`, retaliates.
     if (this._shieldCharges && this._shieldCharges > 0 && (game?.runElapsed ?? 0) < (this._shieldExpires || 0)) {
       this._shieldCharges -= 1;
+      const broken = this._shieldCharges === 0;
       if (game) {
-        game.spawnDamageNumber(this.x, this.y - this.radius - 8, 'BLOCKED', false);
-        game.spawnHitParticles(this.x, this.y, '#ff7733', 12);
+        // BLOCKED on each hit; SHIELD BROKEN on the last one — clear binary
+        // signal that the wall just fell and the player is now exposed.
+        if (broken) {
+          game.spawnDamageNumber(this.x, this.y - this.radius - 14, 'SHIELD BROKEN', true, { verdict: 'resist' });
+          game.spawnExplosion(this.x, this.y, 90, '#ff7733', 'fire');
+          game.spawnHitParticles(this.x, this.y, '#ffd266', 24);
+          game.addShake(0.22);
+        } else {
+          game.spawnDamageNumber(this.x, this.y - this.radius - 8, `BLOCKED (${this._shieldCharges} left)`, false);
+          game.spawnHitParticles(this.x, this.y, '#ff7733', 12);
+          game.spawnExplosion(this.x, this.y, 50, '#ff7733', 'fire');
+        }
         // Retaliate burn on attacker (small AoE around player too)
         if (attacker?.alive) {
           const burn = (this._shieldBurnDamage || 30);
@@ -3863,7 +3897,6 @@ class Player {
           game.totalDamageDealt += a;
           game.spawnDamageNumber(attacker.x, attacker.y - attacker.radius - 6, a, true, attacker);
         }
-        game.spawnExplosion(this.x, this.y, 50, '#ff7733', 'fire');
       }
       this.iframes = CONFIG.player.iframes * 0.6;
       return;
@@ -4500,14 +4533,13 @@ class Game {
     this.playerState = {
       charDef,
       level: 0,
-      unspentPoints: 0,
+      unspentPoints: 0,                                // single shared pool
       tiers: { 1: null, 2: null, 3: null },
       points: {},
       spells: [],
       // Minion is picked at run start, after the Tier 1 ability.
-      minion: null,                                    // minion id
+      minion: null,
       minionPoints: { dumps: [0, 0], spec: null },     // 2 dumps × 3 pts max
-      unspentMinionPoints: 0,                          // earned 1 per 2 waves
     };
     this.minion = null;
     this.enemies = [];
@@ -4599,12 +4631,12 @@ class Game {
 
   investMinionPoint(dumpIdx) {
     const ps = this.playerState;
-    if (!ps || (ps.unspentMinionPoints || 0) <= 0) return false;
+    if (!ps || (ps.unspentPoints || 0) <= 0) return false;
     if (!ps.minion) return false;
     if (dumpIdx < 0 || dumpIdx > 1) return false;
     if ((ps.minionPoints.dumps[dumpIdx] || 0) >= 3) return false;
     ps.minionPoints.dumps[dumpIdx] += 1;
-    ps.unspentMinionPoints -= 1;
+    ps.unspentPoints -= 1;
     Logger.event('minion_point_invested', { minion: ps.minion, dump: dumpIdx });
     return true;
   }
@@ -5226,7 +5258,7 @@ class Game {
       }
       // Decoy is hit by enemies via direct contact (handled in tickEnemies
       // through the _tauntTarget hook). Recompute max HP if needed.
-      const desiredMax = (80 + mods.hpBonus) * ironMult;
+      const desiredMax = (120 + mods.hpBonus) * ironMult;
       if (m.maxHp !== desiredMax) {
         const ratio = m.hp / m.maxHp;
         m.maxHp = desiredMax;
@@ -5285,12 +5317,12 @@ class Game {
     m.x += (tx - m.x) * Math.min(1, dt * 4);
     m.y += (ty - m.y) * Math.min(1, dt * 4);
     const beh = mods.behavior || {};
-    // Tempo: each pulseFaster point shaves 0.5s off the 4s base; min 1.5s.
-    const pulseIv = Math.max(1.5, 4.0 - mods.pulseFaster);
+    // Tempo: each pulseFaster point shaves 0.6s off the 4s base; min 1.4s.
+    const pulseIv = Math.max(1.4, 4.0 - mods.pulseFaster);
     m.pulseAcc += dt;
     if (m.pulseAcc < pulseIv) return;
     m.pulseAcc = 0;
-    const heal = 6 + mods.healBonus;
+    const heal = 12 + mods.healBonus;
     if (this.player.hp < this.player.maxHp) {
       this.healPlayer(heal);
       this.spawnDamageNumber(this.player.x, this.player.y - 30, '+' + heal, false, { verdict: 'heal' });
@@ -5345,10 +5377,6 @@ class Game {
     if (!ps) return;
     ps.level = (ps.level || 0) + 1;
     ps.unspentPoints = (ps.unspentPoints || 0) + 1;
-    // Minion point: +1 every 2 waves cleared (waves 2, 4, 6, ...).
-    if (wave % 2 === 0 && ps.minion) {
-      ps.unspentMinionPoints = (ps.unspentMinionPoints || 0) + 1;
-    }
     Logger.event('level_up', { level: ps.level });
     // Wave-end heal — light and predictable so the run doesn't snowball
     // on free heals. 18% of max HP each wave.
@@ -5705,7 +5733,24 @@ class Game {
     for (let i = this.wells.length - 1; i >= 0; i--) {
       const w = this.wells[i];
       w.t += dt;
-      if (w.t >= w.life) { this.wells.splice(i, 1); continue; }
+      if (w.t >= w.life) {
+        // Black Hole "Fracture" spec — detonate on expire.
+        if (w.fractureExpire) {
+          const fr = w.fractureExpire;
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(w, e) < fr.radius + e.radius) {
+              const a = e.takeDamage(fr.dmg, { spell: 'gravity_bolt:fracture' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+            }
+          }
+          this.spawnExplosion(w.x, w.y, fr.radius, '#a07cff');
+          this.addShake(0.22);
+        }
+        this.wells.splice(i, 1);
+        continue;
+      }
       // Pull + DPS
       for (const e of this.enemies) {
         if (!e.alive) continue;
@@ -6432,6 +6477,47 @@ const Renderer = {
     ctx.fillStyle = PAL.gold;
     ctx.beginPath(); ctx.arc(13.5, -17, 1.4, 0, TAU); ctx.fill();
 
+    ctx.restore();
+
+    // ---- Defense status pips above the head ----
+    // Reads as "I have N walls left". Each pip = one fire-shield charge.
+    // A small Snow Fort glyph appears next to them when the safe-zone
+    // is currently active. Sized to be visible without cluttering.
+    this._drawDefenseStatus(ctx, p, t);
+  },
+
+  _drawDefenseStatus(ctx, p, t) {
+    const charges = (p._shieldCharges || 0);
+    const sheltered = (p._safeZoneUntil || 0) > t - 0.05;
+    if (!charges && !sheltered) return;
+    ctx.save();
+    const baseY = p.y - p.radius - 22;
+    let xOff = -((charges * 8) + (sheltered ? 14 : 0)) / 2;
+    // Fire shield charges as orange pips
+    for (let i = 0; i < charges; i++) {
+      const cx = p.x + xOff + 4 + i * 8;
+      const cy = baseY;
+      ctx.fillStyle = '#ff7733';
+      ctx.strokeStyle = '#1d150c';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 3.2, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = `rgba(255, 240, 200, ${0.7 + 0.3 * Math.sin(t * 6 + i)})`;
+      ctx.beginPath(); ctx.arc(cx - 0.8, cy - 0.8, 1.2, 0, TAU); ctx.fill();
+    }
+    // Sheltered glyph — snow blue
+    if (sheltered) {
+      const cx = p.x + xOff + (charges ? charges * 8 + 8 : 4);
+      const cy = baseY;
+      ctx.fillStyle = 'rgba(190, 230, 250, 0.9)';
+      ctx.strokeStyle = '#3a7aa0';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#1d150c';
+      ctx.font = 'bold 7px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', cx, cy);
+    }
     ctx.restore();
   },
 
@@ -8419,12 +8505,50 @@ const Renderer = {
 /* ==========================================================================
  * 9. UI — DOM overlays + HUD updates.
  * ========================================================================*/
+/*
+ * formatStat — render a stat-bonus value as a short human-readable line.
+ * Used by the level-up panel to show concrete "+16% damage" instead of
+ * the player having to multiply pts × perPoint in their head.
+ *
+ * `total` is already the cumulative bonus (perPoint × pts). For multi
+ * stats like dmgMult / radiusMult, total is added to a base of 1.0 in
+ * the actual mods, but for display we want the *delta*, hence "+X%".
+ */
+function formatStat(stat, total) {
+  const pct = (n) => (n >= 0 ? '+' : '') + Math.round(n * 100) + '%';
+  switch (stat) {
+    case 'dmgMult':           return `${pct(total)} damage`;
+    case 'radiusMult':        return `${pct(total)} radius`;
+    case 'sizeMult':          return `${pct(total)} size`;
+    case 'durationMult':      return `${pct(total)} duration`;
+    case 'cdMult':            return `${pct(total)} cooldown`;
+    case 'attackRateMult':    return `${pct(total)} attack rate`;
+    case 'shieldMult':        return `${pct(total)} shield strength`;
+    case 'slowMult':          return `${pct(total)} slow strength`;
+    case 'critChance':        return `${pct(total)} crit chance`;
+    case 'critMult':          return `${pct(total)} crit damage`;
+    case 'pierceBonus':       return `+${Math.floor(total)} pierce`;
+    case 'chainBonus':        return `+${Math.floor(total)} chain`;
+    // Minion stats
+    case 'shareBonus':        return `${pct(total)} link share`;
+    case 'rangeMult':         return `${pct(total)} range`;
+    case 'hpBonus':           return `+${Math.round(total)} max HP`;
+    case 'boomMult':          return `${pct(total)} explosion damage`;
+    case 'healBonus':         return `+${Math.round(total)} HP / pulse`;
+    case 'pulseFaster':       return `−${total.toFixed(1)}s pulse`;
+    case 'auraStrengthBonus': return `${pct(total)} aura strength`;
+    case 'auraRangeMult':     return `${pct(total)} aura radius`;
+    default:                  return '';
+  }
+}
+
 const UI = {
   /*
    * UI — minimal overlay router for the new tier/level system.
    *
    *   init()                    — bind start-screen character pick
    *   showTierPicker(tier)      — overlay with 4 ability cards
+   *   showMinionPicker()        — overlay with 4 companion cards
    *   showLevelUp(ps)           — overlay with all owned ability panels
    *   showWaveBanner(n)         — transient wave banner
    *   showGameOver(stats)       — terminal screen with stats
@@ -8600,8 +8724,6 @@ const UI = {
     const cont = this.$('lu-choices');
     cont.innerHTML = '';
     this.$('lu-points').textContent = String(ps.unspentPoints || 0);
-    const lmp = this.$('lu-minion-points');
-    if (lmp) lmp.textContent = String(ps.unspentMinionPoints || 0);
     const ownedIds = [ps.tiers[1], ps.tiers[2], ps.tiers[3]].filter(Boolean);
     if (ownedIds.length === 0) {
       cont.innerHTML = '<div class="lu-empty">No abilities yet. Pick a tier first.</div>';
@@ -8629,12 +8751,19 @@ const UI = {
       for (let i = 0; i < ab.dumps.length; i++) {
         const dump = ab.dumps[i];
         const filled = pts.dumps[i] || 0;
+        const cur = filled * (dump.perPoint || 0);
+        const nxt = (filled + 1) * (dump.perPoint || 0);
+        const progress = (filled === 0)
+          ? `<span class="lu-dump-now">Currently: <b>—</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`
+          : (filled >= 5
+            ? `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
+            : `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`);
         const row = document.createElement('div');
         row.className = 'lu-dump-row';
         row.innerHTML = `
           <div class="lu-dump-name">${dump.name}</div>
           <div class="lu-dump-pips" data-dump-idx="${i}"></div>
-          <div class="lu-dump-desc">${dump.desc || ''}</div>
+          <div class="lu-dump-desc">${dump.desc || ''}<div class="lu-dump-progress">${progress}</div></div>
         `;
         const pips = row.querySelector('.lu-dump-pips');
         for (let j = 0; j < 5; j++) {
@@ -8706,7 +8835,7 @@ const UI = {
           <div class="lu-panel-head">
             <div class="lu-icon">${def.icon || '◇'}</div>
             <div class="lu-name">${def.name}</div>
-            <div class="lu-tag">COMPANION · <b style="font-family:'JetBrains Mono',monospace;color:var(--ink);">${ps.unspentMinionPoints || 0}</b> pts</div>
+            <div class="lu-tag">COMPANION</div>
           </div>
         `;
         const dumpsEl = document.createElement('div');
@@ -8714,18 +8843,25 @@ const UI = {
         for (let i = 0; i < def.dumps.length; i++) {
           const dump = def.dumps[i];
           const filled = mpts.dumps[i] || 0;
+          const cur = filled * (dump.perPoint || 0);
+          const nxt = (filled + 1) * (dump.perPoint || 0);
+          const progress = (filled === 0)
+            ? `<span class="lu-dump-now">Currently: <b>—</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`
+            : (filled >= 3
+              ? `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
+              : `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`);
           const row = document.createElement('div');
           row.className = 'lu-dump-row';
           row.innerHTML = `
             <div class="lu-dump-name">${dump.name}</div>
             <div class="lu-dump-pips" data-dump-idx="${i}"></div>
-            <div class="lu-dump-desc">${dump.desc || ''}</div>
+            <div class="lu-dump-desc">${dump.desc || ''}<div class="lu-dump-progress">${progress}</div></div>
           `;
           const pips = row.querySelector('.lu-dump-pips');
           for (let j = 0; j < 3; j++) {
             const pip = document.createElement('span');
             pip.className = 'lu-pip' + (j < filled ? ' filled' : '');
-            if (j === filled && (ps.unspentMinionPoints || 0) > 0 && filled < 3) {
+            if (j === filled && (ps.unspentPoints || 0) > 0 && filled < 3) {
               pip.classList.add('clickable');
               pip.addEventListener('click', () => {
                 this.game.investMinionPoint(i);

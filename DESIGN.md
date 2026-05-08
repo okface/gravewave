@@ -9,8 +9,8 @@
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
 3. Pick a **Companion** (1 of 4 minions). Stays with you the whole run.
 4. Fight wave 1.
-5. Wave clear → **+1 level → +1 unspent point**. Every 2 cleared waves
-   also award **+1 unspent companion point**.
+5. Wave clear → **+1 level → +1 unspent point** (single shared pool —
+   spend on abilities OR your companion).
 6. Levels **1 / 4 / 9** open a **tier picker** — pick 1 of 4 from the
    next tier. So by level 9 you have exactly **3 abilities**
    (one per tier).
@@ -172,8 +172,9 @@ Companion
 └── 2 specializations             (pick 1 once total invested ≥ 4)
 ```
 
-Companion points are **separate from ability points** — earned at
-**+1 per 2 cleared waves**, so by wave 10 you have ~5 companion points.
+Companion points come from the **same shared pool** as ability points.
+You can dump everything into the companion if you want a strong
+sidekick at the cost of slower spell scaling, or barely touch them.
 
 ### Wizard companions
 
