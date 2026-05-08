@@ -4012,6 +4012,7 @@ class Enemy {
      * and per-frame processing.
      */
     this.statuses = {};
+    this.spawnedAt = performance.now() / 1000; // for renderer spawn telegraph
   }
   /*
    * Apply (or refresh) a status. Stronger/longer values win — if you
@@ -6585,6 +6586,21 @@ const Renderer = {
 
     if (hasShake) ctx.restore();
 
+    // Game-over desaturation — dark grey wash that fades in over ~1.5s
+    if (game.state === 'gameover') {
+      if (this._gameOverFadeStart === undefined) this._gameOverFadeStart = performance.now();
+      const elapsed = (performance.now() - this._gameOverFadeStart) / 1000;
+      const fadeA = Math.min(0.72, elapsed / 1.5 * 0.72);
+      ctx.fillStyle = `rgba(20, 15, 10, ${fadeA})`;
+      ctx.fillRect(0, 0, w, h);
+      // Desaturate further with a neutral grey overlay (canvas doesn't have native desat)
+      const desat = Math.min(0.35, elapsed / 2.5 * 0.35);
+      ctx.fillStyle = `rgba(120, 110, 100, ${desat})`;
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      this._gameOverFadeStart = undefined;
+    }
+
     // Overlay: spawn-zone indicators (drawn LAST in the world layer so
     // they sit above flagstones but below HUD, and don't shake)
     this.drawSpawnZones(ctx, w, h, game.runElapsed, game);
@@ -6610,6 +6626,35 @@ const Renderer = {
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.r, 0, TAU);
       ctx.fill();
+    }
+
+    // Slow-drifting smog patches — two large translucent blobs moving apart
+    for (let s = 0; s < 3; s++) {
+      const sx = w * (0.2 + s * 0.3) + Math.sin(t * 0.07 + s * 2.1) * w * 0.12;
+      const sy = h * (0.3 + s * 0.2) + Math.cos(t * 0.05 + s * 1.4) * h * 0.10;
+      const sr = Math.min(w, h) * (0.30 + s * 0.08);
+      const smogA = 0.04 + 0.02 * Math.sin(t * 0.12 + s);
+      const smog = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+      smog.addColorStop(0,   `rgba(200, 185, 155, ${smogA})`);
+      smog.addColorStop(0.6, `rgba(180, 165, 130, ${smogA * 0.5})`);
+      smog.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = smog;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // Lantern flicker glows at the four corners
+    const corners = [[0,0],[w,0],[0,h],[w,h]];
+    for (let i = 0; i < corners.length; i++) {
+      const [lx, ly] = corners[i];
+      const flicker  = 0.55 + 0.45 * Math.sin(t * (3.1 + i * 0.8)) * Math.sin(t * (5.3 + i * 1.2));
+      const lanternA = 0.10 + 0.06 * flicker;
+      const lr = Math.min(w, h) * 0.28;
+      const lantern = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+      lantern.addColorStop(0,   `rgba(200, 140, 60, ${lanternA})`);
+      lantern.addColorStop(0.4, `rgba(180, 100, 40, ${lanternA * 0.4})`);
+      lantern.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = lantern;
+      ctx.fillRect(0, 0, w, h);
     }
 
     // Vellum vignette — warm sepia darkening at edges
@@ -7100,6 +7145,62 @@ const Renderer = {
   drawEnemies(ctx, enemies) {
     const tNow = performance.now() / 1000;
     for (const e of enemies) {
+      const ageS = tNow - (e.spawnedAt || tNow);
+
+      // Spawn dust flurry — first 0.45s of life
+      if (ageS < 0.45) {
+        const spawnProg = ageS / 0.45;
+        const DUST = e.boss ? 14 : 7;
+        for (let k = 0; k < DUST; k++) {
+          const hash   = (k * 13 + Math.floor((e.spawnedAt || 0) * 100) % 97) % 97;
+          const dAng   = (k / DUST) * TAU + hash * 0.3;
+          const dDist  = e.radius * (0.7 + 0.8 * spawnProg) * (0.6 + (hash % 40) / 40 * 0.8);
+          const dA     = Math.max(0, (1 - spawnProg * 1.6) * 0.65);
+          ctx.fillStyle = e.boss
+            ? `rgba(40, 20, 10, ${dA})`
+            : `rgba(100, 80, 50, ${dA * 0.85})`;
+          ctx.beginPath();
+          ctx.arc(e.x + Math.cos(dAng) * dDist, e.y + Math.sin(dAng) * dDist,
+            1.2 + (hash % 3), 0, TAU);
+          ctx.fill();
+        }
+        // Boss spawn: ground-crack lines expanding from spawn point
+        if (e.boss) {
+          const CRACKS = 8;
+          ctx.save();
+          for (let k = 0; k < CRACKS; k++) {
+            const cAng  = (k / CRACKS) * TAU + 0.2;
+            const cLen  = e.radius * (1.5 + spawnProg * 2.5);
+            const cA    = Math.max(0, (0.8 - spawnProg) * 0.90);
+            ctx.strokeStyle = `rgba(20, 10, 5, ${cA})`;
+            ctx.lineWidth   = 1.8 - spawnProg * 1.2;
+            ctx.beginPath();
+            ctx.moveTo(e.x, e.y);
+            const midX = e.x + Math.cos(cAng + 0.15) * cLen * 0.55;
+            const midY = e.y + Math.sin(cAng + 0.15) * cLen * 0.55;
+            ctx.lineTo(midX, midY);
+            ctx.lineTo(e.x + Math.cos(cAng) * cLen, e.y + Math.sin(cAng) * cLen);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+
+      // Boss dark mist trail — faint shadow wisps behind the boss as it moves
+      if (e.boss && e.pvx !== undefined) {
+        const speed = Math.sqrt(e.pvx * e.pvx + e.pvy * e.pvy);
+        if (speed > 20) {
+          const tx = e.x - (e.pvx / speed) * e.radius * 1.1;
+          const ty = e.y - (e.pvy / speed) * e.radius * 1.1;
+          const mistGrad = ctx.createRadialGradient(tx, ty, 0, tx, ty, e.radius * 1.2);
+          mistGrad.addColorStop(0,   'rgba(20, 10, 5, 0.18)');
+          mistGrad.addColorStop(0.5, 'rgba(30, 15, 8, 0.08)');
+          mistGrad.addColorStop(1,   'rgba(0,0,0,0)');
+          ctx.fillStyle = mistGrad;
+          ctx.beginPath(); ctx.arc(tx, ty, e.radius * 1.2, 0, TAU); ctx.fill();
+        }
+      }
+
       // Each shape draws its own silhouette + shadow + hatching at world
       // coordinates so motion micro-animations (drift/recoil/breathe) can
       // be specific to the shape.
