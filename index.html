@@ -6570,7 +6570,7 @@ const Renderer = {
     this.drawMeteors(ctx, game.meteors, game.runElapsed);
     this.drawWormholes(ctx, game.wormholes, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
-    this.drawWells(ctx, game.wells);
+    this.drawWells(ctx, game.wells, game.player);
     this.drawAura(ctx, game.player, game.auraPulse, game);
     this.drawEnemies(ctx, game.enemies);
     this.drawProjectiles(ctx, game.projectiles);
@@ -7687,6 +7687,37 @@ const Renderer = {
           ctx.lineTo(p.trailPts[i].x, p.trailPts[i].y);
           ctx.stroke();
         }
+        // Fire trail: hot inner core + ember particles drifting up from trail
+        if (isFire && p.trailPts.length > 2) {
+          // Bright orange inner core along the last 40% of trail
+          const startIdx = Math.floor(p.trailPts.length * 0.6);
+          for (let i = startIdx + 1; i < p.trailPts.length; i++) {
+            const a = (i - startIdx) / (p.trailPts.length - startIdx);
+            ctx.strokeStyle = `rgba(255,${Math.round(160 + a * 70)},40,${a * 0.70})`;
+            ctx.lineWidth = p.radius * 0.55 * a;
+            ctx.beginPath();
+            ctx.moveTo(p.trailPts[i - 1].x, p.trailPts[i - 1].y);
+            ctx.lineTo(p.trailPts[i].x, p.trailPts[i].y);
+            ctx.stroke();
+          }
+          // Ember particles: deterministic floaters at each trail point
+          for (let i = 0; i < p.trailPts.length; i++) {
+            const tp = p.trailPts[i];
+            const age = tp.t || 0;
+            // 2-3 embers per point using index hash
+            for (let e = 0; e < 2; e++) {
+              const hash = (i * 7 + e * 31) % 97;
+              const drift  = (hash / 97 - 0.5) * 14;
+              const rise   = age * (20 + (hash % 5) * 8);
+              const eA     = Math.max(0, (1 - age / 0.5) * 0.65 * (i / p.trailPts.length));
+              if (eA < 0.05) continue;
+              ctx.fillStyle = `rgba(255,${150 + (hash % 80)},30,${eA})`;
+              ctx.beginPath();
+              ctx.arc(tp.x + drift, tp.y - rise, 1.2 + (hash % 3) * 0.5, 0, TAU);
+              ctx.fill();
+            }
+          }
+        }
       }
 
       ctx.save();
@@ -7855,7 +7886,7 @@ const Renderer = {
     }
   },
 
-  drawWells(ctx, wells) {
+  drawWells(ctx, wells, player) {
     const tNow = performance.now() / 1000;
     for (const w of wells) {
       const lifeT = 1 - w.t / w.life;
@@ -7975,6 +8006,33 @@ const Renderer = {
         ctx.beginPath();
         ctx.arc(cx, cy, Math.max(8, r * 0.11), 0, TAU);
         ctx.stroke();
+
+        // Gravital Anomaly extras: connection thread + pop on expire
+        if (w.spell === 'gravital_anomaly' && player) {
+          // Faint tether line from well to player
+          const threadA = 0.28 * lifeT;
+          ctx.save();
+          ctx.strokeStyle = `rgba(100, 70, 200, ${threadA})`;
+          ctx.lineWidth = 1.0;
+          ctx.setLineDash([2, 6]);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(player.x, player.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+          // "Pop" flash as life nears 0 (last 0.4s)
+          if (w.t > w.life - 0.4) {
+            const popT = 1 - (w.life - w.t) / 0.4;
+            ctx.save();
+            ctx.strokeStyle = `rgba(160, 120, 255, ${(1 - popT) * 0.85})`;
+            ctx.lineWidth   = 2.5 - popT * 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * (0.3 + popT * 1.1), 0, TAU);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
       }
     }
   },
