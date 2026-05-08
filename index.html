@@ -4079,6 +4079,8 @@ class Enemy {
       resistMult < 0.95 ? 'resist' :
       resistMult > 1.10 ? 'vuln' :
       null;
+    if (resistMult < 0.95) this.resistShimmer = 0.28;
+    if (resistMult > 1.10) this.vulnShimmer   = 0.22;
     // Track the damage type that scored the killing blow so the
     // affinity system can credit it. Updated every hit; on death,
     // tickEnemies reads this to bump playerState.affinity.
@@ -5785,8 +5787,10 @@ class Game {
         this.spawnHitParticles(e.x, e.y, explosionColor, e.boss ? 18 : 8);
         this.addShake(e.boss ? 0.32 : 0.14);
       }
-      if (e.flash > 0) e.flash -= dt;
-      if (e.shock > 0) e.shock -= dt;
+      if (e.flash > 0)         e.flash         -= dt;
+      if (e.shock > 0)         e.shock         -= dt;
+      if (e.resistShimmer > 0) e.resistShimmer -= dt;
+      if (e.vulnShimmer > 0)   e.vulnShimmer   -= dt;
     }
   }
 
@@ -7206,6 +7210,30 @@ const Renderer = {
       // be specific to the shape.
       const state = e.flash > 0 ? 'hit' : 'walk';
       this.drawEnemyShape(ctx, e, tNow, state);
+
+      // Resist shimmer — pearlescent iridescent overlay
+      if (e.resistShimmer > 0) {
+        const prog = 1 - e.resistShimmer / 0.28;
+        const sA   = (1 - prog) * 0.55;
+        ctx.save();
+        const sg = ctx.createRadialGradient(e.x, e.y - e.radius * 0.2, 1, e.x, e.y, e.radius * 1.1);
+        sg.addColorStop(0,   `rgba(220, 240, 255, ${sA * 0.95})`);
+        sg.addColorStop(0.4, `rgba(180, 210, 235, ${sA * 0.70})`);
+        sg.addColorStop(0.8, `rgba(140, 180, 220, ${sA * 0.35})`);
+        sg.addColorStop(1,   'rgba(100,150,200,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 1.1, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      // Vuln overlay — subtle red wash
+      if (e.vulnShimmer > 0) {
+        const prog = 1 - e.vulnShimmer / 0.22;
+        const vA   = (1 - prog) * 0.38;
+        ctx.save();
+        ctx.fillStyle = `rgba(200, 40, 20, ${vA})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 1.05, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
 
       // Hit impact splash — replaces the flat white-flash.
       if (e.flash > 0) {
