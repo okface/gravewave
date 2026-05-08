@@ -4428,6 +4428,7 @@ class WaveManager {
     if (this.game.activeSpells) {
       for (const s of this.game.activeSpells) s.castThisWave = false;
     }
+    this.game.waveStartT = this.game.runElapsed; // renderer uses for chevron pulse boost
     Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
   }
 
@@ -6678,7 +6679,10 @@ const Renderer = {
   drawSpawnZones(ctx, w, h, t, game) {
     const useVertical = h >= w;
     const depth = 70;
-    const pulse = (Math.sin(t * 1.6) + 1) * 0.5;
+    // Pulse ramps up in the first 2s of each wave, then settles to normal
+    const waveAge = game.waveStartT !== undefined ? t - game.waveStartT : 99;
+    const waveBoost = Math.max(0, 1 - waveAge / 2.0) * 0.55;
+    const pulse = (Math.sin(t * (1.6 + waveBoost * 3)) + 1) * 0.5 * (1 + waveBoost);
 
     // Vermilion wash → transparent paper, with a dashed threshold line and
     // pulsing ink chevrons. Reads as a "stained edge" on the manuscript.
