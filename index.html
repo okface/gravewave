@@ -2686,12 +2686,17 @@ const SPELLS = {
         life    = 1.9;
       }
 
+      // Fracture spec damage scales with the player's investment in damage.
+      const fract = b.fractureExpire ? {
+        dmg:    b.fractureExpire.dmg    * mods.dmgMult,
+        radius: b.fractureExpire.radius * (mods.radiusMult || 1),
+      } : null;
       game.spawnGravityWell({
         x: target.x, y: target.y,
         radius, pull, dps, life,
         spell: 'gravity_bolt',
         applyStatus: mods.applyStatus,       // Glacial Pull etc. propagate via well damage
-        fractureExpire: b.fractureExpire,    // Black Hole "Fracture" spec
+        fractureExpire: fract,                // Black Hole "Fracture" spec
       });
 
       // Visual hit when the well lands — gives Gravity Bolt a real "thump"
@@ -3127,17 +3132,21 @@ const ABILITIES = {
       game.snowForts = game.snowForts || [];
       // Only one real fort at a time (permafrost patches are flagged _permafrostPatch)
       if (game.snowForts.some(f => !f._permafrostPatch)) return;
+      const beh        = mods.behavior || {};
       const radius     = 110 * (mods.radiusMult || 1);
       const dps        = 12  * (mods.dmgMult || 1);
       const shieldHp   = Math.round(120 * (mods.dmgMult || 1));
       const slowFactor = Math.max(0.20, 0.50 / (mods.slowMult || 1));
       const rechargeTime = 8 / (mods.durationMult || 1);
+      // Avalanche spec scales its on-expire detonation with damage investment.
+      const spec = { ...beh };
+      if (spec.avalancheExpire) spec.avalancheExpire = beh.avalancheExpire * (mods.dmgMult || 1);
       game.snowForts.push(new SnowFort({
         x: caster.x, y: caster.y,
         radius, life: 999, dps,
         shieldHp, shieldMaxHp: shieldHp,
         rechargeTime, slowFactor, slowDuration: 1.2, reduction: 0,
-        spec: mods.behavior || {},
+        spec,
       }));
       game.spawnExplosion(caster.x, caster.y, radius * 0.6, '#bce8ff', 'frost');
       game.addShake(0.08);
@@ -3174,12 +3183,20 @@ const ABILITIES = {
       // Base: 2 block charges. +1 from Aegis spec. Shield reads as a real wall.
       const beh = mods.behavior || {};
       const blockCharges = Math.floor(2 * mods.shieldMult) + (beh.extraBlock || 0);
+      // Phoenix spec scales its on-expire detonation with damage investment.
+      const specCfg = { ...beh };
+      if (specCfg.phoenixExpire) {
+        specCfg.phoenixExpire = {
+          dmg:    beh.phoenixExpire.dmg    * mods.dmgMult,
+          radius: beh.phoenixExpire.radius * (mods.radiusMult || 1),
+        };
+      }
       game.fireShields = game.fireShields || [];
       // Replace any existing shield (single-instance defensive)
       game.fireShields.length = 0;
       game.fireShields.push(new FireShield({
         caster, orbCount, dps, radius, life,
-        blockCharges, spec: mods.behavior || {},
+        blockCharges, spec: specCfg,
       }));
       caster._shieldCharges = blockCharges;
       caster._shieldChargesMax = blockCharges;
@@ -3222,6 +3239,11 @@ const ABILITIES = {
       const count   = beh.singularityStorm ? 1 : 3;
       const radius  = beh.singularityStorm ? baseRadius * 2.0 : baseRadius;
       const dps     = beh.singularityStorm ? baseDps * 1.4 : baseDps;
+      // Black Pulse damage scales with the player's investment.
+      const blackPulse = beh.blackPulse ? {
+        dmg: beh.blackPulse.dmg * mods.dmgMult,
+        interval: beh.blackPulse.interval,
+      } : null;
       for (let i = 0; i < count; i++) {
         const ang = (i / count) * TAU + Math.random() * 0.4;
         const dist = beh.singularityStorm ? 0 : (90 + Math.random() * 60);
@@ -3230,9 +3252,7 @@ const ABILITIES = {
         game.spawnGravityWell({
           x, y, radius, pull, dps, life,
           spell: 'gravital_anomaly',
-          // Black Pulse: periodic shockwaves out of each well.
-          blackPulse: beh.blackPulse,
-          // Wandering: well drifts toward dense enemy clusters.
+          blackPulse,
           wandering: !!beh.wandering,
         });
       }
@@ -3431,14 +3451,18 @@ const ABILITIES = {
     damageType: 'elemental',
     cooldown: 18.0, damage: 30, damageNote: 'dps', radius: 260, duration: 8,
     cast(game, caster, mods) {
+      const beh = mods.behavior || {};
       const radius = 260 * mods.radiusMult;
       const life = 8 * mods.durationMult;
       const dps = 30 * mods.dmgMult;
+      // Avalanche spec scales its on-expire burst with damage investment.
+      const spec = { ...beh };
+      if (spec.avalancheFinal) spec.avalancheFinal = beh.avalancheFinal * mods.dmgMult;
       game.snowStorms = game.snowStorms || [];
       game.snowStorms.push(new SnowStorm({
         x: caster.x, y: caster.y, radius, life, dps,
         slowFactor: 0.55, slowDuration: 1.5,
-        spec: mods.behavior || {},
+        spec,
       }));
       game.addShake(0.20);
     },
@@ -5099,7 +5123,10 @@ class Game {
   tickSnowForts(dt) {
     if (!this.snowForts) return;
     // Clear per-frame player fort reference; will be set below if a live fort exists.
-    if (this.player) this.player._snowFort = null;
+    if (this.player) {
+      this.player._snowFort = null;
+      this.player._fortCritBonus = 0;
+    }
     for (let i = this.snowForts.length - 1; i >= 0; i--) {
       const f = this.snowForts[i];
       f.t += dt;
@@ -5770,6 +5797,9 @@ class Game {
         // Drummer Vigor aura — flat % damage bonus to every cast.
         const vigor = this.player?._drummerAura?.vigor || 0;
         if (vigor > 0) mods.dmgMult *= (1 + vigor);
+        // Snow Fort Crystalline spec — bonus crit while fort is alive.
+        const fortCrit = this.player?._fortCritBonus || 0;
+        if (fortCrit > 0) mods.critChance = Math.min(1, (mods.critChance || 0) + fortCrit);
         ab.cast(this, this.player, mods);
         this.player.castFlash = 0.2;
       }
@@ -6251,17 +6281,20 @@ class Game {
         c.radius = (c.baseRadius || c.radius) * (1 + prog);
       }
       // Lightning Pulse — every interval seconds, hit every enemy under
-      // the cloud with a chain-style zap.
+      // the cloud with a chain-style zap. Damage scales with cloud's
+      // damage investment so it stays relevant late game.
       if (c.spec?.lightningPulse) {
         c._pulseAcc = (c._pulseAcc || 0) + dt;
         const lp = c.spec.lightningPulse;
         if (c._pulseAcc >= (lp.interval || 5)) {
           c._pulseAcc = 0;
+          // c.damage is already mods-scaled (set in cast); use ratio.
+          const baseDmg = (lp.damage || 60) * (c.damage / 14);
           for (const e of this.enemies) {
             if (!e.alive) continue;
             const dx = e.x - c.x, dy = e.y - c.y;
             if (dx*dx + dy*dy < c.radius * c.radius) {
-              const a = e.takeDamage(lp.damage || 60, { spell: 'storm_cloud' });
+              const a = e.takeDamage(baseDmg, { spell: 'storm_cloud' });
               this.totalDamageDealt += a;
               this.lightnings.push({
                 from: { x: c.x, y: c.y },
@@ -8378,30 +8411,7 @@ const Renderer = {
     }
   },
 
-  drawAura(ctx, player, pulse, game) {
-    if (!player) return;
-    const hasField = game.playerState?.spells?.includes('static_field');
-    if (!hasField) return;
-    const mods = computeSpellMods(game.playerState, 'static_field');
-    const r = 110 * (mods.radiusMult || 1);
-    const intensity = pulse > 0 ? (pulse / 0.25) : 0.35;
-    // Indigo wash + dashed gold crackle ring (paper-friendly)
-    const g = ctx.createRadialGradient(player.x, player.y, r * 0.4, player.x, player.y, r);
-    g.addColorStop(0, 'rgba(44,74,140,0)');
-    g.addColorStop(0.7, `rgba(44,74,140,${0.05 + 0.10 * intensity})`);
-    g.addColorStop(1, 'rgba(44,74,140,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, r, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(200,148,26,${0.2 + 0.6 * intensity})`;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([6, 8]);
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, r, 0, TAU);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  },
+  drawAura() { /* removed: was tied to deleted static_field spell */ },
 
   drawLightnings(ctx, lights) {
     for (const l of lights) {
