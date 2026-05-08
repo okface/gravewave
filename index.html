@@ -2669,7 +2669,7 @@ const SPELLS = {
       // Base small well. Annihilation keystone makes it punchy and brief.
       // Collapse keystone makes it slow and wide.
       let radius = 80 * (mods.radiusMult || 1);
-      let dps = 28 * mods.dmgMult;          // higher dps than gravity_well, shorter life
+      let dps = 36 * mods.dmgMult;          // higher dps than gravity_well, shorter life
       let life = 1.4;
       let pull = 220;
 
@@ -2715,7 +2715,7 @@ const SPELLS = {
       const target = game.findNearestEnemy(caster);
       if (!target) return;
       const b = mods.behavior || {};
-      const baseDmg = 16 * mods.dmgMult;
+      const baseDmg = 22 * mods.dmgMult;
       // Pinpoint keystone: no chain, just the primary hit at full power
       const chainCount = b.noChain ? 0 : (1 + (mods.chainBonus || 0));
       game.spawnChainLightning({
@@ -2780,8 +2780,8 @@ const SPELLS = {
       if (!target) return;
       const dir = Vec.norm(Vec.sub(target, caster));
       const b = mods.behavior || {};
-      const baseDmg = 18 * mods.dmgMult;
-      const splashDmg = 11 * mods.dmgMult;
+      const baseDmg = 24 * mods.dmgMult;
+      const splashDmg = 14 * mods.dmgMult;
       const radius = 80 * (mods.radiusMult || 1);
       // Speed bumped to 340 (was 280) and life to 3.0s (was 2.0s) so the
       // projectile can cross the full phone-shaped world from center to
@@ -2881,7 +2881,7 @@ const SPELLS = {
       if (!target) return;
       const dir = Vec.norm(Vec.sub(target, caster));
       const b = mods.behavior || {};
-      const baseDmg = 12 * mods.dmgMult;
+      const baseDmg = 16 * mods.dmgMult;
       const pierce = 2 + (mods.pierceBonus || 0);
       const baseSlow = { slow: { duration: 1.5, factor: 0.65 } };
       const statusToApply = mods.applyStatus || baseSlow;
@@ -2975,14 +2975,14 @@ const ABILITIES = {
   fireball: {
     id: 'fireball', name: 'Fireball', tier: 1, classId: 'wizard',
     icon: '🔥', tag: 'attack', color: '#ff7733',
-    description: 'Lobbed flame that explodes on impact. 18 direct + 11 splash dmg.',
+    description: 'Lobbed flame that explodes on impact. 24 direct + 14 splash dmg.',
     damageType: 'elemental',
-    cooldown: 1.5, damage: 18, radius: 80,
+    cooldown: 1.5, damage: 24, radius: 80,
     cast: (game, caster, mods) => SPELLS.fireball.cast(game, caster, mods),
     dumps: [
-      { id: 'heat',    name: 'Heat',       desc: '+8% Fireball damage per point.', stat: 'dmgMult',    perPoint: 0.08 },
-      { id: 'spread',  name: 'Spread',     desc: '+6% blast radius per point.',    stat: 'radiusMult', perPoint: 0.06 },
-      { id: 'quick',   name: 'Quick Cast', desc: '−4% cooldown per point.',        stat: 'cdMult',     perPoint: -0.04 },
+      { id: 'heat',    name: 'Heat',       desc: '+12% Fireball damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'spread',  name: 'Spread',     desc: '+8% blast radius per point.',     stat: 'radiusMult', perPoint: 0.08 },
+      { id: 'quick',   name: 'Quick Cast', desc: '−5% cooldown per point.',         stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
       { id: 'ignite',  name: 'Ignite',
@@ -3001,14 +3001,14 @@ const ABILITIES = {
   chain_lightning: {
     id: 'chain_lightning', name: 'Chain Lightning', tier: 1, classId: 'wizard',
     icon: '⚡', tag: 'attack', color: '#5ae5ff',
-    description: 'Instant 16 dmg strike on nearest enemy, arcs to 1 nearby at 70% dmg.',
+    description: 'Instant 22 dmg strike on nearest enemy, arcs to 1 nearby at 70% dmg.',
     damageType: 'elemental',
-    cooldown: 0.9, damage: 16,
+    cooldown: 0.9, damage: 22,
     cast: (game, caster, mods) => SPELLS.lightning_bolt.cast(game, caster, mods),
     dumps: [
-      { id: 'voltage',  name: 'Voltage',  desc: '+8% damage per point.',     stat: 'dmgMult',    perPoint: 0.08 },
-      { id: 'forking',  name: 'Forking',  desc: '+1 chain target per 2 points (max +2).', stat: 'chainBonus', perPoint: 0.5 },
-      { id: 'quick',    name: 'Quickdraw', desc: '−4% cooldown per point.',  stat: 'cdMult',     perPoint: -0.04 },
+      { id: 'voltage',  name: 'Voltage',  desc: '+12% damage per point.',                  stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'forking',  name: 'Forking',  desc: '+1 chain target per point (max +5).',     stat: 'chainBonus', perPoint: 1.0 },
+      { id: 'quick',    name: 'Quickdraw', desc: '−5% cooldown per point.',                stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
       { id: 'pinpoint', name: 'Pinpoint',
@@ -3026,14 +3026,14 @@ const ABILITIES = {
   black_hole: {
     id: 'black_hole', name: 'Black Hole', tier: 1, classId: 'wizard',
     icon: '◉', tag: 'attack', color: '#a07cff',
-    description: 'Singularity at densest cluster. 28 dps pull for 1.4s.',
+    description: 'Singularity at densest cluster. 36 dps pull for 1.4s.',
     damageType: 'arcane',
-    cooldown: 1.7, damage: 28, damageNote: 'dps', radius: 80, duration: 1.4,
+    cooldown: 1.7, damage: 36, damageNote: 'dps', radius: 80, duration: 1.4,
     cast: (game, caster, mods) => SPELLS.gravity_bolt.cast(game, caster, mods),
     dumps: [
-      { id: 'crush',  name: 'Crushing Force', desc: '+8% damage per point.',  stat: 'dmgMult',    perPoint: 0.08 },
-      { id: 'wider',  name: 'Wider Pull',     desc: '+5% radius per point.',  stat: 'radiusMult', perPoint: 0.05 },
-      { id: 'cycle',  name: 'Quick Collapse', desc: '−4% cooldown per point.', stat: 'cdMult',    perPoint: -0.04 },
+      { id: 'crush',  name: 'Crushing Force', desc: '+12% damage per point.',  stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'wider',  name: 'Wider Pull',     desc: '+8% radius per point.',   stat: 'radiusMult', perPoint: 0.08 },
+      { id: 'cycle',  name: 'Quick Collapse', desc: '−5% cooldown per point.', stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
       { id: 'annihilation', name: 'Annihilation',
@@ -3051,14 +3051,14 @@ const ABILITIES = {
   frost_bolt: {
     id: 'frost_bolt', name: 'Frost Bolt', tier: 1, classId: 'wizard',
     icon: '❄', tag: 'attack', color: '#9af0e6',
-    description: 'Piercing projectile. 12 dmg per hit, slows, pierces 2 targets.',
+    description: 'Piercing projectile. 16 dmg per hit, slows, pierces 2 targets.',
     damageType: 'elemental',
-    cooldown: 1.0, damage: 12,
+    cooldown: 1.0, damage: 16,
     cast: (game, caster, mods) => SPELLS.frost_spike.cast(game, caster, mods),
     dumps: [
-      { id: 'cold',   name: 'Cold Bite',  desc: '+8% damage per point.',  stat: 'dmgMult',    perPoint: 0.08 },
-      { id: 'pierce', name: 'Multi-Spike', desc: '+1 pierce per 2 points (max +2).', stat: 'pierceBonus', perPoint: 0.5 },
-      { id: 'quick',  name: 'Quick Cast', desc: '−4% cooldown per point.', stat: 'cdMult',     perPoint: -0.04 },
+      { id: 'cold',   name: 'Cold Bite',  desc: '+12% damage per point.',              stat: 'dmgMult',     perPoint: 0.12 },
+      { id: 'pierce', name: 'Multi-Spike', desc: '+1 pierce per point (max +5).',      stat: 'pierceBonus', perPoint: 1.0 },
+      { id: 'quick',  name: 'Quick Cast', desc: '−5% cooldown per point.',             stat: 'cdMult',      perPoint: -0.05 },
     ],
     specs: [
       { id: 'glacial',  name: 'Glacial',
@@ -3189,9 +3189,9 @@ const ABILITIES = {
       game.addShake(0.08);
     },
     dumps: [
-      { id: 'mass',     name: 'Mass',      desc: '+10% well damage per point.', stat: 'dmgMult',     perPoint: 0.10 },
-      { id: 'gravity',  name: 'Gravity',   desc: '+8% well radius per point.', stat: 'radiusMult',   perPoint: 0.08 },
-      { id: 'lasting',  name: 'Lasting',   desc: '+10% duration per point.',   stat: 'durationMult', perPoint: 0.10 },
+      { id: 'mass',     name: 'Mass',      desc: '+13% well damage per point.', stat: 'dmgMult',     perPoint: 0.13 },
+      { id: 'gravity',  name: 'Gravity',   desc: '+10% well radius per point.', stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'lasting',  name: 'Lasting',   desc: '+12% duration per point.',    stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'singularity_storm', name: 'Singularity Storm',
@@ -3228,9 +3228,9 @@ const ABILITIES = {
       }));
     },
     dumps: [
-      { id: 'voltage',   name: 'Voltage',   desc: '+10% tower damage per point.', stat: 'dmgMult',        perPoint: 0.10 },
-      { id: 'reach',     name: 'Reach',     desc: '+8% range per point.',         stat: 'radiusMult',     perPoint: 0.08 },
-      { id: 'tempo',     name: 'Tempo',     desc: '+10% attack rate per point.',  stat: 'attackRateMult', perPoint: 0.10 },
+      { id: 'voltage',   name: 'Voltage',   desc: '+13% tower damage per point.', stat: 'dmgMult',        perPoint: 0.13 },
+      { id: 'reach',     name: 'Reach',     desc: '+10% range per point.',        stat: 'radiusMult',     perPoint: 0.10 },
+      { id: 'tempo',     name: 'Tempo',     desc: '+12% attack rate per point.',  stat: 'attackRateMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'tesla',     name: 'Tesla',
@@ -3256,9 +3256,9 @@ const ABILITIES = {
     cooldown: 14.0, damage: 14, damageNote: '/strike', radius: 100, duration: 5.5,
     cast: (game, caster, mods) => SPELLS.storm_cloud.cast(game, caster, mods),
     dumps: [
-      { id: 'voltage',  name: 'Voltage',   desc: '+8% strike damage per point.', stat: 'dmgMult',     perPoint: 0.08 },
-      { id: 'wider',    name: 'Stormfront', desc: '+8% radius per point.',       stat: 'radiusMult',  perPoint: 0.08 },
-      { id: 'longer',   name: 'Lingering', desc: '+10% duration per point.',    stat: 'durationMult', perPoint: 0.10 },
+      { id: 'voltage',  name: 'Voltage',   desc: '+14% strike damage per point.', stat: 'dmgMult',     perPoint: 0.14 },
+      { id: 'wider',    name: 'Stormfront', desc: '+10% radius per point.',       stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'longer',   name: 'Lingering', desc: '+12% duration per point.',     stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'hurricane', name: 'Hurricane',
@@ -3292,9 +3292,9 @@ const ABILITIES = {
       }));
     },
     dumps: [
-      { id: 'damage',  name: 'Spatial Tear', desc: '+10% damage per point.', stat: 'dmgMult',     perPoint: 0.10 },
-      { id: 'mouth',   name: 'Wider Mouth',  desc: '+8% radius per point.', stat: 'radiusMult',   perPoint: 0.08 },
-      { id: 'longer',  name: 'Stable Tear',  desc: '+10% duration per point.', stat: 'durationMult', perPoint: 0.10 },
+      { id: 'damage',  name: 'Spatial Tear', desc: '+14% damage per point.',    stat: 'dmgMult',     perPoint: 0.14 },
+      { id: 'mouth',   name: 'Wider Mouth',  desc: '+10% radius per point.',    stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'longer',  name: 'Stable Tear',  desc: '+12% duration per point.',  stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'singularity', name: 'Singularity',
@@ -3334,9 +3334,9 @@ const ABILITIES = {
       });
     },
     dumps: [
-      { id: 'mass',    name: 'Mass',     desc: '+10% damage per point.', stat: 'dmgMult',     perPoint: 0.10 },
-      { id: 'crater',  name: 'Crater',   desc: '+6% radius per point.', stat: 'radiusMult',   perPoint: 0.06 },
-      { id: 'cycle',   name: 'Cycle',    desc: '−5% cooldown per point.', stat: 'cdMult',     perPoint: -0.05 },
+      { id: 'mass',    name: 'Mass',     desc: '+16% damage per point.',  stat: 'dmgMult',     perPoint: 0.16 },
+      { id: 'crater',  name: 'Crater',   desc: '+10% radius per point.',  stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'cycle',   name: 'Cycle',    desc: '−6% cooldown per point.', stat: 'cdMult',      perPoint: -0.06 },
     ],
     specs: [
       { id: 'cosmic_storm', name: 'Cosmic Storm',
@@ -3370,9 +3370,9 @@ const ABILITIES = {
       game.addShake(0.20);
     },
     dumps: [
-      { id: 'cold',    name: 'Cold Front', desc: '+8% damage per point.',     stat: 'dmgMult',      perPoint: 0.08 },
-      { id: 'wider',   name: 'Wider',      desc: '+5% radius per point.',     stat: 'radiusMult',   perPoint: 0.05 },
-      { id: 'longer',  name: 'Lingering',  desc: '+10% duration per point.',  stat: 'durationMult', perPoint: 0.10 },
+      { id: 'cold',    name: 'Cold Front', desc: '+13% damage per point.',    stat: 'dmgMult',      perPoint: 0.13 },
+      { id: 'wider',   name: 'Wider',      desc: '+8% radius per point.',     stat: 'radiusMult',   perPoint: 0.08 },
+      { id: 'longer',  name: 'Lingering',  desc: '+12% duration per point.',  stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'ice_age',     name: 'Ice Age',
@@ -3617,9 +3617,9 @@ const MINIONS = {
     description: 'Threads 3 nearby enemies together. Damage bleeds to all linked at 20% share. Range 240px. Relinks every 1.5s.',
     flavor: 'utility · damage redirection',
     dumps: [
-      { id: 'share',  name: 'Bleedover', desc: '+8% link damage share per point (base 20%).', stat: 'shareBonus',     perPoint: 0.08 },
-      { id: 'reach',  name: 'Reach',     desc: '+18% link range per point (base 240px).',     stat: 'rangeMult',      perPoint: 0.18 },
-      { id: 'count',  name: 'Web',       desc: '+1 max linked enemies per 2 points (base 3).', stat: 'linkCountBonus', perPoint: 0.5  },
+      { id: 'share',  name: 'Bleedover', desc: '+15% link damage share per point (base 20%).', stat: 'shareBonus',     perPoint: 0.15 },
+      { id: 'reach',  name: 'Reach',     desc: '+25% link range per point (base 240px).',      stat: 'rangeMult',      perPoint: 0.25 },
+      { id: 'count',  name: 'Web',       desc: '+1 linked enemy per point (base 3, max +3).',  stat: 'linkCountBonus', perPoint: 1.0 },
     ],
     specs: [
       { id: 'echo',     name: 'Echo',     desc: 'Linked enemies slow for 0.7s when struck.',
@@ -3668,11 +3668,11 @@ const MINIONS = {
   mender: {
     id: 'mender', name: 'Mender Wisp', icon: '✚',
     color: '#9af0c8',
-    description: 'Hovers at your shoulder and heals you. 12 HP every 4s. Resurgence spec saves you from death once per run.',
+    description: 'Hovers at your shoulder and heals you. 6 HP every 5s. Resurgence spec saves you from death once per run.',
     flavor: 'utility · healing',
     dumps: [
-      { id: 'flow',  name: 'Healing Flow', desc: '+5 HP healed per pulse per point.', stat: 'healBonus', perPoint: 5 },
-      { id: 'tempo', name: 'Tempo',        desc: '−0.6s between pulses per point (min 1.4s).', stat: 'pulseFaster', perPoint: 0.6 },
+      { id: 'flow',  name: 'Healing Flow', desc: '+3 HP healed per pulse per point.', stat: 'healBonus', perPoint: 3 },
+      { id: 'tempo', name: 'Tempo',        desc: '−0.5s between pulses per point (min 2.0s).', stat: 'pulseFaster', perPoint: 0.5 },
     ],
     specs: [
       { id: 'cleanse',   name: 'Cleansing Pulse',
@@ -3697,8 +3697,8 @@ const MINIONS = {
     description: 'Cycles auras every 2s: Vigor (+15% dmg), Ward (−15% dmg taken), Haste (−15% cd). Aura applies to you in range.',
     flavor: 'utility · cycling auras',
     dumps: [
-      { id: 'might', name: 'Might',  desc: '+3% aura strength per point.',     stat: 'auraStrengthBonus', perPoint: 0.03 },
-      { id: 'reach', name: 'Reach',  desc: '+15% aura radius per point.',      stat: 'auraRangeMult',     perPoint: 0.15 },
+      { id: 'might', name: 'Might',  desc: '+5% aura strength per point.',     stat: 'auraStrengthBonus', perPoint: 0.05 },
+      { id: 'reach', name: 'Reach',  desc: '+20% aura radius per point.',      stat: 'auraRangeMult',     perPoint: 0.20 },
     ],
     specs: [
       { id: 'triple_time', name: 'Triple Time',
@@ -5533,12 +5533,12 @@ class Game {
     m.x += (tx - m.x) * Math.min(1, dt * 4);
     m.y += (ty - m.y) * Math.min(1, dt * 4);
     const beh = mods.behavior || {};
-    // Tempo: each pulseFaster point shaves 0.6s off the 4s base; min 1.4s.
-    const pulseIv = Math.max(1.4, 4.0 - mods.pulseFaster);
+    // Tempo: each pulseFaster point shaves 0.5s off the 5s base; min 2.0s.
+    const pulseIv = Math.max(2.0, 5.0 - mods.pulseFaster);
     m.pulseAcc += dt;
     if (m.pulseAcc < pulseIv) return;
     m.pulseAcc = 0;
-    const heal = 12 + mods.healBonus;
+    const heal = 6 + mods.healBonus;
     if (this.player.hp < this.player.maxHp) {
       this.healPlayer(heal);
       this.spawnDamageNumber(this.player.x, this.player.y - 30, '+' + heal, false, { verdict: 'heal' });
