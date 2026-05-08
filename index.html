@@ -251,6 +251,11 @@
     position: relative;
     overflow: hidden;
     box-shadow: 0 3px 0 rgba(29, 21, 12, 0.18), 0 8px 18px rgba(0,0,0,0.18);
+    animation: cardEnter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes cardEnter {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   .card::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0;
@@ -614,7 +619,7 @@
     text-align: center;
   }
   #wave-banner.show {
-    animation: bannerShow 2.4s ease-out forwards;
+    animation: bannerShow 2.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
   /* Wave banner — a chiseled woodcut numeral; the canvas painted scene
      shows through behind it (overlay shroud is paper, but for in-flight
@@ -641,10 +646,11 @@
   }
 
   @keyframes bannerShow {
-    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
-    20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    80% { opacity: 1; }
-    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
+    0%   { opacity: 0; transform: translate(-50%, calc(-50% - 18px)) scale(0.88); }
+    14%  { opacity: 1; transform: translate(-50%, calc(-50% + 4px))  scale(1.04); }
+    22%  { opacity: 1; transform: translate(-50%, -50%)              scale(1.00); }
+    75%  { opacity: 1; transform: translate(-50%, -50%)              scale(1.00); }
+    100% { opacity: 0; transform: translate(-50%, calc(-50% + 8px))  scale(1.06); }
   }
 
   /* Skill tree mini display in upgrade screen */
@@ -2177,6 +2183,11 @@
     background: var(--accent, var(--vermilion));
     border-color: var(--ink);
     box-shadow: inset 0 1px 0 rgba(255, 220, 200, 0.35), 0 1px 0 rgba(29, 21, 12, 0.4);
+    animation: pipPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes pipPop {
+    from { transform: scale(0.55); opacity: 0.4; }
+    to   { transform: scale(1);    opacity: 1; }
   }
   .lu-pip.clickable {
     cursor: pointer;
@@ -6711,23 +6722,28 @@ const Renderer = {
       ctx.restore();
     }
 
-    // Cast sigil ring (replacement for the old soft-glow flash)
+    // Cast flash: gold ring pulse expanding outward over castFlash duration
     if (cast) {
-      const phase = (t * 1.6) % 1;
-      const a = Math.max(0, 1 - phase);
+      const flash = p.castFlash;                      // 0..0.2 remaining
+      const prog  = 1 - flash / 0.2;                  // 0 = just cast, 1 = done
+      const a     = Math.max(0, 1 - prog * prog);     // fast-in / ease-out alpha
       ctx.save();
       ctx.translate(x, y);
-      ctx.strokeStyle = `rgba(168,58,44,${a * 0.85})`;
-      ctx.lineWidth = 1.4;
-      const r = 32 + phase * 14;
+      // Outer expanding ring
+      const r = 20 + prog * 28;
+      ctx.strokeStyle = `rgba(232, 196, 80, ${a * 0.95})`;
+      ctx.lineWidth   = 2.5 - prog * 1.5;
       ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, TAU); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = `rgba(168,58,44,${a})`;
-      for (let i = 0; i < 6; i++) {
-        const ang = i / 6 * TAU + t * 0.8;
-        drawStarPath(ctx, Math.cos(ang) * (r + 10), Math.sin(ang) * (r + 10), 2.4, 1.0, 5);
+      // Slim inner ring
+      ctx.strokeStyle = `rgba(255, 235, 140, ${a * 0.60})`;
+      ctx.lineWidth   = 1.0;
+      ctx.beginPath(); ctx.arc(0, 0, r - 5, 0, TAU); ctx.stroke();
+      // 8 gold spark points radiating outward
+      ctx.fillStyle = `rgba(255, 210, 80, ${a * 0.85})`;
+      for (let i = 0; i < 8; i++) {
+        const ang  = i / 8 * TAU;
+        const dist = r + 4 + prog * 8;
+        drawStarPath(ctx, Math.cos(ang) * dist, Math.sin(ang) * dist, 2.2, 0.8, 4, ang);
         ctx.fill();
       }
       ctx.restore();
@@ -7927,46 +7943,53 @@ const Renderer = {
     for (const l of lights) {
       const a = 1 - l.t / l.life;
       const dx = l.to.x - l.from.x, dy = l.to.y - l.from.y;
-      const segs = 7;
-      // Build jagged path with perpendicular jitter so ink + gold accent
-      // both follow the same shape.
+      const segs = 8;
       const points = [{ x: l.from.x, y: l.from.y }];
       const len = Math.hypot(dx, dy) || 1;
-      const px = -dy / len, py = dx / len; // perpendicular
+      const px = -dy / len, py = dx / len;
       for (let i = 1; i < segs; i++) {
         const k = i / segs;
-        const j = (Math.random() - 0.5) * 22;
-        points.push({
-          x: l.from.x + dx * k + px * j,
-          y: l.from.y + dy * k + py * j,
-        });
+        const j = (Math.random() - 0.5) * (l.crit ? 28 : 18);
+        points.push({ x: l.from.x + dx * k + px * j, y: l.from.y + dy * k + py * j });
       }
       points.push({ x: l.to.x, y: l.to.y });
 
-      // Ink core stroke
-      ctx.strokeStyle = `rgba(26,22,18,${a})`;
-      ctx.lineWidth = l.crit ? 2.6 : 2;
-      ctx.lineJoin = 'miter';
-      ctx.lineCap = 'square';
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-      ctx.stroke();
-      // Gold accent stroke (thinner) on top
-      ctx.strokeStyle = `rgba(200,148,26,${a * (l.crit ? 1 : 0.85)})`;
-      ctx.lineWidth = l.crit ? 1.3 : 1;
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-      ctx.stroke();
+      const drawPath = () => {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+      };
 
-      // Endpoint markers — ink ring + gold pip
-      ctx.strokeStyle = `rgba(26,22,18,${a})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(l.to.x, l.to.y, 5, 0, TAU); ctx.stroke();
-      ctx.fillStyle = `rgba(200,148,26,${a})`;
-      drawStarPath(ctx, l.to.x, l.to.y, 3, 1.2, 5);
-      ctx.fill();
+      ctx.lineJoin = 'miter'; ctx.lineCap = 'round';
+      // 1) Outer dark ink halo
+      ctx.strokeStyle = `rgba(26,22,18,${a * 0.65})`;
+      ctx.lineWidth   = l.crit ? 5 : 3.5;
+      drawPath();
+      // 2) Electric-blue mid glow
+      ctx.strokeStyle = `rgba(90, 190, 255, ${a * 0.80})`;
+      ctx.lineWidth   = l.crit ? 2.8 : 1.8;
+      drawPath();
+      // 3) White-hot center core
+      ctx.strokeStyle = `rgba(220, 245, 255, ${a * 0.95})`;
+      ctx.lineWidth   = l.crit ? 1.0 : 0.7;
+      drawPath();
+
+      // Endpoint spark — electric cluster at the hit point
+      const es = l.crit ? 7 : 5;
+      for (let i = 0; i < es; i++) {
+        const ang = i / es * TAU + l.t * 12;
+        const r   = l.crit ? 7 + i * 1.5 : 5 + i;
+        ctx.strokeStyle = `rgba(90,190,255,${a * (0.9 - i * 0.1)})`;
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(l.to.x, l.to.y);
+        ctx.lineTo(l.to.x + Math.cos(ang) * r, l.to.y + Math.sin(ang) * r);
+        ctx.stroke();
+      }
+      // Bright endpoint pip
+      ctx.fillStyle = `rgba(220, 245, 255, ${a})`;
+      ctx.beginPath(); ctx.arc(l.to.x, l.to.y, l.crit ? 3.5 : 2.5, 0, TAU); ctx.fill();
     }
   },
 
@@ -8571,26 +8594,63 @@ const Renderer = {
       const fadeOut = Math.min(1, (s.life - s.t) / 0.6);
       const a = Math.min(fadeIn, fadeOut);
       ctx.save();
-      ctx.fillStyle = `rgba(220, 235, 250, ${0.10 * a})`;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius, 0, TAU);
-      ctx.fill();
+      // Clip everything to the storm radius
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, TAU); ctx.clip();
+      // Soft icy fill
+      ctx.fillStyle = `rgba(210, 230, 250, ${0.10 * a})`;
+      ctx.fillRect(s.x - s.radius, s.y - s.radius, s.radius * 2, s.radius * 2);
+      // Ground frost overlay — brightens as storm ages
+      const frostA = Math.min(1, s.t / 3) * 0.18 * a;
+      ctx.fillStyle = `rgba(230, 245, 255, ${frostA})`;
+      ctx.fillRect(s.x - s.radius, s.y, s.radius * 2, s.radius);
+      // 40 falling snowflakes
+      const seed0 = s.seed || 0;
+      const FLAKES = 40;
+      for (let i = 0; i < FLAKES; i++) {
+        // deterministic per-flake pseudo-random using index + seed
+        const r0 = ((i * 7 + Math.floor(seed0)) % 97) / 97;   // 0..1
+        const r1 = ((i * 13 + Math.floor(seed0 * 0.5)) % 83) / 83;
+        const r2 = ((i * 19 + Math.floor(seed0 * 0.3)) % 71) / 71;
+        const speed  = 30 + r0 * 55;
+        const drift  = (r1 - 0.5) * 18;  // horizontal drift per second
+        const period = (s.radius * 2) / speed; // time to cross the storm
+        const phase  = r2 * period;       // stagger start time
+        const age    = (t + phase) % period;
+        const fy     = -s.radius + age * speed;
+        const fx     = (r0 - 0.5) * s.radius * 1.8 + drift * age;
+        const px     = s.x + fx;
+        const py     = s.y + fy;
+        // skip if outside radius
+        if ((fx * fx + fy * fy) > s.radius * s.radius) continue;
+        const flakeSize = 1.0 + r2 * 1.2;
+        const flakeA    = (0.6 + r0 * 0.35) * a;
+        ctx.fillStyle = `rgba(240, 250, 255, ${flakeA})`;
+        ctx.beginPath(); ctx.arc(px, py, flakeSize, 0, TAU); ctx.fill();
+      }
+      // Gust lines — 4 sweeping arcs
+      for (let g = 0; g < 4; g++) {
+        const gPhase = (t * 0.8 + g * 0.25) % 1;
+        const gy     = s.y - s.radius + gPhase * s.radius * 2;
+        const gA     = Math.sin(gPhase * Math.PI) * 0.25 * a;
+        ctx.strokeStyle = `rgba(200, 230, 255, ${gA})`;
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(s.x - s.radius, gy);
+        ctx.bezierCurveTo(
+          s.x - s.radius * 0.3, gy - 8 + Math.sin(t + g) * 5,
+          s.x + s.radius * 0.3, gy + 8 - Math.sin(t + g) * 5,
+          s.x + s.radius, gy
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Perimeter dashed ring (outside the clip)
+      ctx.save();
       ctx.strokeStyle = `rgba(160, 200, 230, ${0.55 * a})`;
       ctx.lineWidth = 1.4;
       ctx.setLineDash([6, 5]);
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius, 0, TAU);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
-      // a few drifting flake dots
-      for (let i = 0; i < 8; i++) {
-        const ang = (i / 8 + t * 0.15) * TAU;
-        const rr = (s.radius * 0.4) + Math.sin(t * 2 + i) * 6;
-        const px = s.x + Math.cos(ang) * rr;
-        const py = s.y + Math.sin(ang) * rr;
-        ctx.fillStyle = `rgba(240, 248, 255, ${0.7 * a})`;
-        ctx.beginPath(); ctx.arc(px, py, 1.4, 0, TAU); ctx.fill();
-      }
       ctx.restore();
     }
   },
@@ -8755,21 +8815,36 @@ const Renderer = {
       const fadeOut = sh.life ? Math.min(1, (sh.life - sh.t) / 0.4) : 1;
       const a = Math.min(fadeIn, fadeOut);
       const orbCount = sh.orbCount || 3;
-      const radius = sh.orbitRadius || 38;
-      const spin = (sh.spin || 0) + t * 1.8;
+      const radius   = sh.orbitRadius || 38;
+      const spin     = (sh.spin || 0) + t * 1.8;
+      const TRAIL    = 10; // trail segment count
+      const trailArc = 0.9; // radians behind the orb
       for (let i = 0; i < orbCount; i++) {
         const ang = spin + (i / orbCount) * TAU;
+        // Flame trail (behind the orb)
+        for (let k = TRAIL; k >= 1; k--) {
+          const ta   = ang - (k / TRAIL) * trailArc;
+          const tx   = player.x + Math.cos(ta) * radius;
+          const ty   = player.y + Math.sin(ta) * radius;
+          const tf   = 1 - k / TRAIL;        // 0 at tail, 1 at orb
+          const tAlpha = tf * tf * a * 0.60;
+          const tSize  = 2 + tf * 5;
+          ctx.fillStyle = `rgba(${200 + Math.round(55 * tf)}, ${Math.round(80 + 80 * tf)}, 20, ${tAlpha})`;
+          ctx.beginPath(); ctx.arc(tx, ty, tSize, 0, TAU); ctx.fill();
+        }
+        // Main orb
         const ox = player.x + Math.cos(ang) * radius;
         const oy = player.y + Math.sin(ang) * radius;
         ctx.save();
-        const grad = ctx.createRadialGradient(ox, oy, 1, ox, oy, 8);
-        grad.addColorStop(0, `rgba(255, 220, 120, ${0.95 * a})`);
-        grad.addColorStop(0.5, `rgba(255, 130, 60, ${0.65 * a})`);
-        grad.addColorStop(1, `rgba(255, 80, 40, 0)`);
+        const grad = ctx.createRadialGradient(ox, oy, 1, ox, oy, 10);
+        grad.addColorStop(0,   `rgba(255, 240, 160, ${0.98 * a})`);
+        grad.addColorStop(0.4, `rgba(255, 130, 60,  ${0.75 * a})`);
+        grad.addColorStop(1,   `rgba(255, 60,  20,  0)`);
         ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(ox, oy, 8, 0, TAU); ctx.fill();
-        ctx.fillStyle = `rgba(255, 255, 220, ${0.9 * a})`;
-        ctx.beginPath(); ctx.arc(ox, oy, 2, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(ox, oy, 10, 0, TAU); ctx.fill();
+        // Bright core
+        ctx.fillStyle = `rgba(255, 255, 240, ${0.95 * a})`;
+        ctx.beginPath(); ctx.arc(ox, oy, 2.5, 0, TAU); ctx.fill();
         ctx.restore();
       }
     }
@@ -8932,32 +9007,55 @@ const Renderer = {
     ctx.textAlign = 'center';
     for (const d of nums) {
       const lifeT = d.t / d.life;
-      const fade = lifeT < 0.7 ? 1 : (1 - lifeT) / 0.3;
-      const size = d.isCrit ? 18 : 13;
-      // Paper halo behind the text for legibility on a busy field
+      const fade  = lifeT < 0.7 ? 1 : (1 - lifeT) / 0.3;
+
+      // Crit scale-pop: 1.0 → 1.45 → 1.0 over first 0.25s
+      let scale = 1;
+      if (d.isCrit) {
+        const popPhase = Math.min(1, d.t / 0.25);
+        scale = 1 + 0.45 * Math.sin(popPhase * Math.PI);
+      }
+
+      const baseSize = d.isCrit ? 18 : 13;
+      const size     = baseSize * scale;
+      const text     = d.isCrit ? `${d.value}!` : `${d.value}`;
+
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.scale(scale, scale);
+
+      // Paper halo
+      ctx.font = `${d.isCrit ? '700' : '600'} ${baseSize}px JetBrains Mono, monospace`;
       ctx.fillStyle = `rgba(232,220,192,${0.6 * fade})`;
-      ctx.font = `${d.isCrit ? '700' : '600'} ${size}px JetBrains Mono, monospace`;
-      const text = d.isCrit ? `${d.value}!` : `${d.value}`;
       const halo = ctx.measureText(text);
-      ctx.fillRect(d.x - halo.width / 2 - 2, d.y - size + 1, halo.width + 4, size + 2);
-      // Main text — gold for crits, green for heals, blue for resist,
-      // orange for vuln, vermilion for plain hits.
+      ctx.fillRect(-halo.width / 2 - 2, -baseSize + 1, halo.width + 4, baseSize + 2);
+
+      // Gold outline for crits
+      if (d.isCrit) {
+        ctx.strokeStyle = `rgba(200,148,26,${fade * 0.70})`;
+        ctx.lineWidth   = 2.5;
+        ctx.strokeText(text, 0, 0);
+      }
+
+      // Main color
       let fillColor;
-      if (d.isHeal)             fillColor = `rgba(112,168,96,${fade})`;
+      if (d.isHeal)                    fillColor = `rgba(112,168,96,${fade})`;
       else if (d.verdict === 'resist') fillColor = `rgba(70,110,160,${fade})`;
       else if (d.verdict === 'vuln')   fillColor = `rgba(216,118,46,${fade})`;
-      else if (d.isCrit)        fillColor = `rgba(200,148,26,${fade})`;
-      else                      fillColor = `rgba(168,58,44,${fade})`;
+      else if (d.isCrit)               fillColor = `rgba(235,195,50,${fade})`;
+      else                             fillColor = `rgba(168,58,44,${fade})`;
       ctx.fillStyle = fillColor;
-      ctx.fillText(text, d.x, d.y);
-      // Tiny RESIST / VULN tag right above the number — small caps, ink colour.
+      ctx.fillText(text, 0, 0);
+
+      // RESIST / VULN tag
       if (d.verdict) {
         ctx.font = `700 9px JetBrains Mono, monospace`;
         ctx.fillStyle = d.verdict === 'resist'
           ? `rgba(70,110,160,${fade * 0.95})`
           : `rgba(216,118,46,${fade * 0.95})`;
-        ctx.fillText(d.verdict.toUpperCase(), d.x, d.y - size - 1);
+        ctx.fillText(d.verdict.toUpperCase(), 0, -baseSize - 1);
       }
+      ctx.restore();
     }
     ctx.textAlign = 'start';
   },
@@ -9171,9 +9269,11 @@ const UI = {
     const cont = this.$('tier-choices');
     cont.innerHTML = '';
     const options = Object.values(ABILITIES).filter(a => a.tier === tier && a.classId === charId);
-    for (const ab of options) {
+    for (let ci = 0; ci < options.length; ci++) {
+      const ab = options[ci];
       const card = document.createElement('div');
       card.className = 'card';
+      card.style.animationDelay = `${ci * 0.06}s`;
       card.style.setProperty('--accent', ab.color || 'var(--vermilion)');
       const baseStats = abilityBaseStatLine(ab);
       card.innerHTML = `
@@ -9220,9 +9320,12 @@ const UI = {
     this.$('tier-subtitle').textContent = '— A minion that follows you all run. Lighter investment, big personality. —';
     const cont = this.$('tier-choices');
     cont.innerHTML = '';
-    for (const def of Object.values(MINIONS)) {
+    const minionDefs = Object.values(MINIONS);
+    for (let ci = 0; ci < minionDefs.length; ci++) {
+      const def = minionDefs[ci];
       const card = document.createElement('div');
       card.className = 'card';
+      card.style.animationDelay = `${ci * 0.06}s`;
       card.style.setProperty('--accent', def.color || 'var(--gold)');
       card.innerHTML = `
         <div class="card-tier">${def.flavor || 'minion'}</div>
