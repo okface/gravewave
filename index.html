@@ -2676,14 +2676,14 @@ const SPELLS = {
       if (b.noPull) {
         // Annihilation: a sharp burst. Compressed time = high dps.
         radius *= 0.85;
-        dps    *= 2.2;
-        life    = 0.55;
-        pull    = 0;                         // no pull — pure single-spot damage
+        dps    *= 3.0;            // 51 base × 0.7s ≈ 36 base damage on the spot
+        life    = 0.7;
+        pull    = 0;               // no pull — pure single-spot damage
       } else if (b.explodeOnHit) {
         // Collapse: wider, longer, slower per-tick — sweeping AOE.
         radius *= 1.6;
         dps    *= 0.7;
-        life    = 1.9;
+        life    = 2.2;             // longer life so total dps integral matches
       }
 
       // Fracture spec damage scales with the player's investment in damage.
@@ -3083,10 +3083,10 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'annihilation', name: 'Annihilation',
-        desc: 'Sharp burst — ×1.6 dps, 0.55s, no pull. Single-spot annihilation.',
+        desc: 'Sharp burst — ×3.0 dps, 0.7s, no pull. Single-spot annihilation.',
         behavior: { noPull: true } },
       { id: 'collapse',     name: 'Collapse',
-        desc: 'Wider, longer well — ×1.6 radius, ×0.7 dps, 1.9s. Sweeping AOE.',
+        desc: 'Wider, longer well — ×1.6 radius, ×0.7 dps, 2.2s. Sweeping AOE.',
         behavior: { explodeOnHit: true } },
       { id: 'fracture',     name: 'Fracture',
         desc: 'On expire, the well detonates for 80 damage in a 180u radius.',
@@ -3335,8 +3335,8 @@ const ABILITIES = {
         desc: 'Cloud grows over time — radius doubles by end of life.',
         behavior: { hurricane: true } },
       { id: 'lightning_pulse', name: 'Lightning Pulse',
-        desc: 'Every 5s the cloud detonates a chain lightning hitting all under it.',
-        behavior: { lightningPulse: { interval: 5, damage: 60 } } },
+        desc: 'Every 2s the cloud detonates a thundercrack hitting all under it.',
+        behavior: { lightningPulse: { interval: 2, damage: 45 } } },
       { id: 'cumulonimbus', name: 'Cumulonimbus',
         desc: 'Strikes alternate between lightning, fire (ignite), and frost (slow).',
         behavior: { cumulonimbus: true } },
@@ -5317,11 +5317,15 @@ class Game {
       const w = this.wormholes[i];
       w.t += dt;
       if (w.t >= w.life) {
-        // Spec: Singularity — collapse to a single big well at player
+        // Spec: Singularity — collapse to a single big well at player.
+        // Scale dps with the wormhole's damage investment so this stays
+        // relevant as the player invests in mass / damage.
         if (w.spec?.collapseToWell && this.player?.alive) {
           this.spawnGravityWell({
             x: this.player.x, y: this.player.y,
-            radius: 240, pull: 320, dps: 30, life: 3,
+            radius: 240, pull: 320,
+            dps: 30 * (w.damage / 50),     // damage was 50 base × dmgMult; ratio carries the scaling
+            life: 3,
             spell: 'wormhole',
           });
         }
@@ -5676,6 +5680,9 @@ class Game {
     m.x += (tx - m.x) * Math.min(1, dt * 4);
     m.y += (ty - m.y) * Math.min(1, dt * 4);
     const beh = mods.behavior || {};
+    // Surface the resurgence flag every frame so Player.takeDamage can
+    // consume it even before the first heal pulse lands.
+    this.player._resurgence = !!beh.resurgence && !m.resurgenceUsed;
     // Tempo: each pulseFaster point shaves 0.5s off the 5s base; min 2.0s.
     const pulseIv = Math.max(2.0, 5.0 - mods.pulseFaster);
     m.pulseAcc += dt;
@@ -5690,8 +5697,6 @@ class Game {
       delete this.player.hex;
       // status fields may live elsewhere — best-effort
     }
-    // Surface the resurgence flag for Player.takeDamage to consume.
-    this.player._resurgence = !!beh.resurgence && !m.resurgenceUsed;
   }
 
   /*
