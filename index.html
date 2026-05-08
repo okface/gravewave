@@ -4819,10 +4819,12 @@ class Game {
     const variant = ['hit', 'crit', 'resist', 'vuln', 'death'].includes(evt.kind)
       ? evt.kind : 'hit';
     this.particles.push({ kind: 'burst', variant, x: evt.x, y: evt.y, life: 0.5, t: 0, vx: 0, vy: 0, radius: 0, color: '' });
-    const shakeKey = evt.fatal ? 'heavy' :
-                     evt.source === 'meteor' ? 'catastrophic' :
-                     evt.kind === 'crit' ? 'medium' : 'light';
-    Camera.shake(shakeKey);
+    // Only shake from the impact bus for high-signal events — normal hits
+    // already get their shake from each spell's own addShake call.
+    if (evt.fatal)                          Camera.shake('heavy');
+    else if (evt.source === 'meteor')       Camera.shake('catastrophic');
+    else if (evt.kind === 'crit')           Camera.shake('medium');
+    // 'hit' / 'resist' / 'vuln' — no extra shake here
   }
   spawnChainLightning({ from, firstTarget, damage, chains, chainRange, falloff, crit, spell, applyStatus }) {
     let prev = from;
@@ -8712,6 +8714,68 @@ function formatStat(stat, total) {
   }
 }
 
+// Returns a compact line of base stats for the ability card header.
+function abilityBaseStatLine(ab) {
+  const parts = [];
+  if (ab.damage)   parts.push(`${ab.damage} dmg`);
+  if (ab.cooldown) parts.push(`${ab.cooldown}s cd`);
+  if (ab.radius)   parts.push(`${ab.radius}px range`);
+  if (ab.duration) parts.push(`${ab.duration}s duration`);
+  return parts.join(' · ');
+}
+
+// Returns the absolute effective value of a dump at `pts` points invested,
+// using the ability's base stats. Falls back to formatStat when no base is known.
+function formatDumpAt(dump, ab, pts) {
+  const total = (dump.perPoint || 0) * pts;
+  switch (dump.stat) {
+    case 'cdMult':
+      if (ab && ab.cooldown) return `${(ab.cooldown * Math.max(0.25, 1 + total)).toFixed(2)}s`;
+      break;
+    case 'radiusMult':
+    case 'sizeMult': {
+      const base = (ab && (ab.radius || ab.size)) || 0;
+      if (base) return `${Math.round(base * (1 + total))}px`;
+      break;
+    }
+    case 'durationMult':
+      if (ab && ab.duration) return `${(ab.duration * (1 + total)).toFixed(1)}s`;
+      break;
+    case 'dmgMult':
+      if (ab && ab.damage) return `${Math.round(ab.damage * (1 + total))} dmg`;
+      break;
+  }
+  return formatStat(dump.stat, total);
+}
+
+// Returns a concrete per-point description, e.g. "−0.06s cd per point".
+// Falls back to dump.desc when no base stat is known.
+function formatDumpPerPoint(dump, ab) {
+  const pp = dump.perPoint || 0;
+  const sign = (n) => n >= 0 ? `+${n}` : `${n}`;
+  switch (dump.stat) {
+    case 'cdMult':
+      if (ab && ab.cooldown) {
+        const delta = (ab.cooldown * pp).toFixed(2);
+        return `${sign(+(ab.cooldown * pp).toFixed(2))}s cd per point`;
+      }
+      break;
+    case 'radiusMult':
+    case 'sizeMult': {
+      const base = (ab && (ab.radius || ab.size)) || 0;
+      if (base) return `${sign(Math.round(base * pp))}px per point`;
+      break;
+    }
+    case 'durationMult':
+      if (ab && ab.duration) return `${sign(+(ab.duration * pp).toFixed(1))}s duration per point`;
+      break;
+    case 'dmgMult':
+      if (ab && ab.damage) return `${sign(Math.round(ab.damage * pp))} dmg per point`;
+      break;
+  }
+  return dump.desc || '';
+}
+
 const UI = {
   /*
    * UI — minimal overlay router for the new tier/level system.
@@ -8807,13 +8871,14 @@ const UI = {
       const card = document.createElement('div');
       card.className = 'card';
       card.style.setProperty('--accent', ab.color || 'var(--vermilion)');
+      const baseStats = abilityBaseStatLine(ab);
       card.innerHTML = `
         <div class="card-tier">T${ab.tier}</div>
         <div class="card-tag">${ab.icon || '◇'} ${(ab.tag || 'Ability').toUpperCase()}</div>
         <div class="card-name">${ab.name}</div>
         <div class="card-desc">${ab.description || ''}</div>
         <div class="card-detail" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mid); margin-top: 8px;">
-          Dumps: ${ab.dumps.map(d => d.name).join(' · ')}<br>
+          ${baseStats ? `<b>${baseStats}</b><br>` : ''}Dumps: ${ab.dumps.map(d => d.name).join(' · ')}<br>
           Specs (at 6 pts): ${ab.specs.map(s => s.name).join(' / ')}
         </div>
       `;
@@ -8908,11 +8973,13 @@ const UI = {
       panel.className = 'lu-panel';
       panel.style.setProperty('--accent', ab.color || 'var(--vermilion)');
       const tag = `T${ab.tier} · ${(ab.tag || 'ability').toUpperCase()}`;
+      const abBaseStats = abilityBaseStatLine(ab);
       panel.innerHTML = `
         <div class="lu-panel-head">
           <div class="lu-icon">${ab.icon || '◇'}</div>
           <div class="lu-name">${ab.name}</div>
           <div class="lu-tag">${tag}</div>
+          ${abBaseStats ? `<div class="lu-base-stats" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-mid);margin-top:2px;">${abBaseStats}</div>` : ''}
         </div>
       `;
       // Three dump rows
@@ -8921,19 +8988,17 @@ const UI = {
       for (let i = 0; i < ab.dumps.length; i++) {
         const dump = ab.dumps[i];
         const filled = pts.dumps[i] || 0;
-        const cur = filled * (dump.perPoint || 0);
-        const nxt = (filled + 1) * (dump.perPoint || 0);
         const progress = (filled === 0)
-          ? `<span class="lu-dump-now">Currently: <b>—</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`
+          ? `<span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, ab, 1)}</b></span>`
           : (filled >= 5
-            ? `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
-            : `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`);
+            ? `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, ab, filled)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
+            : `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, ab, filled)}</b></span> &middot; <span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, ab, filled + 1)}</b></span>`);
         const row = document.createElement('div');
         row.className = 'lu-dump-row';
         row.innerHTML = `
           <div class="lu-dump-name">${dump.name}</div>
           <div class="lu-dump-pips" data-dump-idx="${i}"></div>
-          <div class="lu-dump-desc">${dump.desc || ''}<div class="lu-dump-progress">${progress}</div></div>
+          <div class="lu-dump-desc">${formatDumpPerPoint(dump, ab)}<div class="lu-dump-progress">${progress}</div></div>
         `;
         const pips = row.querySelector('.lu-dump-pips');
         for (let j = 0; j < 5; j++) {
@@ -9013,13 +9078,11 @@ const UI = {
         for (let i = 0; i < def.dumps.length; i++) {
           const dump = def.dumps[i];
           const filled = mpts.dumps[i] || 0;
-          const cur = filled * (dump.perPoint || 0);
-          const nxt = (filled + 1) * (dump.perPoint || 0);
           const progress = (filled === 0)
-            ? `<span class="lu-dump-now">Currently: <b>—</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`
+            ? `<span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, null, 1)}</b></span>`
             : (filled >= 3
-              ? `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
-              : `<span class="lu-dump-now">Currently: <b>${formatStat(dump.stat, cur)}</b></span> &middot; <span class="lu-dump-next">+1 pt: <b>${formatStat(dump.stat, nxt)}</b></span>`);
+              ? `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, null, filled)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
+              : `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, null, filled)}</b></span> &middot; <span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, null, filled + 1)}</b></span>`);
           const row = document.createElement('div');
           row.className = 'lu-dump-row';
           row.innerHTML = `
