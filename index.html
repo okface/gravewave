@@ -5150,6 +5150,7 @@ class Game {
       t.atkAcc += dt;
       if (t.atkAcc < t.attackInterval) continue;
       t.atkAcc = 0;
+      t.lastFireT = t.t; // renderer uses this for halo pulse + jitter
       const target = this.findNearestEnemyTo(t, t.range);
       if (!target) continue;
       t.shotCount++;
@@ -7861,48 +7862,120 @@ const Renderer = {
       const r = w.radius;
       const cx = w.x, cy = w.y;
 
-      // Concentric ink rings, slightly drifting
-      ctx.strokeStyle = `rgba(26,22,18,${0.55 * lifeT})`;
-      for (let i = 1; i <= 5; i++) {
-        ctx.lineWidth = 0.4 + (5 - i) * 0.16;
+      if (w.spell === 'gravity_bolt') {
+        // ── Black Hole visual ─────────────────────────────────────────────
+        const spin = tNow * 2.4;
+
+        // Outer lensing glow
+        const outerGlow = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 1.1);
+        outerGlow.addColorStop(0,   `rgba(100, 50, 200, ${0.22 * lifeT})`);
+        outerGlow.addColorStop(0.6, `rgba(60,  20, 140, ${0.12 * lifeT})`);
+        outerGlow.addColorStop(1,   `rgba(20,   5,  60, 0)`);
+        ctx.fillStyle = outerGlow;
+        ctx.beginPath(); ctx.arc(cx, cy, r * 1.1, 0, TAU); ctx.fill();
+
+        // Accretion disk — two counter-rotating arms pulled inward
+        for (let arm = 0; arm < 2; arm++) {
+          const dir = arm === 0 ? 1 : -1;
+          ctx.save();
+          ctx.strokeStyle = `rgba(${arm === 0 ? '180,100,255' : '120,180,255'},${0.65 * lifeT})`;
+          ctx.lineWidth = arm === 0 ? 1.6 : 1.0;
+          ctx.beginPath();
+          for (let a = 0; a < TAU * 3.5; a += 0.06) {
+            const rr = r * (1 - a / (TAU * 4.5));
+            const px = cx + Math.cos(a * dir + spin * dir) * rr;
+            const py = cy + Math.sin(a * dir + spin * dir) * rr;
+            if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Disk particles — hot bright streaks orbiting close
+        const DISK = 9;
+        for (let k = 0; k < DISK; k++) {
+          const baseAng = (k / DISK) * TAU + spin * 1.7;
+          const orbitR  = r * (0.22 + 0.28 * ((k * 7 % DISK) / DISK));
+          const px = cx + Math.cos(baseAng) * orbitR;
+          const py = cy + Math.sin(baseAng) * orbitR;
+          const bright = 0.5 + 0.5 * Math.sin(tNow * 5 + k);
+          ctx.fillStyle = `rgba(220, ${Math.round(120 + bright * 80)}, 255, ${0.70 * lifeT})`;
+          ctx.beginPath(); ctx.arc(px, py, 1.3 + bright * 0.8, 0, TAU); ctx.fill();
+        }
+
+        // Solid black void core — absolute darkness
+        const coreR = Math.max(7, r * 0.14);
+        ctx.fillStyle = '#080208';
+        ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, TAU); ctx.fill();
+
+        // Blazing event horizon ring
+        const ehGrad = ctx.createRadialGradient(cx, cy, coreR * 0.85, cx, cy, coreR * 1.6);
+        ehGrad.addColorStop(0,   `rgba(255, 255, 255, ${0.95 * lifeT})`);
+        ehGrad.addColorStop(0.3, `rgba(200, 140, 255, ${0.80 * lifeT})`);
+        ehGrad.addColorStop(0.7, `rgba(100,  50, 200, ${0.45 * lifeT})`);
+        ehGrad.addColorStop(1,   `rgba(40,   10,  80, 0)`);
+        ctx.fillStyle = ehGrad;
+        ctx.beginPath(); ctx.arc(cx, cy, coreR * 1.6, 0, TAU); ctx.fill();
+
+        // Light-bend streaks radiating outward from horizon
+        const STREAKS = 6;
+        for (let k = 0; k < STREAKS; k++) {
+          const sa  = (k / STREAKS) * TAU + spin * 0.6;
+          const len = r * (0.18 + 0.12 * Math.sin(tNow * 3 + k));
+          ctx.save();
+          ctx.strokeStyle = `rgba(200, 170, 255, ${0.35 * lifeT})`;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(sa) * coreR * 1.5, cy + Math.sin(sa) * coreR * 1.5);
+          ctx.lineTo(cx + Math.cos(sa) * (coreR * 1.5 + len), cy + Math.sin(sa) * (coreR * 1.5 + len));
+          ctx.stroke();
+          ctx.restore();
+        }
+
+      } else {
+        // ── Generic gravity well visual ────────────────────────────────────
+        // Concentric ink rings, slightly drifting
+        ctx.strokeStyle = `rgba(26,22,18,${0.55 * lifeT})`;
+        for (let i = 1; i <= 5; i++) {
+          ctx.lineWidth = 0.4 + (5 - i) * 0.16;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r * (i / 5) + Math.sin(tNow * 1.5 + i) * 0.6, 0, TAU);
+          ctx.stroke();
+        }
+
+        // Inward indigo spiral
+        ctx.strokeStyle = `rgba(44,74,140,${0.85 * lifeT})`;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(cx, cy, r * (i / 5) + Math.sin(tNow * 1.5 + i) * 0.6, 0, TAU);
+        for (let a = 0; a < TAU * 4; a += 0.08) {
+          const rr = r * (1 - a / (TAU * 4));
+          const px = cx + Math.cos(a + tNow * 1.5) * rr;
+          const py = cy + Math.sin(a + tNow * 1.5) * rr;
+          if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(44,74,140,${0.45 * lifeT})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        for (let a = 0; a < TAU * 4; a += 0.08) {
+          const rr = r * (1 - a / (TAU * 4));
+          const px = cx + Math.cos(-a + tNow * 1.5) * rr;
+          const py = cy + Math.sin(-a + tNow * 1.5) * rr;
+          if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        // Black core + vermilion event-horizon ring
+        ctx.fillStyle = PAL.ink;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(5, r * 0.07), 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(168,58,44,${0.95 * lifeT})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(8, r * 0.11), 0, TAU);
         ctx.stroke();
       }
-
-      // Inward indigo spiral
-      ctx.strokeStyle = `rgba(44,74,140,${0.85 * lifeT})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      for (let a = 0; a < TAU * 4; a += 0.08) {
-        const rr = r * (1 - a / (TAU * 4));
-        const px = cx + Math.cos(a + tNow * 1.5) * rr;
-        const py = cy + Math.sin(a + tNow * 1.5) * rr;
-        if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      // Counter-spiral, lighter
-      ctx.strokeStyle = `rgba(44,74,140,${0.45 * lifeT})`;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      for (let a = 0; a < TAU * 4; a += 0.08) {
-        const rr = r * (1 - a / (TAU * 4));
-        const px = cx + Math.cos(-a + tNow * 1.5) * rr;
-        const py = cy + Math.sin(-a + tNow * 1.5) * rr;
-        if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-
-      // Black core + vermilion event-horizon ring
-      ctx.fillStyle = PAL.ink;
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(5, r * 0.07), 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(168,58,44,${0.95 * lifeT})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(8, r * 0.11), 0, TAU);
-      ctx.stroke();
     }
   },
 
@@ -8514,82 +8587,117 @@ const Renderer = {
       const fadeIn = Math.min(1, f.t / 0.3);
       const lifeA  = f.life < 999 ? Math.min(1, (f.life - f.t) / 0.5) : 1;
       const baseA  = Math.min(fadeIn, lifeA);
-
-      // Recharging: dim, cracked look with progress ring
       const isRecharging = f.recharging;
-      const a = isRecharging ? 0.30 : baseA;
+      const a = isRecharging ? 0.28 : baseA;
+      const seed = f.seed || 0;
+      const r = f.radius;
+      const SIDES = 6; // hexagonal
 
-      ctx.save();
-      // Soft ice fill
-      const grad = ctx.createRadialGradient(f.x, f.y, 4, f.x, f.y, f.radius);
-      if (isRecharging) {
-        grad.addColorStop(0,   `rgba(80, 100, 120, ${0.20 * baseA})`);
-        grad.addColorStop(1,   `rgba(40, 60, 80, ${0.05 * baseA})`);
-      } else {
-        grad.addColorStop(0,   `rgba(220, 240, 255, ${0.42 * a})`);
-        grad.addColorStop(0.6, `rgba(170, 210, 240, ${0.30 * a})`);
-        grad.addColorStop(1,   `rgba(120, 170, 210, ${0.05 * a})`);
-      }
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      const lobes = 22;
-      for (let i = 0; i <= lobes; i++) {
-        const ang = i / lobes * TAU;
-        const wobble = isRecharging ? Math.sin(t * 0.5 + i * 0.8 + (f.seed || 0)) * 1.2
-                                    : Math.sin(t * 1.4 + i * 0.6 + (f.seed || 0)) * 2.5;
-        const r = f.radius + wobble;
-        const px = f.x + Math.cos(ang) * r;
-        const py = f.y + Math.sin(ang) * r;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-      // Perimeter ring
-      ctx.strokeStyle = isRecharging ? `rgba(60, 80, 100, ${0.50 * baseA})` : `rgba(60, 120, 170, ${0.95 * a})`;
-      ctx.lineWidth   = isRecharging ? 1.0 : 1.8;
-      ctx.stroke();
-
-      if (!isRecharging) {
-        // Inner dashed ring
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * a})`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
+      // Helper: draw hexagonal outline, slightly perturbed per-vertex
+      const hexPath = (scale, wobbleMag) => {
         ctx.beginPath();
-        ctx.arc(f.x, f.y, f.radius * 0.78, 0, TAU);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        // Shield HP arc — cyan arc showing remaining absorption
-        if (f.shieldMaxHp > 0) {
-          const frac = Math.max(0, f.shieldHp / f.shieldMaxHp);
-          ctx.strokeStyle = `rgba(100, 220, 255, ${0.85 * a})`;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(f.x, f.y, f.radius + 5, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
-          ctx.stroke();
-        }
-        // Frost flakes
-        const seed = f.seed || 0;
-        for (let i = 0; i < 12; i++) {
-          const ang = (i * 2.39 + seed) % TAU;
-          const rr  = (f.radius * 0.85) * ((i * 17 + Math.floor(seed)) % 100) / 100;
+        for (let i = 0; i <= SIDES; i++) {
+          const ang = (i / SIDES) * TAU - Math.PI / 6;
+          const w   = wobbleMag * Math.sin(t * 1.2 + i * 1.1 + seed);
+          const rr  = r * scale + w;
           const px  = f.x + Math.cos(ang) * rr;
           const py  = f.y + Math.sin(ang) * rr;
-          const tw  = 0.6 + 0.4 * Math.sin(t * 3 + i);
-          ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * a * tw})`;
-          ctx.beginPath(); ctx.arc(px, py, 1.3, 0, TAU); ctx.fill();
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      };
+
+      ctx.save();
+
+      // ── Soft ice-fog fill ──────────────────────────────────────────────
+      const grad = ctx.createRadialGradient(f.x, f.y, 4, f.x, f.y, r);
+      if (isRecharging) {
+        grad.addColorStop(0,   `rgba(60, 80, 100, ${0.14 * baseA})`);
+        grad.addColorStop(1,   `rgba(30, 45, 60, ${0.04 * baseA})`);
+      } else {
+        grad.addColorStop(0,   `rgba(210, 238, 255, ${0.38 * a})`);
+        grad.addColorStop(0.55, `rgba(160, 205, 235, ${0.24 * a})`);
+        grad.addColorStop(1,   `rgba(100, 155, 200, ${0.04 * a})`);
+      }
+      ctx.fillStyle = grad;
+      hexPath(1.0, 2.0);
+      ctx.fill();
+
+      // ── Outer hex wall (solid ice edge) ───────────────────────────────
+      ctx.strokeStyle = isRecharging
+        ? `rgba(55, 75, 95, ${0.45 * baseA})`
+        : `rgba(140, 210, 245, ${0.90 * a})`;
+      ctx.lineWidth = isRecharging ? 1.2 : 2.2;
+      hexPath(1.0, 1.8);
+      ctx.stroke();
+
+      // ── Inner hex ring (lighter) ───────────────────────────────────────
+      if (!isRecharging) {
+        ctx.strokeStyle = `rgba(230, 248, 255, ${0.45 * a})`;
+        ctx.lineWidth   = 1.0;
+        hexPath(0.74, 0.9);
+        ctx.stroke();
+      }
+
+      if (!isRecharging) {
+        // ── Frost crystal bloom on vertices (0..0.3s) ─────────────────
+        const bloom = Math.min(1, f.t / 0.32);
+        for (let i = 0; i < SIDES; i++) {
+          const ang = (i / SIDES) * TAU - Math.PI / 6;
+          const vx  = f.x + Math.cos(ang) * r;
+          const vy  = f.y + Math.sin(ang) * r;
+          const twink = 0.6 + 0.4 * Math.sin(t * 4 + i * 1.7);
+          const cr    = (3 + bloom * 4) * twink;
+          // Spike cross
+          const spikeA = `rgba(200, 240, 255, ${0.80 * a * bloom * twink})`;
+          ctx.strokeStyle = spikeA;
+          ctx.lineWidth = 1.0;
+          for (let s = 0; s < 3; s++) {
+            const sa = ang + s * (Math.PI / 3);
+            ctx.beginPath();
+            ctx.moveTo(vx + Math.cos(sa) * cr * 0.3, vy + Math.sin(sa) * cr * 0.3);
+            ctx.lineTo(vx + Math.cos(sa) * cr, vy + Math.sin(sa) * cr);
+            ctx.stroke();
+          }
+          // Vertex pip
+          ctx.fillStyle = `rgba(240, 250, 255, ${0.90 * a * bloom * twink})`;
+          ctx.beginPath(); ctx.arc(vx, vy, 1.8, 0, TAU); ctx.fill();
+        }
+
+        // ── Rotating snowflake particles drifting inside ───────────────
+        const DRIFTERS = 14;
+        for (let i = 0; i < DRIFTERS; i++) {
+          const ph  = ((i * 7 + Math.floor(seed)) % 97) / 97;
+          const sp  = 0.25 + ((i * 13 + Math.floor(seed * 0.5)) % 83) / 83 * 0.35;
+          const orR = r * (0.20 + ((i * 19 + Math.floor(seed * 0.3)) % 71) / 71 * 0.65);
+          const ang = (ph * TAU + t * sp) % TAU;
+          const px  = f.x + Math.cos(ang) * orR;
+          const py  = f.y + Math.sin(ang) * orR;
+          const tw2 = 0.55 + 0.45 * Math.sin(t * 3.5 + i);
+          ctx.fillStyle = `rgba(220, 244, 255, ${0.65 * a * tw2})`;
+          ctx.beginPath(); ctx.arc(px, py, 1.0 + tw2 * 0.8, 0, TAU); ctx.fill();
+        }
+
+        // ── Shield HP arc (cyan, outside the hex) ─────────────────────
+        if (f.shieldMaxHp > 0) {
+          const frac = Math.max(0, f.shieldHp / f.shieldMaxHp);
+          ctx.strokeStyle = `rgba(80, 215, 255, ${0.88 * a})`;
+          ctx.lineWidth   = 3.2;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, r + 6, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+          ctx.stroke();
         }
       } else {
-        // Recharge progress arc
+        // ── Recharge progress arc + REFORMING label ────────────────────
         const prog = Math.min(1, (f.rechargeAcc || 0) / (f.rechargeTime || 8));
-        ctx.strokeStyle = `rgba(100, 180, 220, ${0.70 * baseA})`;
+        ctx.strokeStyle = `rgba(90, 170, 215, ${0.65 * baseA})`;
         ctx.lineWidth   = 2;
         ctx.beginPath();
-        ctx.arc(f.x, f.y, f.radius + 5, -Math.PI / 2, -Math.PI / 2 + prog * TAU);
+        ctx.arc(f.x, f.y, r + 6, -Math.PI / 2, -Math.PI / 2 + prog * TAU);
         ctx.stroke();
-        // "REFORMING" label
-        ctx.fillStyle = `rgba(160, 210, 240, ${0.80 * baseA})`;
-        ctx.font = 'bold 10px monospace';
-        ctx.textAlign = 'center';
+        ctx.fillStyle   = `rgba(150, 205, 235, ${0.78 * baseA})`;
+        ctx.font        = 'bold 10px monospace';
+        ctx.textAlign   = 'center';
         ctx.fillText('REFORMING', f.x, f.y + 3);
       }
       ctx.restore();
@@ -8670,25 +8778,41 @@ const Renderer = {
       const fadeIn  = Math.min(1, tw.t / 0.25);
       const fadeOut = Math.min(1, (tw.life - tw.t) / 0.4);
       const a = Math.min(fadeIn, fadeOut);
+
+      // Micro-jitter on recent fire
+      const timeSinceFire = tw.lastFireT !== undefined ? tw.t - tw.lastFireT : 99;
+      const jitter = timeSinceFire < 0.12
+        ? (Math.random() - 0.5) * 2.4 * (1 - timeSinceFire / 0.12) : 0;
+      const bx = tw.x + jitter, by = tw.y + jitter * 0.5;
+
       ctx.save();
-      // base
-      ctx.fillStyle   = `rgba(80, 90, 110, ${0.85 * a})`;
+      // Base disc
+      ctx.fillStyle   = `rgba(72, 88, 108, ${0.90 * a})`;
       ctx.strokeStyle = `rgba(29, 21, 12, ${a})`;
       ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.arc(tw.x, tw.y, 8, 0, TAU); ctx.fill(); ctx.stroke();
-      // antenna
-      ctx.beginPath();
-      ctx.moveTo(tw.x, tw.y - 2);
-      ctx.lineTo(tw.x, tw.y - 18);
-      ctx.stroke();
-      // crackling head
-      const flicker = 0.6 + Math.sin(t * 14) * 0.4;
+      ctx.beginPath(); ctx.arc(bx, by, 8, 0, TAU); ctx.fill(); ctx.stroke();
+      // Antenna
+      ctx.strokeStyle = `rgba(29, 21, 12, ${a})`;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(bx, by - 2); ctx.lineTo(bx, by - 18); ctx.stroke();
+      // Crackling head — flicker speed increases near fire
+      const flickerSpeed = timeSinceFire < 0.15 ? 28 : 14;
+      const flicker = 0.55 + Math.sin(t * flickerSpeed) * 0.45;
       ctx.fillStyle = `rgba(255, 235, 120, ${flicker * a})`;
-      ctx.beginPath(); ctx.arc(tw.x, tw.y - 18, 3, 0, TAU); ctx.fill();
-      // range halo
-      ctx.strokeStyle = `rgba(200, 168, 95, ${0.20 * a})`;
-      ctx.setLineDash([3, 4]);
-      ctx.beginPath(); ctx.arc(tw.x, tw.y, tw.range || 220, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by - 18, 3.5, 0, TAU); ctx.fill();
+      // Electric blue inner pip
+      ctx.fillStyle = `rgba(180, 230, 255, ${0.85 * flicker * a})`;
+      ctx.beginPath(); ctx.arc(bx, by - 18, 1.5, 0, TAU); ctx.fill();
+
+      // Range halo — pulses outward on each fire, then fades to soft static
+      const pulseT  = Math.min(1, timeSinceFire / 0.6);
+      const pulsedR = (tw.range || 220) * (1 + (1 - pulseT) * 0.04);
+      const pulseA  = 0.10 + (1 - pulseT) * 0.55;
+      const pulseW  = 0.8 + (1 - pulseT) * 1.8;
+      ctx.strokeStyle = `rgba(90, 200, 255, ${pulseA * a})`;
+      ctx.lineWidth   = pulseW;
+      ctx.setLineDash(timeSinceFire > 0.3 ? [3, 5] : []);
+      ctx.beginPath(); ctx.arc(tw.x, tw.y, pulsedR, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     }
