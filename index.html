@@ -3164,7 +3164,7 @@ const ABILITIES = {
         desc: 'When the fort expires, it collapses for 180 damage to all enemies inside.',
         behavior: { avalancheExpire: 180 } },
       { id: 'crystal',    name: 'Crystalline',
-        desc: 'While inside the fort, your spells get +25% crit chance.',
+        desc: 'While the fort\'s shield is up, your spells get +25% crit chance.',
         behavior: { crystalCrit: 0.25 } },
     ],
   },
@@ -9344,17 +9344,35 @@ const Renderer = {
 
       const pr = h.radius ? h.radius * 0.45 : 22; // portal visual radius
 
-      // Connection thread between portals
+      // Connection thread between portals. Echo spec — render a glowing
+      // beam instead of a passive dashed thread so the damage zone reads.
       if (portals.length === 2) {
         ctx.save();
-        ctx.strokeStyle = `rgba(160, 124, 255, ${0.22 * alpha})`;
-        ctx.setLineDash([3, 7]);
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(portals[0].x, portals[0].y);
-        ctx.lineTo(portals[1].x, portals[1].y);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        if (h.spec?.echoTrail) {
+          // Two-pass glow: outer halo + inner bright core, pulsing.
+          const pulse = 0.65 + 0.35 * Math.sin(t * 7);
+          ctx.strokeStyle = `rgba(180, 130, 255, ${0.35 * alpha * pulse})`;
+          ctx.lineWidth = 14;
+          ctx.beginPath();
+          ctx.moveTo(portals[0].x, portals[0].y);
+          ctx.lineTo(portals[1].x, portals[1].y);
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(220, 180, 255, ${0.75 * alpha})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(portals[0].x, portals[0].y);
+          ctx.lineTo(portals[1].x, portals[1].y);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = `rgba(160, 124, 255, ${0.22 * alpha})`;
+          ctx.setLineDash([3, 7]);
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(portals[0].x, portals[0].y);
+          ctx.lineTo(portals[1].x, portals[1].y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         ctx.restore();
       }
 
