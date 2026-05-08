@@ -4058,6 +4058,18 @@ class Enemy {
       this.alive = false;
       Logger.event('enemy_killed', { type: this.def.id, source: source?.spell || 'unknown' });
     }
+    if (this.game) {
+      this.game.onImpact({
+        x: this.x, y: this.y,
+        kind: !this.alive ? 'death' :
+              this._lastResistVerdict === 'resist' ? 'resist' :
+              this._lastResistVerdict === 'vuln'   ? 'vuln' : 'hit',
+        dmg: actual,
+        fatal: !this.alive,
+        source: source?.spell,
+      });
+      if (!this.alive) this._deathBurstFired = true;
+    }
     return actual;
   }
 }
@@ -4432,7 +4444,9 @@ class WaveManager {
       // Small offsets clustered around base point
       const ox = n === 1 ? 0 : rand(-spread, spread);
       const oy = n === 1 ? 0 : rand(-spread * 0.5, spread * 0.5);
-      this.game.enemies.push(new Enemy(def, bx + ox, by + oy, hpMult, speedMult));
+      const enemy = new Enemy(def, bx + ox, by + oy, hpMult, speedMult);
+      enemy.game = this.game;
+      this.game.enemies.push(enemy);
     }
     Logger.event('enemy_spawn', { type: def.id, wave: this.wave, count: n });
     return n;
@@ -4721,7 +4735,6 @@ class Game {
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
     this.tickParticles(dt);
-    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 2.4);
     if (!this.player.alive) {
       this.state = 'gameover';
       UI.showGameOver(this.statsSnapshot());
@@ -4790,19 +4803,26 @@ class Game {
     }
   }
   spawnDeathParticles(e) {
-    const color = e.color || '#cfa3ff';
-    for (let i = 0; i < 10; i++) {
-      const a = rand(0, TAU);
-      const sp = rand(60, 200);
-      this.particles.push(new Particle({
-        x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        radius: rand(1.5, 3.5), color, life: rand(0.4, 0.7),
-        kind: 'spark',
-      }));
-    }
+    this.particles.push({ kind: 'burst', variant: 'death', x: e.x, y: e.y, life: 0.5, t: 0, vx: 0, vy: 0, radius: 0, color: '' });
+    if (e.boss) Camera.shake('catastrophic');
   }
   addShake(magnitude) {
     this.shake = Math.min(1.0, this.shake + magnitude);
+    Camera.shake(
+      magnitude < 0.15 ? 'light' :
+      magnitude < 0.25 ? 'medium' :
+      magnitude < 0.40 ? 'heavy' : 'catastrophic'
+    );
+  }
+
+  onImpact(evt) {
+    const variant = ['hit', 'crit', 'resist', 'vuln', 'death'].includes(evt.kind)
+      ? evt.kind : 'hit';
+    this.particles.push({ kind: 'burst', variant, x: evt.x, y: evt.y, life: 0.5, t: 0, vx: 0, vy: 0, radius: 0, color: '' });
+    const shakeKey = evt.fatal ? 'heavy' :
+                     evt.source === 'meteor' ? 'catastrophic' :
+                     evt.kind === 'crit' ? 'medium' : 'light';
+    Camera.shake(shakeKey);
   }
   spawnChainLightning({ from, firstTarget, damage, chains, chainRange, falloff, crit, spell, applyStatus }) {
     let prev = from;
@@ -5514,7 +5534,7 @@ class Game {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (!e.alive) {
-        this.spawnDeathParticles(e);
+        if (!e._deathBurstFired) this.spawnDeathParticles(e);
         this.kills += 1;
         this.enemies.splice(i, 1);
         continue;
@@ -5965,6 +5985,151 @@ class Game {
 
 
 /* ==========================================================================
+ * 7b. CAMERA SHAKE — stacking event model (replaces simple accumulator)
+ * ========================================================================*/
+const Camera = {
+  shakes: [],
+  ox: 0, oy: 0,
+
+  shake(level) {
+    const TABLE = {
+      light:        { amp: 2,  dur: 0.12 },
+      medium:       { amp: 5,  dur: 0.22 },
+      heavy:        { amp: 9,  dur: 0.40 },
+      catastrophic: { amp: 14, dur: 0.70 },
+    };
+    const p = typeof level === 'string' ? TABLE[level] : level;
+    if (!p) return;
+    this.shakes.push({ amp: p.amp, dur: p.dur, t0: performance.now() / 1000 });
+  },
+
+  update(now) {
+    let x = 0, y = 0;
+    for (let i = this.shakes.length - 1; i >= 0; i--) {
+      const e = this.shakes[i];
+      const age = now - e.t0;
+      if (age >= e.dur) { this.shakes.splice(i, 1); continue; }
+      const k = 1 - age / e.dur;
+      const ang = (Math.sin((age + i * 0.13) * 73) + Math.cos((age + i * 0.31) * 97)) * 50;
+      x += Math.cos(ang) * e.amp * k * k;
+      y += Math.sin(ang) * e.amp * k * k;
+    }
+    this.ox = x; this.oy = y;
+  },
+};
+
+/* ==========================================================================
+ * 7c. HIT BURSTS — 5 variants rendered as 'burst' particles
+ * ========================================================================*/
+function burstHit(ctx, x, y, phase) {
+  if (phase <= 0 || phase >= 1) return;
+  const a = 1 - phase;
+  ctx.strokeStyle = `rgba(168,58,44,${a})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(x, y, 5 + phase * 14, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = `rgba(26,22,18,${a * 0.6})`;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.arc(x, y, 3 + phase * 10, 0, TAU); ctx.stroke();
+  for (let i = 0; i < 7; i++) {
+    const ang = i / 7 * TAU + phase * 0.3;
+    const ra = 4 + phase * 4;
+    const rb = 14 + phase * 4;
+    ctx.strokeStyle = `rgba(200,148,26,${a * 0.9})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(ang) * ra, y + Math.sin(ang) * ra);
+    ctx.lineTo(x + Math.cos(ang) * rb, y + Math.sin(ang) * rb);
+    ctx.stroke();
+  }
+}
+
+function burstCrit(ctx, x, y, phase) {
+  if (phase <= 0 || phase >= 1) return;
+  const a = 1 - phase;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(phase * 0.6);
+  ctx.fillStyle = `rgba(232,184,64,${a * 0.6})`;
+  drawStarPath(ctx, 0, 0, 8 + phase * 22, 3 + phase * 8, 8);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(168,58,44,${a})`;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = `rgba(200,148,26,${a})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(x, y, 6 + phase * 18, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = `rgba(26,22,18,${a * 0.7})`;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.arc(x, y, 10 + phase * 22, 0, TAU); ctx.stroke();
+}
+
+function burstResist(ctx, x, y, phase) {
+  if (phase <= 0 || phase >= 1) return;
+  const a = 1 - phase;
+  const hues = ['rgba(232,220,192,', 'rgba(200,148,26,', 'rgba(44,74,140,', 'rgba(232,220,192,'];
+  for (let i = 0; i < 4; i++) {
+    const k = phase + i * 0.06;
+    if (k >= 1) continue;
+    ctx.strokeStyle = `${hues[i]}${(1 - k) * 0.9})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x, y, 6 + k * 16, 0, TAU); ctx.stroke();
+  }
+  ctx.font = '600 9px "JetBrains Mono", monospace';
+  ctx.fillStyle = `rgba(60,60,80,${a})`;
+  ctx.textAlign = 'center';
+  ctx.fillText('RESIST', x, y - 18 - phase * 8);
+  ctx.textAlign = 'start';
+}
+
+function burstVuln(ctx, x, y, phase) {
+  if (phase <= 0 || phase >= 1) return;
+  const a = 1 - phase;
+  ctx.fillStyle = `rgba(168,58,44,${a * 0.45})`;
+  ctx.beginPath(); ctx.arc(x, y, 8 + phase * 20, 0, TAU); ctx.fill();
+  ctx.strokeStyle = `rgba(168,58,44,${a})`;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(x, y, 5 + phase * 16, 0, TAU); ctx.stroke();
+  for (let i = 0; i < 12; i++) {
+    const ang = i / 12 * TAU;
+    ctx.strokeStyle = `rgba(122,40,32,${a * 0.8})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(ang) * (6 + phase * 6), y + Math.sin(ang) * (6 + phase * 6));
+    ctx.lineTo(x + Math.cos(ang) * (18 + phase * 8), y + Math.sin(ang) * (18 + phase * 8));
+    ctx.stroke();
+  }
+  ctx.font = '600 9px "JetBrains Mono", monospace';
+  ctx.fillStyle = `rgba(168,58,44,${a})`;
+  ctx.textAlign = 'center';
+  ctx.fillText('VULN', x, y - 20 - phase * 8);
+  ctx.textAlign = 'start';
+}
+
+function burstDeath(ctx, x, y, phase) {
+  if (phase <= 0 || phase >= 1) return;
+  const a = 1 - phase;
+  for (let i = 0; i < 8; i++) {
+    const ang = i / 8 * TAU + 0.3;
+    const dist = 4 + phase * 32;
+    ctx.save();
+    ctx.translate(x + Math.cos(ang) * dist, y + Math.sin(ang) * dist);
+    ctx.rotate(ang + phase * 1.6);
+    ctx.fillStyle = `rgba(26,22,18,${a})`;
+    ctx.beginPath();
+    ctx.moveTo(-3, -2); ctx.lineTo(4, 0); ctx.lineTo(-2, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = `rgba(26,22,18,${a * 0.8})`;
+  ctx.beginPath(); ctx.arc(x, y, 3 + phase * 4, 0, TAU); ctx.fill();
+  ctx.strokeStyle = `rgba(168,58,44,${a * 0.8})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(x, y, 8 + phase * 22, 0, TAU); ctx.stroke();
+}
+
+/* ==========================================================================
  * 8. RENDERER — Pure draw layer.
  *    Replace drawPlayer / drawEnemy / drawProjectile with sprite calls
  *    when art is available. Keep signatures.
@@ -6194,17 +6359,16 @@ const Renderer = {
 
     if (game.state === 'menu') return;
 
-    // Screen shake: random small offset that decays each frame.
-    // Reads from game.shake (0..1). 12px max travel feels punchy without nausea.
-    let shakeX = 0, shakeY = 0;
-    if (game.shake > 0) {
-      shakeX = (Math.random() - 0.5) * game.shake * 12;
-      shakeY = (Math.random() - 0.5) * game.shake * 12;
+    // Camera shake — stacking event model, punchier decay than the old accumulator.
+    const now = performance.now() / 1000;
+    Camera.update(now);
+    const hasShake = Camera.shakes.length > 0 || Camera.ox !== 0 || Camera.oy !== 0;
+    if (hasShake) {
       ctx.save();
-      ctx.translate(shakeX, shakeY);
+      ctx.translate(Camera.ox, Camera.oy);
     }
 
-    // World layers
+    // World layers (inside shake transform — HUD lives in the DOM and is immune)
     this.drawFlamePatches(ctx, game.flamePatches, game.runElapsed);
     this.drawFlameWalls(ctx, game.flameWalls, w, game.runElapsed);
     this.drawSnowForts(ctx, game.snowForts, game.runElapsed);
@@ -6225,7 +6389,7 @@ const Renderer = {
     if (game.minion)  this.drawMinion(ctx, game.minion, game.runElapsed);
     if (game.player) this.drawPlayer(ctx, game.player, game.runElapsed);
 
-    if (game.shake > 0) ctx.restore();
+    if (hasShake) ctx.restore();
 
     // Overlay: spawn-zone indicators (drawn LAST in the world layer so
     // they sit above flagstones but below HUD, and don't shake)
@@ -7625,7 +7789,13 @@ const Renderer = {
   },
 
   drawParticles(ctx, parts) {
+    const BURST_FNS = { hit: burstHit, crit: burstCrit, resist: burstResist, vuln: burstVuln, death: burstDeath };
     for (const p of parts) {
+      if (p.kind === 'burst') {
+        const fn = BURST_FNS[p.variant];
+        if (fn) fn(ctx, p.x, p.y, p.t / p.life);
+        continue;
+      }
       const a = 1 - p.t / p.life;
       ctx.fillStyle = this.colorWithAlpha(p.color, a);
       ctx.beginPath();
