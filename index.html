@@ -7672,7 +7672,7 @@ const Renderer = {
         const isSteel = trailKind === 'steel';
         let trailColor = '26,22,18'; // ink default
         if (isFire) trailColor = '168,58,44';
-        else if (isFrost) trailColor = '44,74,140';
+        else if (isFrost) trailColor = '100,200,240'; // cyan frost mist
         else if (isGrav) trailColor = '60,40,32';
         else if (isTidal) trailColor = '76,108,172';
         else if (isSteel) trailColor = '168,58,44';
@@ -7754,25 +7754,34 @@ const Renderer = {
         ctx.fillStyle = PAL.gold;
         ctx.beginPath(); ctx.arc(0, 0, rr * 0.06, 0, TAU); ctx.fill();
       } else if (trailKind === 'frost') {
+        // Rotating ice-crystal body + cyan inner highlight + tip sparkle
+        const spin = performance.now() * 0.004;
+        ctx.rotate(spin);
         const len = Math.max(14, r * 2.4);
-        ctx.fillStyle = PAL.blue;
-        ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.2;
+        // Outer crystal — pale blue-indigo
+        ctx.fillStyle   = 'rgba(100, 180, 220, 0.90)';
+        ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.0;
         ctx.beginPath();
         ctx.moveTo(len * 0.55, 0);
-        ctx.lineTo(-len * 0.1, -r * 0.7);
+        ctx.lineTo(-len * 0.1, -r * 0.75);
         ctx.lineTo(-len * 0.45, 0);
-        ctx.lineTo(-len * 0.1, r * 0.7);
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = PAL.paper;
+        ctx.lineTo(-len * 0.1,  r * 0.75);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // Inner highlight — ice-white core
+        ctx.fillStyle = 'rgba(210, 245, 255, 0.85)';
         ctx.beginPath();
         ctx.moveTo(len * 0.32, 0);
-        ctx.lineTo(-len * 0.05, -r * 0.28);
-        ctx.lineTo(-len * 0.05, r * 0.28);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = PAL.ink;
-        ctx.beginPath(); ctx.arc(len * 0.5, 0, 1, 0, TAU); ctx.fill();
+        ctx.lineTo(-len * 0.05, -r * 0.30);
+        ctx.lineTo(-len * 0.05,  r * 0.30);
+        ctx.closePath(); ctx.fill();
+        // Tip sparkle
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath(); ctx.arc(len * 0.50, 0, 1.2, 0, TAU); ctx.fill();
+        // Two tiny cross-arm bars at center (snowflake cross)
+        ctx.strokeStyle = 'rgba(180, 230, 255, 0.80)';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(-len * 0.04, -r * 0.5); ctx.lineTo(-len * 0.04, r * 0.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-len * 0.22, 0); ctx.lineTo(len * 0.18, 0); ctx.stroke();
       } else if (trailKind === 'gravity' || trailKind === 'void') {
         // Ink orb wrapped in vermilion event-horizon ring
         ctx.fillStyle = PAL.ink;
@@ -8777,32 +8786,87 @@ const Renderer = {
     for (const h of holes) {
       const fadeIn  = Math.min(1, h.t / 0.3);
       const fadeOut = Math.min(1, (h.life - h.t) / 0.5);
-      const a = Math.min(fadeIn, fadeOut);
-      const portals = [h.portalA, h.portalB].filter(Boolean);
-      for (const p of portals) {
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(t * 1.6);
-        ctx.strokeStyle = `rgba(160, 124, 255, ${0.85 * a})`;
-        ctx.lineWidth = 1.6;
-        for (let r = 4; r <= 16; r += 4) {
-          ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU * 0.85); ctx.stroke();
-        }
-        ctx.fillStyle = `rgba(28, 12, 50, ${0.8 * a})`;
-        ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
-        ctx.restore();
-      }
-      // line connecting the two portals
+      const alpha = Math.min(fadeIn, fadeOut);
+      const portals = [h.a, h.b].filter(Boolean);
+      if (!portals.length) continue;
+
+      const pr = h.radius ? h.radius * 0.45 : 22; // portal visual radius
+
+      // Connection thread between portals
       if (portals.length === 2) {
         ctx.save();
-        ctx.strokeStyle = `rgba(160, 124, 255, ${0.18 * a})`;
-        ctx.setLineDash([2, 6]);
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(160, 124, 255, ${0.22 * alpha})`;
+        ctx.setLineDash([3, 7]);
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(portals[0].x, portals[0].y);
         ctx.lineTo(portals[1].x, portals[1].y);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      for (let pi = 0; pi < portals.length; pi++) {
+        const p = portals[pi];
+        const isIn  = pi === 0; // portal A sucks in, portal B ejects
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+
+        // Dark void fill
+        const voidGrad = ctx.createRadialGradient(0, 0, pr * 0.15, 0, 0, pr);
+        voidGrad.addColorStop(0,   `rgba(8, 2, 22, ${0.96 * alpha})`);
+        voidGrad.addColorStop(0.55, `rgba(28, 10, 58, ${0.80 * alpha})`);
+        voidGrad.addColorStop(1,   `rgba(60, 30, 120, 0)`);
+        ctx.fillStyle = voidGrad;
+        ctx.beginPath(); ctx.arc(0, 0, pr, 0, TAU); ctx.fill();
+
+        // Distortion ring — two counter-rotating arcs suggesting pinch
+        const rot1 = t * (isIn ? 1.8 : -1.4);
+        const rot2 = t * (isIn ? -2.2 : 1.9);
+        for (const [rot, sweep, col] of [
+          [rot1, TAU * 0.70, `rgba(180, 130, 255, ${0.70 * alpha})`],
+          [rot2, TAU * 0.55, `rgba(120, 200, 255, ${0.50 * alpha})`],
+        ]) {
+          ctx.save();
+          ctx.rotate(rot);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1.8;
+          ctx.beginPath(); ctx.arc(0, 0, pr * 0.82, 0, sweep); ctx.stroke();
+          ctx.lineWidth = 1.0;
+          ctx.strokeStyle = col.replace(/[\d.]+\)$/, `${0.35 * alpha})`);
+          ctx.beginPath(); ctx.arc(0, 0, pr * 0.92, 0, sweep * 0.6); ctx.stroke();
+          ctx.restore();
+        }
+
+        // Swirling particles being sucked in (portal A) or flung out (portal B)
+        const PARTS = 7;
+        for (let k = 0; k < PARTS; k++) {
+          const phase  = ((t * (isIn ? 1.1 : -0.9)) + k / PARTS) % 1;
+          const ang    = (k / PARTS) * TAU + t * (isIn ? 2.0 : -1.6);
+          const dist   = isIn
+            ? pr * (1 - phase)          // spiral inward
+            : pr * (0.15 + phase * 0.9); // spiral outward
+          const px = Math.cos(ang - phase * TAU * 0.5) * dist;
+          const py = Math.sin(ang - phase * TAU * 0.5) * dist;
+          const pa  = (isIn ? (1 - phase) : phase) * alpha * 0.75;
+          const pSize = isIn ? (1 + phase * 1.8) : (2.2 - phase * 1.4);
+          ctx.fillStyle = `rgba(${isIn ? '160,100,255' : '200,160,255'}, ${pa})`;
+          ctx.beginPath(); ctx.arc(px, py, Math.max(0.5, pSize), 0, TAU); ctx.fill();
+        }
+
+        // Bright event-horizon rim
+        const rimGrad = ctx.createRadialGradient(0, 0, pr * 0.72, 0, 0, pr * 1.05);
+        rimGrad.addColorStop(0,   `rgba(200, 160, 255, 0)`);
+        rimGrad.addColorStop(0.6, `rgba(200, 160, 255, ${0.55 * alpha})`);
+        rimGrad.addColorStop(1,   `rgba(255, 255, 255, 0)`);
+        ctx.fillStyle = rimGrad;
+        ctx.beginPath(); ctx.arc(0, 0, pr * 1.05, 0, TAU); ctx.fill();
+
+        // Tiny bright core pip
+        ctx.fillStyle = `rgba(255, 240, 255, ${0.90 * alpha})`;
+        ctx.beginPath(); ctx.arc(0, 0, 2.0, 0, TAU); ctx.fill();
+
         ctx.restore();
       }
     }
@@ -8815,7 +8879,7 @@ const Renderer = {
       const fadeOut = sh.life ? Math.min(1, (sh.life - sh.t) / 0.4) : 1;
       const a = Math.min(fadeIn, fadeOut);
       const orbCount = sh.orbCount || 3;
-      const radius   = sh.orbitRadius || 38;
+      const radius   = sh.orbitRadius || sh.radius || 38;
       const spin     = (sh.spin || 0) + t * 1.8;
       const TRAIL    = 10; // trail segment count
       const trailArc = 0.9; // radians behind the orb
