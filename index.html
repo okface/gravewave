@@ -2813,6 +2813,10 @@ const SPELLS = {
           if (b.lingeringFlame) {
             game.spawnFlamePatch(hit.x, hit.y, radius * 0.85, 2.5, burnDmg);
           }
+          // Hydra spec: 20% chance to spawn a fireball-spitting Hydra Head for 6s
+          if (b.hydraOnHit && Math.random() < b.hydraOnHit) {
+            game.spawnHydraHead(hit.x, hit.y, mods);
+          }
         },
         trail: 'fire',
         spell: 'fireball',
@@ -2960,9 +2964,9 @@ const ABILITIES = {
   fireball: {
     id: 'fireball', name: 'Fireball', tier: 1, classId: 'wizard',
     icon: '🔥', tag: 'attack', color: '#ff7733',
-    description: 'Lobbed flame that explodes on impact. Splash damage.',
+    description: 'Lobbed flame that explodes on impact. 18 direct + 11 splash dmg.',
     damageType: 'elemental',
-    cooldown: 1.5,
+    cooldown: 1.5, damage: 18, radius: 80,
     cast: (game, caster, mods) => SPELLS.fireball.cast(game, caster, mods),
     dumps: [
       { id: 'heat',    name: 'Heat',       desc: '+8% Fireball damage per point.', stat: 'dmgMult',    perPoint: 0.08 },
@@ -2986,9 +2990,9 @@ const ABILITIES = {
   chain_lightning: {
     id: 'chain_lightning', name: 'Chain Lightning', tier: 1, classId: 'wizard',
     icon: '⚡', tag: 'attack', color: '#5ae5ff',
-    description: 'Instant strike on the nearest enemy + arcs to nearby foes.',
+    description: 'Instant 16 dmg strike on nearest enemy, arcs to 1 nearby at 70% dmg.',
     damageType: 'elemental',
-    cooldown: 0.9,
+    cooldown: 0.9, damage: 16,
     cast: (game, caster, mods) => SPELLS.lightning_bolt.cast(game, caster, mods),
     dumps: [
       { id: 'voltage',  name: 'Voltage',  desc: '+8% damage per point.',     stat: 'dmgMult',    perPoint: 0.08 },
@@ -3011,9 +3015,9 @@ const ABILITIES = {
   black_hole: {
     id: 'black_hole', name: 'Black Hole', tier: 1, classId: 'wizard',
     icon: '◉', tag: 'attack', color: '#a07cff',
-    description: 'Stationary singularity at the densest cluster. Pulls + grinds.',
+    description: 'Singularity at densest cluster. 28 dps pull for 1.4s.',
     damageType: 'arcane',
-    cooldown: 1.7,
+    cooldown: 1.7, damage: 28, damageNote: 'dps', radius: 80, duration: 1.4,
     cast: (game, caster, mods) => SPELLS.gravity_bolt.cast(game, caster, mods),
     dumps: [
       { id: 'crush',  name: 'Crushing Force', desc: '+8% damage per point.',  stat: 'dmgMult',    perPoint: 0.08 },
@@ -3036,9 +3040,9 @@ const ABILITIES = {
   frost_bolt: {
     id: 'frost_bolt', name: 'Frost Bolt', tier: 1, classId: 'wizard',
     icon: '❄', tag: 'attack', color: '#9af0e6',
-    description: 'Piercing slow projectile. Snares enemies in a line.',
+    description: 'Piercing projectile. 12 dmg per hit, slows, pierces 2 targets.',
     damageType: 'elemental',
-    cooldown: 1.0,
+    cooldown: 1.0, damage: 12,
     cast: (game, caster, mods) => SPELLS.frost_spike.cast(game, caster, mods),
     dumps: [
       { id: 'cold',   name: 'Cold Bite',  desc: '+8% damage per point.',  stat: 'dmgMult',    perPoint: 0.08 },
@@ -3064,28 +3068,32 @@ const ABILITIES = {
   snow_fort: {
     id: 'snow_fort', name: 'Snow Fort', tier: 2, classId: 'wizard',
     icon: '☷', tag: 'defensive', color: '#bce8ff',
-    description: 'Drop a chilled zone. You inside take −50% damage; enemies inside get slowed and chipped.',
+    description: 'Ice wall follows you, absorbs 120 dmg, chips+slows nearby enemies. Reforms after 8s.',
     damageType: 'elemental',
-    cooldown: 12.0,
+    cooldown: 8.0, damage: 12, damageNote: 'dps', radius: 110,
     cast(game, caster, mods) {
-      const radius = 100 * mods.radiusMult;
-      const life   = 5 * mods.durationMult;
-      const dps    = 12 * mods.dmgMult;
-      const slowFactor = Math.max(0.20, 0.50 / mods.slowMult);
-      const reduction = 0.50;
       game.snowForts = game.snowForts || [];
+      // Only one real fort at a time (permafrost patches are flagged _permafrostPatch)
+      if (game.snowForts.some(f => !f._permafrostPatch)) return;
+      const radius     = 110 * (mods.radiusMult || 1);
+      const dps        = 12  * (mods.dmgMult || 1);
+      const shieldHp   = Math.round(120 * (mods.dmgMult || 1));
+      const slowFactor = Math.max(0.20, 0.50 / (mods.slowMult || 1));
+      const rechargeTime = 8 / (mods.durationMult || 1);
       game.snowForts.push(new SnowFort({
-        x: caster.x, y: caster.y, radius, life, dps,
-        slowFactor, slowDuration: 1.0, reduction,
+        x: caster.x, y: caster.y,
+        radius, life: 999, dps,
+        shieldHp, shieldMaxHp: shieldHp,
+        rechargeTime, slowFactor, slowDuration: 1.2, reduction: 0,
         spec: mods.behavior || {},
       }));
       game.spawnExplosion(caster.x, caster.y, radius * 0.6, '#bce8ff', 'frost');
-      game.addShake(0.06);
+      game.addShake(0.08);
     },
     dumps: [
-      { id: 'chill',   name: 'Deeper Chill', desc: '+15% slow strength and chip damage per point.', stat: 'dmgMult', perPoint: 0.15 },
-      { id: 'wider',   name: 'Wider Wall',   desc: '+8% radius per point.',  stat: 'radiusMult',  perPoint: 0.08 },
-      { id: 'longer',  name: 'Longer Frost', desc: '+15% duration per point.', stat: 'durationMult', perPoint: 0.15 },
+      { id: 'chill',   name: 'Fortify',     desc: '+15% shield HP and chip damage per point.', stat: 'dmgMult',      perPoint: 0.15 },
+      { id: 'wider',   name: 'Wider Wall',  desc: '+8% radius per point.',                     stat: 'radiusMult',   perPoint: 0.08 },
+      { id: 'longer',  name: 'Quick Reform',desc: '+12% faster recharge per point.',            stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
@@ -3103,9 +3111,9 @@ const ABILITIES = {
   fire_shield: {
     id: 'fire_shield', name: 'Fire Shield', tier: 2, classId: 'wizard',
     icon: '🜂', tag: 'defensive', color: '#ff7733',
-    description: 'Three flame orbs orbit you, damaging on contact. Blocks one hit per cooldown.',
+    description: '3 flame orbs orbit you. 24 dps contact damage, blocks 2 hits, lasts 6s.',
     damageType: 'elemental',
-    cooldown: 8.0,
+    cooldown: 8.0, damage: 24, damageNote: 'dps', radius: 70, duration: 6,
     cast(game, caster, mods) {
       const orbCount = 3;
       const dps = 24 * mods.dmgMult;
@@ -3148,9 +3156,9 @@ const ABILITIES = {
   gravital_anomaly: {
     id: 'gravital_anomaly', name: 'Gravital Anomalies', tier: 2, classId: 'wizard',
     icon: '◍', tag: 'defensive', color: '#7c3aed',
-    description: 'Spawn 3 small pull-wells around you for area control.',
+    description: '3 pull-wells orbit you. 14 dps each, pull 240u, last 4s.',
     damageType: 'arcane',
-    cooldown: 9.0,
+    cooldown: 9.0, damage: 14, damageNote: 'dps', radius: 70, duration: 4,
     cast(game, caster, mods) {
       const count = 3;
       const radius = 70 * mods.radiusMult;
@@ -3190,9 +3198,9 @@ const ABILITIES = {
   shock_tower: {
     id: 'shock_tower', name: 'Shock Tower', tier: 2, classId: 'wizard',
     icon: '⚡', tag: 'defensive', color: '#1ba8d4',
-    description: 'Stationary sentry that auto-shocks the nearest enemy.',
+    description: 'Sentry near you auto-shocks nearest enemy. 22 dps, 240px range, 8s.',
     damageType: 'elemental',
-    cooldown: 10.0,
+    cooldown: 10.0, damage: 22, damageNote: 'dps', radius: 240, duration: 8,
     cast(game, caster, mods) {
       const dps = 22 * mods.dmgMult;
       const range = 240 * mods.radiusMult;
@@ -3232,9 +3240,9 @@ const ABILITIES = {
   storm_cloud: {
     id: 'storm_cloud', name: 'Storm Cloud', tier: 3, classId: 'wizard',
     icon: '☁', tag: 'ultimate', color: '#1ba8d4',
-    description: 'Hovering cloud, periodically zaps random enemies under it.',
+    description: 'Hovering cloud zaps random enemies. 14 dmg/strike every 0.65s, 100px, 5.5s.',
     damageType: 'elemental',
-    cooldown: 14.0,
+    cooldown: 14.0, damage: 14, damageNote: '/strike', radius: 100, duration: 5.5,
     cast: (game, caster, mods) => SPELLS.storm_cloud.cast(game, caster, mods),
     dumps: [
       { id: 'voltage',  name: 'Voltage',   desc: '+8% strike damage per point.', stat: 'dmgMult',     perPoint: 0.08 },
@@ -3257,9 +3265,9 @@ const ABILITIES = {
   wormhole: {
     id: 'wormhole', name: 'Wormhole', tier: 3, classId: 'wizard',
     icon: '◌', tag: 'ultimate', color: '#7c3aed',
-    description: 'Place 2 portals. Enemies entering one teleport across, take damage, get confused.',
+    description: 'Two portals. Enemies crossing take 50 dmg + get confused. 50px mouth, 8s.',
     damageType: 'arcane',
-    cooldown: 16.0,
+    cooldown: 16.0, damage: 50, radius: 50, duration: 8,
     cast(game, caster, mods) {
       // Place two portals at offsets from caster — A near, B far
       const ang = Math.random() * TAU;
@@ -3293,10 +3301,27 @@ const ABILITIES = {
   meteor: {
     id: 'meteor', name: 'Meteor', tier: 3, classId: 'wizard',
     icon: '💥', tag: 'ultimate', color: '#ff3311',
-    description: 'A massive falling rock. Big single-target damage + AoE crater.',
+    description: 'Massive falling rock. 80 impact damage in 160px crater. Screen-shake.',
     damageType: 'elemental',
-    cooldown: 12.0,
-    cast: (game, caster, mods) => SPELLS.pyroclasm.cast(game, caster, mods),
+    cooldown: 12.0, damage: 80, radius: 160,
+    cast(game, caster, mods) {
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster) || caster;
+      const radius = 160 * (mods.radiusMult || 1);
+      const damage = 80 * mods.dmgMult;
+      const tx = target.x, ty = target.y;
+      // Spawn a falling rock that travels from above the screen to the target
+      const startY = ty - 600;
+      const startX = tx + (Math.random() - 0.5) * 60;
+      const travelTime = 0.55;
+      game.meteors = game.meteors || [];
+      game.meteors.push({
+        startX, startY, targetX: tx, targetY: ty,
+        x: startX, y: startY,
+        t: 0, travelTime,
+        radius, damage, mods,
+        seed: Math.random() * 1000, caster,
+      });
+    },
     dumps: [
       { id: 'mass',    name: 'Mass',     desc: '+10% damage per point.', stat: 'dmgMult',     perPoint: 0.10 },
       { id: 'crater',  name: 'Crater',   desc: '+6% radius per point.', stat: 'radiusMult',   perPoint: 0.06 },
@@ -3318,9 +3343,9 @@ const ABILITIES = {
   snow_storm: {
     id: 'snow_storm', name: 'Snow Storm', tier: 3, classId: 'wizard',
     icon: '❄', tag: 'ultimate', color: '#bce8ff',
-    description: 'Massive radius blizzard. Stacking slow + tick damage to all inside.',
+    description: 'Huge blizzard. 30 dps to all inside, stacking slow, 260px radius, 8s.',
     damageType: 'elemental',
-    cooldown: 18.0,
+    cooldown: 18.0, damage: 30, damageNote: 'dps', radius: 260, duration: 8,
     cast(game, caster, mods) {
       const radius = 260 * mods.radiusMult;
       const life = 8 * mods.durationMult;
@@ -3578,11 +3603,12 @@ const MINIONS = {
   linker: {
     id: 'linker', name: 'Sigil Linker', icon: '◇',
     color: '#a07cff',
-    description: 'A floating sigil that threads nearby enemies together. Damage you deal bleeds to linked enemies. Overkill cascades.',
+    description: 'Threads 3 nearby enemies together. Damage bleeds to all linked at 20% share. Range 240px. Relinks every 1.5s.',
     flavor: 'utility · damage redirection',
     dumps: [
-      { id: 'share', name: 'Bleedover',   desc: '+8% link damage share per point.', stat: 'shareBonus', perPoint: 0.08 },
-      { id: 'reach', name: 'Reach',       desc: '+18% link range per point.',       stat: 'rangeMult',  perPoint: 0.18 },
+      { id: 'share',  name: 'Bleedover', desc: '+8% link damage share per point (base 20%).', stat: 'shareBonus',     perPoint: 0.08 },
+      { id: 'reach',  name: 'Reach',     desc: '+18% link range per point (base 240px).',     stat: 'rangeMult',      perPoint: 0.18 },
+      { id: 'count',  name: 'Web',       desc: '+1 max linked enemies per 2 points (base 3).', stat: 'linkCountBonus', perPoint: 0.5  },
     ],
     specs: [
       { id: 'echo',     name: 'Echo',     desc: 'Linked enemies slow for 0.7s when struck.',
@@ -3602,7 +3628,7 @@ const MINIONS = {
   decoy: {
     id: 'decoy', name: 'Decoy Effigy', icon: '☗',
     color: '#c89aff',
-    description: 'A straw-and-iron effigy. Base 120 HP. Enemies in range target it instead of you. When destroyed, it explodes for AoE damage and respawns.',
+    description: '120 HP decoy. Enemies within 260px target it instead of you. On death: AoE explosion, then respawns in 6s.',
     flavor: 'utility · taunt',
     dumps: [
       { id: 'sturdy', name: 'Sturdy',  desc: '+50 max HP per point.',                stat: 'hpBonus',     perPoint: 50 },
@@ -3631,7 +3657,7 @@ const MINIONS = {
   mender: {
     id: 'mender', name: 'Mender Wisp', icon: '✚',
     color: '#9af0c8',
-    description: 'A wisp that hovers at your shoulder and mends your wounds on a steady cadence. Heals 12 HP every 4s.',
+    description: 'Hovers at your shoulder and heals you. 12 HP every 4s. Resurgence spec saves you from death once per run.',
     flavor: 'utility · healing',
     dumps: [
       { id: 'flow',  name: 'Healing Flow', desc: '+5 HP healed per pulse per point.', stat: 'healBonus', perPoint: 5 },
@@ -3657,7 +3683,7 @@ const MINIONS = {
   drummer: {
     id: 'drummer', name: 'War Drummer', icon: '⌬',
     color: '#d7a648',
-    description: 'A small drummer that pounds a beat. Each beat cycles the active aura: Vigor (+damage), Ward (−damage taken), Haste (faster cooldowns).',
+    description: 'Cycles auras every 2s: Vigor (+15% dmg), Ward (−15% dmg taken), Haste (−15% cd). Aura applies to you in range.',
     flavor: 'utility · cycling auras',
     dumps: [
       { id: 'might', name: 'Might',  desc: '+3% aura strength per point.',     stat: 'auraStrengthBonus', perPoint: 0.03 },
@@ -3864,8 +3890,26 @@ class Player {
    */
   takeDamage(dmg, attacker = null, game = null) {
     if (this.iframes > 0 || !this.alive) return;
-    // Snow Fort safe zone — set by SnowFort.tick when player is inside.
-    // Halves incoming damage while the buff is live.
+    // Snow Fort shield — absorbs incoming damage before HP loss.
+    if (this._snowFort && !this._snowFort.recharging && this._snowFort.shieldHp > 0) {
+      const fort = this._snowFort;
+      const absorbed = Math.min(dmg, fort.shieldHp);
+      fort.shieldHp -= absorbed;
+      dmg -= absorbed;
+      if (game) game.spawnDamageNumber(this.x, this.y - this.radius - 8, `FORT -${Math.round(absorbed)}`, false);
+      if (fort.shieldHp <= 0) {
+        fort.recharging  = true;
+        fort.rechargeAcc = 0;
+        if (game) {
+          game.spawnDamageNumber(this.x, this.y - this.radius - 14, 'FORT BROKEN', true, { verdict: 'resist' });
+          game.spawnExplosion(this.x, this.y, fort.radius * 0.8, '#bce8ff', 'frost');
+          game.spawnHitParticles(this.x, this.y, '#bce8ff', 18);
+          game.addShake(0.20);
+        }
+      }
+      if (dmg <= 0) { this.iframes = CONFIG.player.iframes * 0.4; return; }
+    }
+    // Legacy safe-zone path (kept for permafrost patches, not used by main fort any more)
     if (this._safeZoneUntil && (game?.runElapsed ?? 0) < this._safeZoneUntil) {
       dmg = dmg * (1 - (this._safeZoneReduction || 0.5));
     }
@@ -4184,14 +4228,18 @@ class StormCloud {
  * Game.tickXxx (see further down). Renderer.drawXxx draws the visuals.
  * ------------------------------------------------------------------ */
 class SnowFort {
-  // Cold zone centred on the player at cast time. While alive: damages
-  // and slows enemies inside; flags the player as inside the safe zone
-  // so Player.takeDamage can apply the reduction.
+  // Ice wall that follows the player. Absorbs incoming damage via shieldHp.
+  // When shieldHp reaches 0 the fort "breaks" and recharges over rechargeTime.
+  // Also slows + chips enemies inside and in a wider outer approach zone.
   constructor(opts) {
     Object.assign(this, opts);
     this.t = 0;
     this.dmgAcc = 0;
     this.seed = Math.random() * 1000;
+    this.shieldMaxHp = opts.shieldHp || 120;
+    this.shieldHp    = this.shieldMaxHp;
+    this.recharging  = false;
+    this.rechargeAcc = 0;
   }
 }
 class FireShield {
@@ -4214,6 +4262,17 @@ class ShockTower {
     this.t = 0;
     this.atkAcc = 0;
     this.shotCount = 0;
+  }
+}
+class HydraHead {
+  // Serpent head that spawns on fireball hit. Shoots small fireballs at nearby
+  // enemies every atkInterval seconds for `life` seconds, then pops.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t      = 0;
+    this.atkAcc = 0;
+    this.seed   = Math.random() * 1000;
+    this.bobAng = Math.random() * Math.PI * 2;
   }
 }
 class Wormhole {
@@ -4568,8 +4627,10 @@ class Game {
     this.snowForts = [];
     this.fireShields = [];
     this.shockTowers = [];
-    this.wormholes = [];
-    this.snowStorms = [];
+    this.hydraHeads  = [];
+    this.meteors     = [];
+    this.wormholes   = [];
+    this.snowStorms  = [];
     this.damageNumbers = [];
     this.explosions = [];
     this.shake = 0;
@@ -4647,9 +4708,10 @@ class Game {
     const ps = this.playerState;
     if (!ps || (ps.unspentPoints || 0) <= 0) return false;
     if (!ps.minion) return false;
-    if (dumpIdx < 0 || dumpIdx > 1) return false;
+    const def2 = MINIONS[ps.minion];
+    if (!def2 || dumpIdx < 0 || dumpIdx >= def2.dumps.length) return false;
     if ((ps.minionPoints.dumps[dumpIdx] || 0) >= 3) return false;
-    ps.minionPoints.dumps[dumpIdx] += 1;
+    ps.minionPoints.dumps[dumpIdx] = (ps.minionPoints.dumps[dumpIdx] || 0) + 1;
     ps.unspentPoints -= 1;
     Logger.event('minion_point_invested', { minion: ps.minion, dump: dumpIdx });
     return true;
@@ -4675,6 +4737,7 @@ class Game {
       hpBonus: 0,    boomMult: 1,
       healBonus: 0,  pulseFaster: 0,
       auraStrengthBonus: 0, auraRangeMult: 1,
+      linkCountBonus: 0,
       behavior: {},
     };
     const ps = this.playerState;
@@ -4696,6 +4759,7 @@ class Game {
         case 'pulseFaster':        base.pulseFaster        += total; break;
         case 'auraStrengthBonus':  base.auraStrengthBonus  += total; break;
         case 'auraRangeMult':      base.auraRangeMult      += total; break;
+        case 'linkCountBonus':     base.linkCountBonus     += total; break;
       }
     }
     if (slot.spec) {
@@ -4731,6 +4795,8 @@ class Game {
     this.tickWormholes(dt);
     this.tickSnowStorms(dt);
     this.tickMinion(dt);
+    this.tickHydraHeads(dt);
+    this.tickMeteors(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
@@ -4760,6 +4826,15 @@ class Game {
   }
   spawnStormCloud(opts) {
     this.stormClouds.push(new StormCloud(opts));
+  }
+  spawnHydraHead(x, y, mods) {
+    this.hydraHeads.push(new HydraHead({
+      x, y, life: 6,
+      damage: 8 * (mods?.dmgMult || 1),
+      atkInterval: 0.85,
+      range: 200,
+    }));
+    this.spawnHitParticles(x, y, '#ff6622', 10);
   }
   spawnExplosion(x, y, radius, color, kind = 'burst') {
     this.explosions.push({ x, y, radius, color, kind, t: 0, life: 0.45, dead: false });
@@ -4922,11 +4997,20 @@ class Game {
   /* ---- New ability entity tick methods ---- */
   tickSnowForts(dt) {
     if (!this.snowForts) return;
+    // Clear per-frame player fort reference; will be set below if a live fort exists.
+    if (this.player) this.player._snowFort = null;
     for (let i = this.snowForts.length - 1; i >= 0; i--) {
       const f = this.snowForts[i];
       f.t += dt;
-      if (f.t >= f.life) {
-        // Spec: Avalanche — final big damage.
+
+      // Follow the player (permafrost patches stay put, they have _permafrostPatch)
+      if (!f._permafrostPatch && this.player?.alive) {
+        f.x = this.player.x;
+        f.y = this.player.y;
+      }
+
+      // Expire permafrost patches and spec-limited forts normally
+      if (f.life < 999 && f.t >= f.life) {
         if (f.spec?.avalancheExpire) {
           for (const e of this.enemies) {
             if (!e.alive) continue;
@@ -4939,36 +5023,54 @@ class Game {
           this.spawnExplosion(f.x, f.y, f.radius, '#bce8ff', 'frost');
           this.addShake(0.20);
         }
-        // Spec: Permafrost — leave a slow-only patch
-        if (f.spec?.permafrost) {
-          this.snowForts.push(new SnowFort({
-            x: f.x, y: f.y, radius: f.radius * 0.8, life: 3, dps: 0,
-            slowFactor: 0.5, slowDuration: 1.0, reduction: 0,
-            spec: { _faded: true },
-          }));
-        }
         this.snowForts.splice(i, 1);
         continue;
       }
-      // Apply slow + tick damage to enemies inside
+
+      // Recharging state: fort is broken, waiting to reform
+      if (f.recharging) {
+        f.rechargeAcc = (f.rechargeAcc || 0) + dt;
+        if (f.rechargeAcc >= (f.rechargeTime || 8)) {
+          f.recharging  = false;
+          f.shieldHp    = f.shieldMaxHp || 120;
+          f.rechargeAcc = 0;
+          this.spawnExplosion(f.x, f.y, f.radius * 0.6, '#bce8ff', 'frost');
+        }
+        if (this.player) this.player._snowFort = f; // keep reference so UI shows it
+        continue;
+      }
+
+      // Expose active fort to the player (for shield absorption in takeDamage)
+      if (this.player) this.player._snowFort = f;
+
+      // Chip damage + slow in inner zone; outer slow-only zone at 1.3× radius
       f.dmgAcc += dt;
-      const tickIv = 0.3;
+      const tickIv  = 0.3;
       const wantTick = f.dmgAcc >= tickIv && f.dps > 0;
-      const tickDmg = f.dps * tickIv;
+      const tickDmg  = f.dps * tickIv;
+      const outerR   = f.radius * 1.3;
       for (const e of this.enemies) {
         if (!e.alive) continue;
-        if (Vec.dist(f, e) >= f.radius + e.radius) continue;
-        e.applyStatus('slow', { duration: f.slowDuration, factor: f.slowFactor }, this.runElapsed);
-        if (wantTick) {
-          const a = e.takeDamage(tickDmg, { spell: 'snow_fort' });
-          this.totalDamageDealt += a;
+        const dist = Vec.dist(f, e);
+        if (dist >= outerR + e.radius) continue;
+        const innerHit = dist < f.radius + e.radius;
+        // Inner zone: full slow + chip damage
+        if (innerHit) {
+          e.applyStatus('slow', { duration: f.slowDuration, factor: f.slowFactor }, this.runElapsed);
+          if (wantTick) {
+            const a = e.takeDamage(tickDmg, { spell: 'snow_fort' });
+            this.totalDamageDealt += a;
+          }
+        } else {
+          // Outer approach zone: lighter slow to push them away from the wall
+          e.applyStatus('slow', { duration: 0.4, factor: 0.72 }, this.runElapsed);
         }
       }
       if (wantTick) f.dmgAcc = 0;
-      // Player inside → safe zone
-      if (this.player?.alive && f.reduction > 0 && Vec.dist(f, this.player) < f.radius) {
-        this.player._safeZoneUntil = Math.max(this.player._safeZoneUntil || 0, this.runElapsed + 0.1);
-        this.player._safeZoneReduction = f.reduction;
+
+      // Spec: crystalCrit — boost player crit while fort is up
+      if (f.spec?.crystalCrit && this.player) {
+        this.player._fortCritBonus = f.spec.crystalCrit;
       }
     }
   }
@@ -5186,6 +5288,81 @@ class Game {
    * private behavior helper. Auras / heals / link bookkeeping all
    * reapply state on the player and enemies as needed.
    * -------------------------------------------------------------- */
+  tickMeteors(dt) {
+    if (!this.meteors?.length) return;
+    for (let i = this.meteors.length - 1; i >= 0; i--) {
+      const m = this.meteors[i];
+      m.t += dt;
+      const prog = Math.min(1, m.t / m.travelTime);
+      // Ease-in curve: slow start, accelerating crash
+      const ease = prog * prog;
+      m.x = m.startX + (m.targetX - m.startX) * ease;
+      m.y = m.startY + (m.targetY - m.startY) * ease;
+      if (prog >= 1) {
+        // Impact!
+        const { radius, damage, mods } = m;
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          const d = Vec.dist({ x: m.targetX, y: m.targetY }, e);
+          if (d < radius + e.radius) {
+            const falloff = 1 - (d / (radius + e.radius)) * 0.4;
+            const isCrit  = Math.random() < (mods?.critChance || 0);
+            const dmg     = (isCrit ? damage * (mods?.critMult || 2) : damage) * falloff;
+            const actual  = e.takeDamage(dmg, { spell: 'pyroclasm' });
+            this.totalDamageDealt += actual;
+            this.spawnDamageNumber(e.x, e.y - e.radius - 6, actual, isCrit, e);
+          }
+        }
+        this.spawnExplosion(m.targetX, m.targetY, radius, '#ff3311', 'pyroclasm');
+        this.spawnHitParticles(m.targetX, m.targetY, '#ff5511', 30);
+        Camera.shake('catastrophic');
+        this.meteors.splice(i, 1);
+      }
+    }
+  }
+
+  tickHydraHeads(dt) {
+    if (!this.hydraHeads?.length) return;
+    for (let i = this.hydraHeads.length - 1; i >= 0; i--) {
+      const h = this.hydraHeads[i];
+      h.t += dt;
+      if (h.t >= h.life) { this.hydraHeads.splice(i, 1); continue; }
+      h.bobAng += dt * 2.2;
+      h.atkAcc += dt;
+      if (h.atkAcc < h.atkInterval) continue;
+      h.atkAcc = 0;
+      // Find nearest enemy in range
+      let target = null, bestD = h.range;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist(h, e);
+        if (d < bestD) { bestD = d; target = e; }
+      }
+      if (!target) continue;
+      // Shoot a small fireball at the target
+      const dir = Vec.norm(Vec.sub(target, h));
+      this.spawnProjectile({
+        x: h.x, y: h.y,
+        vx: dir.x * 280, vy: dir.y * 280,
+        radius: 5, damage: h.damage, color: '#ff8844',
+        life: 1.2, pierce: 0,
+        crit: { chance: 0.05, mult: 2 },
+        spell: 'fireball',
+        onHit: (game, hit) => {
+          for (const e of game.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(hit, e) < 30 + e.radius) {
+              const a = e.takeDamage(h.damage * 0.4, { spell: 'fireball' });
+              game.totalDamageDealt += a;
+            }
+          }
+          game.spawnExplosion(hit.x, hit.y, 30, '#ff7733');
+        },
+        trail: 'fire',
+      });
+    }
+  }
+
   tickMinion(dt) {
     const m = this.minion;
     if (!m) return;
@@ -5220,12 +5397,13 @@ class Game {
     }
     m.links = [];
     m._curGroup = null;
-    // Pick up to 3 enemies within range
-    const range = 240 * mods.rangeMult;
+    // Pick up to 3+linkCountBonus enemies within range
+    const range    = 240 * mods.rangeMult;
+    const maxLinks = 3 + Math.floor(mods.linkCountBonus || 0);
     const candidates = this.enemies
       .filter(e => e.alive && Vec.dist(e, m) < range)
       .sort((a, b) => Vec.dist(a, m) - Vec.dist(b, m))
-      .slice(0, 3);
+      .slice(0, maxLinks);
     if (candidates.length < 2) return;
     const share = 0.20 + (mods.shareBonus || 0);
     const beh = mods.behavior || {};
@@ -6376,6 +6554,8 @@ const Renderer = {
     this.drawSnowForts(ctx, game.snowForts, game.runElapsed);
     this.drawSnowStorms(ctx, game.snowStorms, game.runElapsed);
     this.drawShockTowers(ctx, game.shockTowers, game.runElapsed);
+    this.drawHydraHeads(ctx, game.hydraHeads, game.runElapsed);
+    this.drawMeteors(ctx, game.meteors, game.runElapsed);
     this.drawWormholes(ctx, game.wormholes, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells);
@@ -8299,49 +8479,86 @@ const Renderer = {
   drawSnowForts(ctx, forts, t) {
     if (!forts) return;
     for (const f of forts) {
-      const fadeIn  = Math.min(1, f.t / 0.3);
-      const fadeOut = Math.min(1, (f.life - f.t) / 0.5);
-      const a = Math.min(fadeIn, fadeOut);
+      const fadeIn = Math.min(1, f.t / 0.3);
+      const lifeA  = f.life < 999 ? Math.min(1, (f.life - f.t) / 0.5) : 1;
+      const baseA  = Math.min(fadeIn, lifeA);
+
+      // Recharging: dim, cracked look with progress ring
+      const isRecharging = f.recharging;
+      const a = isRecharging ? 0.30 : baseA;
+
       ctx.save();
-      // Soft ice fill — radial gradient, brighter centre
+      // Soft ice fill
       const grad = ctx.createRadialGradient(f.x, f.y, 4, f.x, f.y, f.radius);
-      grad.addColorStop(0,   `rgba(220, 240, 255, ${0.42 * a})`);
-      grad.addColorStop(0.6, `rgba(170, 210, 240, ${0.30 * a})`);
-      grad.addColorStop(1,   `rgba(120, 170, 210, ${0.05 * a})`);
+      if (isRecharging) {
+        grad.addColorStop(0,   `rgba(80, 100, 120, ${0.20 * baseA})`);
+        grad.addColorStop(1,   `rgba(40, 60, 80, ${0.05 * baseA})`);
+      } else {
+        grad.addColorStop(0,   `rgba(220, 240, 255, ${0.42 * a})`);
+        grad.addColorStop(0.6, `rgba(170, 210, 240, ${0.30 * a})`);
+        grad.addColorStop(1,   `rgba(120, 170, 210, ${0.05 * a})`);
+      }
       ctx.fillStyle = grad;
       ctx.beginPath();
       const lobes = 22;
       for (let i = 0; i <= lobes; i++) {
         const ang = i / lobes * TAU;
-        const r = f.radius + Math.sin(t * 1.4 + i * 0.6 + (f.seed || 0)) * 2.5;
+        const wobble = isRecharging ? Math.sin(t * 0.5 + i * 0.8 + (f.seed || 0)) * 1.2
+                                    : Math.sin(t * 1.4 + i * 0.6 + (f.seed || 0)) * 2.5;
+        const r = f.radius + wobble;
         const px = f.x + Math.cos(ang) * r;
         const py = f.y + Math.sin(ang) * r;
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath();
       ctx.fill();
-      // Bold ink-on-vellum perimeter — solid line with crisp edge
-      ctx.strokeStyle = `rgba(60, 120, 170, ${0.95 * a})`;
-      ctx.lineWidth = 1.8;
+      // Perimeter ring
+      ctx.strokeStyle = isRecharging ? `rgba(60, 80, 100, ${0.50 * baseA})` : `rgba(60, 120, 170, ${0.95 * a})`;
+      ctx.lineWidth   = isRecharging ? 1.0 : 1.8;
       ctx.stroke();
-      // Inner dashed ring — reads as the "safe zone" boundary for the player
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * a})`;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, f.radius * 0.78, 0, TAU);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Frost flakes — small static dots scattered inside the perimeter
-      const seed = f.seed || 0;
-      for (let i = 0; i < 12; i++) {
-        const ang = (i * 2.39 + seed) % TAU;
-        const rr = (f.radius * 0.85) * ((i * 17 + Math.floor(seed)) % 100) / 100;
-        const px = f.x + Math.cos(ang) * rr;
-        const py = f.y + Math.sin(ang) * rr;
-        const tw = 0.6 + 0.4 * Math.sin(t * 3 + i);
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * a * tw})`;
-        ctx.beginPath(); ctx.arc(px, py, 1.3, 0, TAU); ctx.fill();
+
+      if (!isRecharging) {
+        // Inner dashed ring
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * a})`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.radius * 0.78, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Shield HP arc — cyan arc showing remaining absorption
+        if (f.shieldMaxHp > 0) {
+          const frac = Math.max(0, f.shieldHp / f.shieldMaxHp);
+          ctx.strokeStyle = `rgba(100, 220, 255, ${0.85 * a})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, f.radius + 5, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+          ctx.stroke();
+        }
+        // Frost flakes
+        const seed = f.seed || 0;
+        for (let i = 0; i < 12; i++) {
+          const ang = (i * 2.39 + seed) % TAU;
+          const rr  = (f.radius * 0.85) * ((i * 17 + Math.floor(seed)) % 100) / 100;
+          const px  = f.x + Math.cos(ang) * rr;
+          const py  = f.y + Math.sin(ang) * rr;
+          const tw  = 0.6 + 0.4 * Math.sin(t * 3 + i);
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * a * tw})`;
+          ctx.beginPath(); ctx.arc(px, py, 1.3, 0, TAU); ctx.fill();
+        }
+      } else {
+        // Recharge progress arc
+        const prog = Math.min(1, (f.rechargeAcc || 0) / (f.rechargeTime || 8));
+        ctx.strokeStyle = `rgba(100, 180, 220, ${0.70 * baseA})`;
+        ctx.lineWidth   = 2;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.radius + 5, -Math.PI / 2, -Math.PI / 2 + prog * TAU);
+        ctx.stroke();
+        // "REFORMING" label
+        ctx.fillStyle = `rgba(160, 210, 240, ${0.80 * baseA})`;
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('REFORMING', f.x, f.y + 3);
       }
       ctx.restore();
     }
@@ -8404,6 +8621,93 @@ const Renderer = {
       ctx.setLineDash([3, 4]);
       ctx.beginPath(); ctx.arc(tw.x, tw.y, tw.range || 220, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
+      ctx.restore();
+    }
+  },
+
+  drawMeteors(ctx, meteors, t) {
+    if (!meteors?.length) return;
+    for (const m of meteors) {
+      const prog = Math.min(1, m.t / m.travelTime);
+      const { x, y, targetX, targetY } = m;
+      // Impact shadow / warning ring on the ground
+      const shadowA = prog * 0.65;
+      const shadowR = m.radius * (0.2 + prog * 0.8);
+      ctx.save();
+      ctx.fillStyle = `rgba(26, 10, 4, ${shadowA * 0.45})`;
+      ctx.beginPath(); ctx.ellipse(targetX, targetY, shadowR, shadowR * 0.35, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = `rgba(200, 60, 20, ${shadowA * 0.7})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.ellipse(targetX, targetY, m.radius * 0.85, m.radius * 0.28, 0, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      // Fire trail behind the rock
+      const trailLen = 60 + prog * 80;
+      const ang = Math.atan2(targetY - m.y, targetX - m.x);
+      const trailGrad = ctx.createLinearGradient(x, y, x - Math.cos(ang) * trailLen, y - Math.sin(ang) * trailLen);
+      trailGrad.addColorStop(0,   `rgba(255, 100, 20, ${0.90})`);
+      trailGrad.addColorStop(0.4, `rgba(200, 50, 10, ${0.50})`);
+      trailGrad.addColorStop(1,   `rgba(100, 20, 5, 0)`);
+      ctx.strokeStyle = trailGrad;
+      ctx.lineWidth   = 10 * (1 - prog * 0.3);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - Math.cos(ang) * trailLen, y - Math.sin(ang) * trailLen);
+      ctx.stroke();
+      // The rock itself — chunky irregular polygon
+      ctx.fillStyle   = `rgba(80, 40, 20, 0.95)`;
+      ctx.strokeStyle = `rgba(26, 10, 4, 0.90)`;
+      ctx.lineWidth   = 1.5;
+      const rs = 14 + prog * 4;
+      ctx.beginPath();
+      for (let k = 0; k < 7; k++) {
+        const a = k / 7 * TAU + m.seed * 0.01;
+        const r = rs * (0.7 + 0.3 * Math.sin(m.seed + k * 3));
+        k === 0 ? ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r)
+                : ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // Hot orange core
+      ctx.fillStyle = `rgba(255, 160, 60, 0.80)`;
+      ctx.beginPath(); ctx.arc(x, y, rs * 0.45, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+  },
+
+  drawHydraHeads(ctx, heads, t) {
+    if (!heads?.length) return;
+    for (const h of heads) {
+      const fadeIn  = Math.min(1, h.t / 0.18);
+      const fadeOut = Math.min(1, (h.life - h.t) / 0.35);
+      const a = Math.min(fadeIn, fadeOut);
+      const bob = Math.sin(h.bobAng) * 3;
+      ctx.save();
+      ctx.translate(h.x, h.y + bob);
+      // Neck stalk
+      ctx.strokeStyle = `rgba(26, 22, 18, ${0.80 * a})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 4);
+      ctx.lineTo(0, 10);
+      ctx.stroke();
+      // Serpent head — elongated oval
+      ctx.fillStyle   = `rgba(168, 58, 30, ${0.90 * a})`;
+      ctx.strokeStyle = `rgba(26, 22, 18, ${a})`;
+      ctx.lineWidth   = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 7, 5, 0, 0, TAU);
+      ctx.fill(); ctx.stroke();
+      // Eye
+      const flicker = 0.7 + 0.3 * Math.sin(t * 9 + h.seed);
+      ctx.fillStyle = `rgba(255, 200, 60, ${flicker * a})`;
+      ctx.beginPath(); ctx.arc(3, -1, 1.5, 0, TAU); ctx.fill();
+      // Life bar
+      const lifeF = 1 - h.t / h.life;
+      ctx.fillStyle = `rgba(26,22,18,${0.50 * a})`;
+      ctx.fillRect(-8, -12, 16, 2);
+      ctx.fillStyle = `rgba(255,80,30,${0.85 * a})`;
+      ctx.fillRect(-8, -12, 16 * lifeF, 2);
       ctx.restore();
     }
   },
@@ -8710,6 +9014,7 @@ function formatStat(stat, total) {
     case 'pulseFaster':       return `−${total.toFixed(1)}s pulse`;
     case 'auraStrengthBonus': return `${pct(total)} aura strength`;
     case 'auraRangeMult':     return `${pct(total)} aura radius`;
+    case 'linkCountBonus':    return `+${Math.floor(total)} linked enemies`;
     default:                  return '';
   }
 }
@@ -8717,10 +9022,10 @@ function formatStat(stat, total) {
 // Returns a compact line of base stats for the ability card header.
 function abilityBaseStatLine(ab) {
   const parts = [];
-  if (ab.damage)   parts.push(`${ab.damage} dmg`);
+  if (ab.damage)   parts.push(`${ab.damage} ${ab.damageNote || 'dmg'}`);
   if (ab.cooldown) parts.push(`${ab.cooldown}s cd`);
-  if (ab.radius)   parts.push(`${ab.radius}px range`);
-  if (ab.duration) parts.push(`${ab.duration}s duration`);
+  if (ab.radius && ab.damageNote !== 'dps')   parts.push(`${ab.radius}px range`);
+  if (ab.duration && ab.duration < 100) parts.push(`${ab.duration}s`);
   return parts.join(' · ');
 }
 
@@ -8742,7 +9047,7 @@ function formatDumpAt(dump, ab, pts) {
       if (ab && ab.duration) return `${(ab.duration * (1 + total)).toFixed(1)}s`;
       break;
     case 'dmgMult':
-      if (ab && ab.damage) return `${Math.round(ab.damage * (1 + total))} dmg`;
+      if (ab && ab.damage) return `${Math.round(ab.damage * (1 + total))} ${ab.damageNote || 'dmg'}`;
       break;
   }
   return formatStat(dump.stat, total);
@@ -8756,7 +9061,6 @@ function formatDumpPerPoint(dump, ab) {
   switch (dump.stat) {
     case 'cdMult':
       if (ab && ab.cooldown) {
-        const delta = (ab.cooldown * pp).toFixed(2);
         return `${sign(+(ab.cooldown * pp).toFixed(2))}s cd per point`;
       }
       break;
@@ -8767,10 +9071,10 @@ function formatDumpPerPoint(dump, ab) {
       break;
     }
     case 'durationMult':
-      if (ab && ab.duration) return `${sign(+(ab.duration * pp).toFixed(1))}s duration per point`;
+      if (ab && ab.duration && ab.duration < 100) return `${sign(+(ab.duration * pp).toFixed(1))}s duration per point`;
       break;
     case 'dmgMult':
-      if (ab && ab.damage) return `${sign(Math.round(ab.damage * pp))} dmg per point`;
+      if (ab && ab.damage) return `${sign(Math.round(ab.damage * pp))} ${ab.damageNote || 'dmg'} per point`;
       break;
   }
   return dump.desc || '';
