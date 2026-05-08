@@ -4013,6 +4013,37 @@ class Player {
           game.spawnExplosion(this.x, this.y, fort.radius * 0.8, '#bce8ff', 'frost');
           game.spawnHitParticles(this.x, this.y, '#bce8ff', 18);
           game.addShake(0.20);
+          // Avalanche spec — collapse damage burst on shield break.
+          if (fort.spec?.avalancheExpire) {
+            const dmgFinal = fort.spec.avalancheExpire;
+            for (const e of game.enemies) {
+              if (!e.alive) continue;
+              if (Vec.dist(fort, e) < fort.radius + e.radius) {
+                const a = e.takeDamage(dmgFinal, { spell: 'snow_fort' });
+                game.totalDamageDealt += a;
+                game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+              }
+            }
+            game.spawnExplosion(fort.x, fort.y, fort.radius, '#bce8ff', 'frost');
+            game.addShake(0.30);
+          }
+          // Permafrost spec — leave a lingering icy patch on the spot.
+          // Slow-only (no chip damage), so the description "applying slow"
+          // is accurate.
+          if (fort.spec?.permafrost) {
+            game.snowForts.push(new SnowFort({
+              x: fort.x, y: fort.y,
+              radius: fort.radius * 0.9,
+              life: 3,
+              dps: 0,
+              shieldHp: 0, shieldMaxHp: 0,
+              rechargeTime: 999,
+              slowFactor: 0.40, slowDuration: 1.0,
+              reduction: 0,
+              spec: { permafrost: true },
+              _permafrostPatch: true,
+            }));
+          }
         }
       }
       if (dmg <= 0) { this.iframes = CONFIG.player.iframes * 0.4; return; }
