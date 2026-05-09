@@ -3016,92 +3016,46 @@ const SPELLS = {
    * ============================================================== */
   focused_beam: {
     id: 'focused_beam', name: 'Focused Beam',
-    tree: 'light', color: '#ffea99', cooldown: 0.4,
+    tree: 'light', color: '#ffea99', cooldown: 0.5,
+    /*
+     * Continuous-beam model. cast() doesn't deal damage directly — it
+     * just (re)establishes the beam's intent on the nearest enemy. The
+     * actual damage tick + ramp curve runs every frame in
+     * Game.tickFocusedBeam, which keeps the beam alive as long as the
+     * cast cooldown keeps re-firing.
+     *
+     * The ramp is exponential→plateau over time-on-target:
+     *   factor(t) = startF + (peakF - startF) * (1 - exp(-t / tau))
+     * default: startF=0.30, peakF=2.0, tau=0.6s
+     *   t=0    → 30%   t=0.5 → 110%   t=1.0 → 162%   t=2.0+ → ~200%
+     * Magnifier spec extends to peakF=2.6 with tau=1.0 (slower climb,
+     * higher ceiling — patient elite-killer).
+     *
+     * Switching targets resets time-on-target (with `beamGrace` dump
+     * granting a partial-decay tolerance).
+     */
     cast(game, caster, mods) {
       const target = game.findNearestEnemy(caster);
       if (!target) return;
-      const b = mods.behavior || {};
-      // Ramp state on the player. Stack 0..STAGES-1.
-      const STAGES_BASE = b.beamMagnifier ? 7 : 5;
-      const RAMP        = b.beamMagnifier
-        ? [0.30, 0.55, 0.80, 1.10, 1.40, 1.75, 2.20]
-        : [0.30, 0.65, 1.00, 1.30, 1.60];
-      // Switch target → reset stacks. "Wide Lens" dump grants `beamGrace`
-      // grace casts — if the same target was hit recently, you don't
-      // lose the stack on a brief miss.
-      if (caster._beamTarget === target && caster._beamTarget?.alive) {
-        caster._beamStacks = Math.min(STAGES_BASE - 1, (caster._beamStacks || 0) + 1);
-      } else {
-        // Soft reset: if grace allows, stacks decay by 1 instead of resetting.
-        const grace = Math.floor(mods.beamGrace || 0);
-        if (caster._beamTarget?.alive && grace > 0 && (caster._beamGraceLeft || 0) > 0) {
-          caster._beamGraceLeft = (caster._beamGraceLeft || 0) - 1;
-          caster._beamStacks = Math.max(0, (caster._beamStacks || 0) - 1);
+      const grace = Math.floor(mods.beamGrace || 0);
+      // Target identity check: keep ramping if same enemy, soft-decay
+      // (or hard-reset, depending on grace) on switch.
+      if (caster._beamTarget !== target) {
+        if (caster._beamTarget?.alive && (caster._beamGraceLeft || 0) > 0) {
+          caster._beamGraceLeft -= 1;
+          // Soft hand-off: drop time-on-target by 0.4s instead of full reset.
+          caster._beamTOT = Math.max(0, (caster._beamTOT || 0) - 0.4);
         } else {
-          caster._beamStacks = 0;
+          caster._beamTOT = 0;
           caster._beamGraceLeft = grace;
-          caster._beamTarget = target;
         }
         caster._beamTarget = target;
       }
-      const stage = caster._beamStacks;
-      const factor = RAMP[stage];
-      const baseDmg = 14 * mods.dmgMult * factor;
-      const isPeak = stage === STAGES_BASE - 1;
-      // Crit chance unchanged; peak fires a thicker visual.
-      const isCrit = Math.random() < (mods.critChance || 0);
-      const dmg = isCrit ? baseDmg * mods.critMult : baseDmg;
-      const actual = target.takeDamage(dmg, { spell: 'focused_beam' });
-      game.totalDamageDealt += actual;
-      game.spawnDamageNumber(target.x, target.y - target.radius - 6, actual, isCrit, target);
-      game.lightnings.push({
-        from: { x: caster.x, y: caster.y },
-        to:   { x: target.x, y: target.y },
-        t: 0, life: isPeak ? 0.22 : 0.14, crit: isPeak,
-      });
-      game._beamFlashes = game._beamFlashes || [];
-      game._beamFlashes.push({
-        from: { x: caster.x, y: caster.y },
-        to:   { x: target.x, y: target.y },
-        t: 0, life: 0.18, stage, peak: isPeak,
-      });
-      // Burnthrough: at peak, the beam chains to 2 nearby enemies at 0.7×.
-      if (isPeak && b.beamBurnthrough) {
-        const struck = new Set([target]);
-        let prev = target, falloff = 1;
-        for (let c = 0; c < 2; c++) {
-          let next = null, nextD = 180;
-          for (const e of game.enemies) {
-            if (!e.alive || struck.has(e)) continue;
-            const d = Vec.dist(prev, e);
-            if (d < nextD) { next = e; nextD = d; }
-          }
-          if (!next) break;
-          falloff *= 0.7;
-          const a = next.takeDamage(dmg * falloff, { spell: 'focused_beam' });
-          game.totalDamageDealt += a;
-          game.lightnings.push({ from: { x: prev.x, y: prev.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.16 });
-          struck.add(next);
-          prev = next;
-        }
-      }
-      // Prism Lens: at peak, beam splits into 3 narrower beams to other targets.
-      if (isPeak && b.beamPrismLens) {
-        const struck = new Set([target]);
-        for (let c = 0; c < 3; c++) {
-          let next = null, nextD = 220;
-          for (const e of game.enemies) {
-            if (!e.alive || struck.has(e)) continue;
-            const d = Vec.dist(target, e);
-            if (d < nextD) { next = e; nextD = d; }
-          }
-          if (!next) break;
-          const a = next.takeDamage(dmg * 0.55, { spell: 'focused_beam' });
-          game.totalDamageDealt += a;
-          game.lightnings.push({ from: { x: target.x, y: target.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.16 });
-          struck.add(next);
-        }
-      }
+      // Refresh beam validity. Cleared in tickFocusedBeam if cast() stops firing.
+      caster._beamMods = mods;
+      caster._beamSpec = mods.behavior || {};
+      caster._beamLastCastT = game.runElapsed;
+      caster._beamActive = true;
     },
   },
 
@@ -3669,25 +3623,25 @@ const ABILITIES = {
   focused_beam: {
     id: 'focused_beam', name: 'Focused Beam', tier: 1, classId: 'optician',
     icon: '◎', tag: 'attack', color: '#ffea99',
-    description: 'Instant beam to nearest enemy. Damage RAMPS 30% → 160% as you keep hitting the same target. Switching targets resets.',
+    description: 'Continuous beam locked on the nearest enemy. DPS RAMPS 30% → 200% over ~2s of focus, then plateaus. Switching targets decays the ramp.',
     damageType: 'elemental',
-    cooldown: 0.4, damage: 14,
+    cooldown: 0.5, damage: 32, damageNote: 'dps',
     cast: (game, caster, mods) => SPELLS.focused_beam.cast(game, caster, mods),
     dumps: [
-      { id: 'concentrate', name: 'Concentrate', desc: '+12% peak damage per point.', stat: 'dmgMult', perPoint: 0.12 },
-      { id: 'quick',       name: 'Quick',       desc: '−5% cooldown per point.',     stat: 'cdMult',  perPoint: -0.05 },
-      { id: 'wide_lens',   name: 'Wide Lens',   desc: '+1 grace cast before the ramp resets per point (max +5).',
+      { id: 'concentrate', name: 'Concentrate', desc: '+12% beam DPS per point.', stat: 'dmgMult', perPoint: 0.12 },
+      { id: 'quick',       name: 'Quick',       desc: '−5% retarget cadence per point (faster target swaps).', stat: 'cdMult',  perPoint: -0.05 },
+      { id: 'wide_lens',   name: 'Wide Lens',   desc: '+1 grace re-target before the ramp resets per point (max +5).',
         stat: 'beamGrace', perPoint: 1.0 },
     ],
     specs: [
       { id: 'magnifier',  name: 'Magnifier',
-        desc: 'Peak goes to 220% but takes 2 extra ramp steps to reach.',
+        desc: 'Plateau rises to 260% but the ramp climbs slower (~3s to peak instead of ~2s). Patient elite-killer.',
         behavior: { beamMagnifier: true } },
       { id: 'burnthrough', name: 'Burnthrough',
-        desc: 'At max ramp, beam pierces — chains to 2 nearby enemies at 0.7× damage.',
+        desc: 'At peak intensity, the beam continuously chains 60% of its damage to the nearest other enemy.',
         behavior: { beamBurnthrough: true } },
       { id: 'prism_lens', name: 'Prism Lens',
-        desc: 'At max ramp, beam splits into 3 narrower beams that each strike a different nearby enemy.',
+        desc: 'At peak intensity, three smaller side-beams continuously strike nearby enemies for 40% damage each.',
         behavior: { beamPrismLens: true } },
     ],
   },
@@ -5808,6 +5762,7 @@ class Game {
     this.tickPrismStrikes(dt);
     this.tickPrismBeams(dt);
     this.tickBeamFlashes(dt);
+    this.tickFocusedBeam(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
@@ -6938,6 +6893,117 @@ class Game {
       f.t += dt;
       if (f.t >= f.life) this._beamFlashes.splice(i, 1);
     }
+  }
+
+  /*
+   * Focused Beam continuous tick — runs every frame regardless of the
+   * spell cooldown. The cast() body just refreshes _beamLastCastT; this
+   * tick keeps the beam alive (and damaging) until the cast lapses.
+   *
+   * Auto-retargets when the current target dies: small TOT decay so a
+   * fresh kill doesn't fully reset the ramp, but forcing a switch still
+   * costs a beat or two.
+   */
+  tickFocusedBeam(dt) {
+    const p = this.player;
+    if (!p?.alive) return;
+    if (!p._beamActive) return;
+    const lastCast = p._beamLastCastT || 0;
+    // Beam lapses if cast() hasn't fired recently. CD is 0.5s, so 0.7s
+    // gives a little slack for haste auras / framerate jitter.
+    if ((this.runElapsed - lastCast) > 0.7) {
+      p._beamActive = false;
+      p._beamTOT = 0;
+      p._beamTarget = null;
+      return;
+    }
+    // Validate / re-acquire the target.
+    let tgt = p._beamTarget;
+    const cap = this.combatRadius();
+    const valid = tgt?.alive && Vec.dist(p, tgt) < cap;
+    if (!valid) {
+      const next = this.findNearestEnemy(p);
+      if (!next) {
+        // No targets in range — pause the ramp without resetting it.
+        // Damage doesn't tick this frame; ramp persists for ~0.7s of
+        // gap before lapse kicks in.
+        return;
+      }
+      // Soft hand-off: drop TOT 0.6s on auto re-acquire.
+      p._beamTOT = Math.max(0, (p._beamTOT || 0) - 0.6);
+      p._beamTarget = next;
+      tgt = next;
+    }
+    // Ramp the time-on-target every frame the beam is active + has a target.
+    p._beamTOT = (p._beamTOT || 0) + dt;
+    const mods = p._beamMods || { dmgMult: 1, critChance: 0, critMult: 2 };
+    const beh  = p._beamSpec || {};
+    const peakF  = beh.beamMagnifier ? 2.6 : 2.0;
+    const tau    = beh.beamMagnifier ? 1.0 : 0.6;
+    const startF = 0.30;
+    const factor = startF + (peakF - startF) * (1 - Math.exp(-p._beamTOT / tau));
+    const baseDps = 32 * mods.dmgMult * factor;
+    // Tick damage at a fixed cadence regardless of frame rate.
+    p._beamTickAcc = (p._beamTickAcc || 0) + dt;
+    const tickIv = 0.1;
+    while (p._beamTickAcc >= tickIv) {
+      p._beamTickAcc -= tickIv;
+      if (!tgt?.alive) break;
+      const isCrit = Math.random() < (mods.critChance || 0);
+      const dmgRaw = baseDps * tickIv;
+      const dmg = isCrit ? dmgRaw * (mods.critMult || 2) : dmgRaw;
+      const a = tgt.takeDamage(dmg, { spell: 'focused_beam' });
+      this.totalDamageDealt += a;
+      if (isCrit && Math.random() < 0.3) {
+        this.spawnDamageNumber(tgt.x, tgt.y - tgt.radius - 6, a, true, tgt);
+      }
+      // At ~peak intensity (90%+ of peak), trigger spec on-tick effects.
+      const atPeak = factor > peakF * 0.9;
+      if (atPeak && beh.beamBurnthrough) {
+        // Chain a fraction of this tick to one nearby enemy.
+        let next = null, nextD = 180;
+        for (const e of this.enemies) {
+          if (!e.alive || e === tgt) continue;
+          const d = Vec.dist(tgt, e);
+          if (d < nextD) { next = e; nextD = d; }
+        }
+        if (next) {
+          const c = next.takeDamage(dmg * 0.6, { spell: 'focused_beam' });
+          this.totalDamageDealt += c;
+          // Light visual chain echo
+          if (Math.random() < 0.4) {
+            this.lightnings.push({ from: { x: tgt.x, y: tgt.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.10 });
+          }
+        }
+      }
+      if (atPeak && beh.beamPrismLens) {
+        // Three smaller prism beams strike other nearby enemies (pick fresh each tick).
+        const struck = new Set([tgt]);
+        for (let c = 0; c < 3; c++) {
+          let next = null, nextD = 220;
+          for (const e of this.enemies) {
+            if (!e.alive || struck.has(e)) continue;
+            const d = Vec.dist(tgt, e);
+            if (d < nextD) { next = e; nextD = d; }
+          }
+          if (!next) break;
+          const a2 = next.takeDamage(dmg * 0.40, { spell: 'focused_beam' });
+          this.totalDamageDealt += a2;
+          struck.add(next);
+          if (Math.random() < 0.3) {
+            this.lightnings.push({ from: { x: tgt.x, y: tgt.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.10 });
+          }
+        }
+      }
+    }
+    // Surface beam state for the renderer: from caster to current target,
+    // with a normalized intensity in [0..1] that the renderer reads.
+    p._beamRender = tgt?.alive ? {
+      from: { x: p.x, y: p.y },
+      to:   { x: tgt.x, y: tgt.y },
+      intensity: Math.min(1, factor / peakF),
+      atPeak: factor > peakF * 0.9,
+    } : null;
   }
 
   /* --------------------------------------------------------------
@@ -8275,6 +8341,7 @@ const Renderer = {
     this.drawPrismStrikes(ctx, game.prismStrikes, game.runElapsed);
     this.drawPrismBeams(ctx, game.prismBeams);
     this.drawBeamFlashes(ctx, game._beamFlashes);
+    this.drawFocusedBeam(ctx, game.player, game.runElapsed);
     this.drawAegisMirrors(ctx, game.aegisMirrors, game.player, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells, game.player);
@@ -11243,6 +11310,57 @@ const Renderer = {
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(f.from.x, f.from.y); ctx.lineTo(f.to.x, f.to.y); ctx.stroke();
     }
+  },
+
+  /*
+   * Continuous Focused Beam — draws as long as the player has an active
+   * beam render state. Width + glow scale with intensity so the player
+   * SEES the ramp building. At peak adds a flickering core for emphasis.
+   */
+  drawFocusedBeam(ctx, player, t) {
+    const r = player?._beamRender;
+    if (!r) return;
+    const fx = r.from.x, fy = r.from.y;
+    const tx = r.to.x,   ty = r.to.y;
+    const k = r.intensity;
+    // Outer halo — soft warm yellow that grows with intensity.
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 220, 130, ${0.18 + 0.30 * k})`;
+    ctx.lineWidth = 4 + 14 * k;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+    // Mid layer — bright orange-yellow.
+    ctx.strokeStyle = `rgba(255, 230, 110, ${0.55 + 0.35 * k})`;
+    ctx.lineWidth = 2 + 6 * k;
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+    // Bright white core.
+    ctx.strokeStyle = `rgba(255, 250, 220, ${0.75 + 0.25 * k})`;
+    ctx.lineWidth = 1 + 2 * k;
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+    // At peak — a flickering white-hot crackle layered on top.
+    if (r.atPeak) {
+      const flicker = 0.6 + 0.4 * Math.sin(t * 80);
+      ctx.strokeStyle = `rgba(255, 255, 240, ${0.95 * flicker})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      // Add tiny zig-zag for crackle feel
+      const dx = tx - fx, dy = ty - fy;
+      const len = Math.hypot(dx, dy) || 1;
+      const segs = Math.max(2, Math.floor(len / 28));
+      const px = -dy / len, py = dx / len;
+      ctx.moveTo(fx, fy);
+      for (let i = 1; i < segs; i++) {
+        const u = i / segs;
+        const j = (Math.random() - 0.5) * 4;
+        ctx.lineTo(fx + dx * u + px * j, fy + dy * u + py * j);
+      }
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      // Spark at the impact point
+      ctx.fillStyle = `rgba(255, 255, 240, ${0.8 * flicker})`;
+      ctx.beginPath(); ctx.arc(tx, ty, 4 + 2 * flicker, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
   },
 
   drawAegisMirrors(ctx, aegises, player, t) {
