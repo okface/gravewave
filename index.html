@@ -10459,6 +10459,10 @@ const Renderer = {
    * inner flash on each strike. Bobs gently for life. Fades in at start
    * and out at end of life so the appearance/disappearance is readable.
    */
+  /*
+   * Storm Cloud — overlapping ink-puff silhouette with golden internal
+   * shimmer + dashed AoE ground ellipse. Ported from spellStormCloud3.
+   */
   drawStormClouds(ctx, clouds, t) {
     for (const c of clouds) {
       const fadeIn = Math.min(1, c.t / 0.25);
@@ -10467,103 +10471,108 @@ const Renderer = {
       const cx = c.x, cy = c.y;
       const aoeR = c.radius;
 
-      // Wobbly puddle perimeter
-      const lobes = 14;
-      ctx.fillStyle = `rgba(44,74,140,${0.18 * alpha})`;
+      // ── Faint dashed AoE ellipse on the ground (under the cloud) ─────
+      ctx.strokeStyle = `rgba(44,74,140,${0.45 * alpha})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
       ctx.beginPath();
-      for (let i = 0; i <= lobes; i++) {
-        const a = i / lobes * TAU;
-        const wobble = Math.sin(t * 1.5 + i * 0.7) * 1.5;
-        const px = cx + Math.cos(a) * (aoeR + wobble);
-        const py = cy + Math.sin(a) * (aoeR + wobble);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-
-      // Hatched fill inside the puddle
-      ctx.save();
-      ctx.beginPath();
-      for (let i = 0; i <= lobes; i++) {
-        const a = i / lobes * TAU;
-        const wobble = Math.sin(t * 1.5 + i * 0.7) * 1.5;
-        const px = cx + Math.cos(a) * (aoeR + wobble);
-        const py = cy + Math.sin(a) * (aoeR + wobble);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.clip();
-      hatch(ctx, cx, cy, aoeR * 2.2, aoeR * 2.2, 3, Math.PI / 3.5, `rgba(44,74,140,${0.25 * alpha})`, 0.5);
-      ctx.restore();
-
-      // Dashed perimeter
-      ctx.strokeStyle = `rgba(44,74,140,${0.65 * alpha})`;
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      for (let i = 0; i <= lobes; i++) {
-        const a = i / lobes * TAU;
-        const wobble = Math.sin(t * 1.5 + i * 0.7) * 1.5;
-        const px = cx + Math.cos(a) * (aoeR + wobble);
-        const py = cy + Math.sin(a) * (aoeR + wobble);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
+      ctx.ellipse(cx, cy + aoeR * 0.35, aoeR, aoeR * 0.25, 0, 0, TAU);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Internal strike arc — short jagged ink flash on each strike tick
+      // ── Cloud silhouette: 5 overlapping ink puffs at slight drift ────
+      const cloudW = aoeR * 1.6;
+      const drift = Math.sin(t * 0.4) * 8;
+      const puffs = [
+        { x: cx - cloudW * 0.35 + drift, y: cy - aoeR * 0.32 + 6, r: aoeR * 0.18 },
+        { x: cx - cloudW * 0.18 + drift, y: cy - aoeR * 0.42 - 4, r: aoeR * 0.24 },
+        { x: cx + drift,                  y: cy - aoeR * 0.40,     r: aoeR * 0.28 },
+        { x: cx + cloudW * 0.20 + drift, y: cy - aoeR * 0.42 - 2, r: aoeR * 0.22 },
+        { x: cx + cloudW * 0.36 + drift, y: cy - aoeR * 0.32 + 4, r: aoeR * 0.18 },
+      ];
+      ctx.fillStyle = `rgba(26,22,18,${alpha})`;
+      ctx.beginPath();
+      for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
+      ctx.fill();
+      // Bottom-edge highlight hatch (paper colour, clipped)
+      ctx.save();
+      ctx.beginPath();
+      for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
+      ctx.clip();
+      const hAng = Math.PI / 3.5;
+      const ux = Math.cos(hAng), uy = Math.sin(hAng);
+      const px = -uy, py = ux;
+      ctx.strokeStyle = `rgba(232,220,192,${0.18 * alpha})`;
+      ctx.lineWidth = 0.5;
+      for (let s = -aoeR; s < aoeR; s += 2.4) {
+        ctx.beginPath();
+        ctx.moveTo(cx + drift + px * s - ux * cloudW, cy - aoeR * 0.4 + py * s - uy * cloudW);
+        ctx.lineTo(cx + drift + px * s + ux * cloudW, cy - aoeR * 0.4 + py * s + uy * cloudW);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // ── Internal lightning shimmer (gold flash on cloud silhouette) ───
+      if (Math.sin(t * 8) > 0.7) {
+        ctx.fillStyle = `rgba(232,184,64,${0.16 * alpha})`;
+        ctx.beginPath();
+        for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
+        ctx.fill();
+      }
+
+      // ── Strike fork — full bolt cloud→ground when a strike just landed ─
       const sinceStrike = c.strikeAcc;
-      if (sinceStrike < 0.18) {
-        const a = (0.18 - sinceStrike) / 0.18;
-        // Two random endpoints inside the puddle (deterministic per strike)
+      if (sinceStrike < 0.22) {
+        const a = (0.22 - sinceStrike) / 0.22 * alpha;
         const seed = Math.floor(c.t * 100) || 1;
-        const sR = (n) => {
-          const x = Math.sin(seed + n * 7919) * 10000;
-          return x - Math.floor(x);
-        };
-        const a1 = sR(1) * TAU, r1 = sR(2) * aoeR * 0.85;
-        const a2 = sR(3) * TAU, r2 = sR(4) * aoeR * 0.85;
-        const sx = cx + Math.cos(a1) * r1, sy = cy + Math.sin(a1) * r1;
-        const ex = cx + Math.cos(a2) * r2, ey = cy + Math.sin(a2) * r2;
-        // Endpoint flash
-        ctx.fillStyle = `rgba(200,148,26,${a * 0.35 * alpha})`;
-        ctx.beginPath(); ctx.arc(ex, ey, 6, 0, TAU); ctx.fill();
-        // Jagged path
-        const segs = 5;
+        const sR = (n) => { const x = Math.sin(seed + n * 7919) * 10000; return x - Math.floor(x); };
+        const sx = cx + (sR(2) - 0.5) * cloudW * 0.5 + drift;
+        const sy = cy - aoeR * 0.40;
+        const ex = cx + (sR(3) - 0.5) * aoeR * 0.6;
+        const ey = cy + aoeR * 0.18 + (sR(4) - 0.5) * aoeR * 0.15;
+        const segs = 9;
         const dx = ex - sx, dy = ey - sy;
         const len = Math.hypot(dx, dy) || 1;
         const perpX = -dy / len, perpY = dx / len;
-        ctx.strokeStyle = `rgba(26,22,18,${a * alpha})`;
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(sx, sy);
+        const points = [{ x: sx, y: sy }];
         for (let i = 1; i < segs; i++) {
           const k = i / segs;
-          const j = (sR(10 + i) - 0.5) * 8;
-          ctx.lineTo(sx + dx * k + perpX * j, sy + dy * k + perpY * j);
+          const j = (sR(i) - 0.5) * 18;
+          points.push({ x: sx + dx * k + perpX * j, y: sy + dy * k + perpY * j });
         }
-        ctx.lineTo(ex, ey);
+        points.push({ x: ex, y: ey });
+        ctx.lineCap = 'square';
+        // Outer ink trace
+        ctx.strokeStyle = `rgba(26,22,18,${a * 0.95})`;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.stroke();
-        ctx.strokeStyle = `rgba(200,148,26,${a * 0.85 * alpha})`;
-        ctx.lineWidth = 0.7;
+        // Gold inner core
+        ctx.strokeStyle = `rgba(232,184,64,${a})`;
+        ctx.lineWidth = 0.9;
         ctx.stroke();
+        // Forks — ~30% chance per mid-segment
+        for (let i = 2; i < points.length - 1; i++) {
+          if (sR(i * 1097) < 0.3) {
+            const dx2 = points[i + 1].x - points[i - 1].x;
+            const dy2 = points[i + 1].y - points[i - 1].y;
+            const len2 = Math.hypot(dx2, dy2) || 1;
+            const side = sR(i * 131) < 0.5 ? 1 : -1;
+            const fx = points[i].x + (-dy2 / len2) * 14 * side;
+            const fy = points[i].y + (dx2 / len2) * 14 * side;
+            ctx.strokeStyle = `rgba(26,22,18,${a * 0.7})`;
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(points[i].x, points[i].y);
+            ctx.lineTo(fx, fy); ctx.stroke();
+          }
+        }
+        // Endpoint flash
+        ctx.fillStyle = `rgba(232,184,64,${a * 0.45})`;
+        ctx.beginPath(); ctx.arc(ex, ey, 12 * a, 0, TAU); ctx.fill();
       }
-
-      // Center storm rune (rotates slowly with the cloud's bob)
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(c.bob * 0.3);
-      ctx.strokeStyle = `rgba(44,74,140,${0.6 * alpha})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.stroke();
-      ctx.strokeStyle = `rgba(200,148,26,${alpha})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(-3, -2); ctx.lineTo(0, 0); ctx.lineTo(2, 1);
-      ctx.moveTo(0, -4); ctx.lineTo(0, 4);
-      ctx.stroke();
-      ctx.restore();
     }
   },
 
@@ -10744,71 +10753,105 @@ const Renderer = {
     }
   },
 
+  /*
+   * Snow Storm — pale frost fill + double-clipped indigo hatch +
+   * dashed indigo perimeter (flowing) + 3-line crossed flakes +
+   * sweeping gust lines. Ported from spellSnowStorm.
+   */
   drawSnowStorms(ctx, storms, t) {
     if (!storms) return;
     for (const s of storms) {
       const fadeIn  = Math.min(1, s.t / 0.4);
       const fadeOut = Math.min(1, (s.life - s.t) / 0.6);
       const a = Math.min(fadeIn, fadeOut);
+      const cx = s.x, cy = s.y, r = s.radius;
+
+      // ── Frost ground fill ─────────────────────────────────────────
+      ctx.fillStyle = `rgba(180,200,232,${0.16 * a})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+      // ── Double clipped hatch (two angles) ──────────────────────────
       ctx.save();
-      // Clip everything to the storm radius
-      ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, TAU); ctx.clip();
-      // Soft icy fill
-      ctx.fillStyle = `rgba(210, 230, 250, ${0.10 * a})`;
-      ctx.fillRect(s.x - s.radius, s.y - s.radius, s.radius * 2, s.radius * 2);
-      // Ground frost overlay — brightens as storm ages
-      const frostA = Math.min(1, s.t / 3) * 0.18 * a;
-      ctx.fillStyle = `rgba(230, 245, 255, ${frostA})`;
-      ctx.fillRect(s.x - s.radius, s.y, s.radius * 2, s.radius);
-      // 40 falling snowflakes
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.clip();
+      const hatchPass = (spacing, ang, alpha, lw) => {
+        ctx.strokeStyle = `rgba(44,74,140,${alpha * a})`;
+        ctx.lineWidth = lw;
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const px = -uy, py = ux;
+        for (let str = -r * 1.2; str < r * 1.2; str += spacing) {
+          ctx.beginPath();
+          ctx.moveTo(cx + px * str - ux * r, cy + py * str - uy * r);
+          ctx.lineTo(cx + px * str + ux * r, cy + py * str + uy * r);
+          ctx.stroke();
+        }
+      };
+      hatchPass(5, Math.PI / 3.5, 0.18, 0.5);
+      hatchPass(7, -Math.PI / 4.5, 0.10, 0.4);
+      ctx.restore();
+
+      // ── Dashed indigo perimeter (flowing) ──────────────────────────
+      ctx.strokeStyle = `rgba(44,74,140,${0.7 * a})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 4]);
+      ctx.lineDashOffset = -t * 10;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // ── Falling crossed-line snowflakes (deterministic per index) ──
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.clip();
       const seed0 = s.seed || 0;
-      const FLAKES = 40;
+      const FLAKES = 50;
       for (let i = 0; i < FLAKES; i++) {
-        // deterministic per-flake pseudo-random using index + seed
-        const r0 = ((i * 7 + Math.floor(seed0)) % 97) / 97;   // 0..1
+        const r0 = ((i * 7 + Math.floor(seed0)) % 97) / 97;
         const r1 = ((i * 13 + Math.floor(seed0 * 0.5)) % 83) / 83;
         const r2 = ((i * 19 + Math.floor(seed0 * 0.3)) % 71) / 71;
-        const speed  = 30 + r0 * 55;
-        const drift  = (r1 - 0.5) * 18;  // horizontal drift per second
-        const period = (s.radius * 2) / speed; // time to cross the storm
-        const phase  = r2 * period;       // stagger start time
-        const age    = (t + phase) % period;
-        const fy     = -s.radius + age * speed;
-        const fx     = (r0 - 0.5) * s.radius * 1.8 + drift * age;
-        const px     = s.x + fx;
-        const py     = s.y + fy;
-        // skip if outside radius
-        if ((fx * fx + fy * fy) > s.radius * s.radius) continue;
-        const flakeSize = 1.0 + r2 * 1.2;
-        const flakeA    = (0.6 + r0 * 0.35) * a;
-        ctx.fillStyle = `rgba(240, 250, 255, ${flakeA})`;
-        ctx.beginPath(); ctx.arc(px, py, flakeSize, 0, TAU); ctx.fill();
+        const speed = 18 + r0 * 22;
+        const period = (r * 2) / speed;
+        const phase = r2 * period;
+        const age = (t + phase) % period;
+        const fy = -r + age * speed;
+        const fx = (r0 - 0.5) * r * 1.7 - 8 * age;
+        const px = cx + fx, py = cy + fy;
+        const sz = 2 + r2 * 2;
+        const rot = age * 1.6 + r1 * TAU;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(rot);
+        ctx.strokeStyle = `rgba(44,74,140,${0.85 * a})`;
+        ctx.lineWidth = 0.9;
+        for (let k = 0; k < 3; k++) {
+          const sa = k / 3 * Math.PI;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(sa) * -sz, Math.sin(sa) * -sz);
+          ctx.lineTo(Math.cos(sa) * sz, Math.sin(sa) * sz);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      // Gust lines — 4 sweeping arcs
+      ctx.restore();
+
+      // ── Gust whips: 4 sweeping arcs (pale main + indigo trailing) ──
       for (let g = 0; g < 4; g++) {
         const gPhase = (t * 0.8 + g * 0.25) % 1;
-        const gy     = s.y - s.radius + gPhase * s.radius * 2;
-        const gA     = Math.sin(gPhase * Math.PI) * 0.25 * a;
-        ctx.strokeStyle = `rgba(200, 230, 255, ${gA})`;
-        ctx.lineWidth   = 0.8;
+        const gy = cy - r + gPhase * r * 2;
+        const gA = Math.sin(gPhase * Math.PI) * 0.6 * a;
+        const gx0 = cx - r;
+        const gx1 = cx + r;
+        const length = 60 + g * 8;
+        ctx.strokeStyle = `rgba(180,200,232,${gA * 0.6})`;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(s.x - s.radius, gy);
-        ctx.bezierCurveTo(
-          s.x - s.radius * 0.3, gy - 8 + Math.sin(t + g) * 5,
-          s.x + s.radius * 0.3, gy + 8 - Math.sin(t + g) * 5,
-          s.x + s.radius, gy
-        );
+        ctx.moveTo(gx0, gy);
+        ctx.lineTo(gx0 + length, gy - 4);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(44,74,140,${gA * 0.5})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(gx0 + 8, gy + 2);
+        ctx.lineTo(gx0 + length - 4, gy - 1);
         ctx.stroke();
       }
-      ctx.restore();
-      // Perimeter dashed ring (outside the clip)
-      ctx.save();
-      ctx.strokeStyle = `rgba(160, 200, 230, ${0.55 * a})`;
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([6, 5]);
-      ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, TAU); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
     }
   },
 
@@ -10908,52 +10951,89 @@ const Renderer = {
     }
   },
 
+  /*
+   * Meteor draw — woodcut telegraph + comet trail. Ported from
+   * spellMeteor in art-lab-v3.js. Telegraph: ink shadow + 3 vermilion
+   * pulse rings + crosshair ticks. Comet: vermilion body with gold
+   * core + ink rim, 12-sample analytic trail (vermilion + ink dots),
+   * 4 gold side-sparks. Impact + crater are handled by tickMeteors
+   * via spawnExplosion + flame patches; this draws only the in-flight
+   * approach phase.
+   */
   drawMeteors(ctx, meteors, t) {
     if (!meteors?.length) return;
     for (const m of meteors) {
       const prog = Math.min(1, m.t / m.travelTime);
       const { x, y, targetX, targetY } = m;
-      // Impact shadow / warning ring on the ground
-      const shadowA = prog * 0.65;
-      const shadowR = m.radius * (0.2 + prog * 0.8);
       ctx.save();
-      ctx.fillStyle = `rgba(26, 10, 4, ${shadowA * 0.45})`;
-      ctx.beginPath(); ctx.ellipse(targetX, targetY, shadowR, shadowR * 0.35, 0, 0, TAU); ctx.fill();
-      ctx.strokeStyle = `rgba(200, 60, 20, ${shadowA * 0.7})`;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.ellipse(targetX, targetY, m.radius * 0.85, m.radius * 0.28, 0, 0, TAU); ctx.stroke();
-      ctx.setLineDash([]);
-      // Fire trail behind the rock
-      const trailLen = 60 + prog * 80;
-      const ang = Math.atan2(targetY - m.y, targetX - m.x);
-      const trailGrad = ctx.createLinearGradient(x, y, x - Math.cos(ang) * trailLen, y - Math.sin(ang) * trailLen);
-      trailGrad.addColorStop(0,   `rgba(255, 100, 20, ${0.90})`);
-      trailGrad.addColorStop(0.4, `rgba(200, 50, 10, ${0.50})`);
-      trailGrad.addColorStop(1,   `rgba(100, 20, 5, 0)`);
-      ctx.strokeStyle = trailGrad;
-      ctx.lineWidth   = 10 * (1 - prog * 0.3);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x - Math.cos(ang) * trailLen, y - Math.sin(ang) * trailLen);
-      ctx.stroke();
-      // The rock itself — chunky irregular polygon
-      ctx.fillStyle   = `rgba(80, 40, 20, 0.95)`;
-      ctx.strokeStyle = `rgba(26, 10, 4, 0.90)`;
-      ctx.lineWidth   = 1.5;
-      const rs = 14 + prog * 4;
-      ctx.beginPath();
-      for (let k = 0; k < 7; k++) {
-        const a = k / 7 * TAU + m.seed * 0.01;
-        const r = rs * (0.7 + 0.3 * Math.sin(m.seed + k * 3));
-        k === 0 ? ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r)
-                : ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+
+      // ── Telegraph at impact site ───────────────────────────────────
+      const tele = prog;     // ramps 0→1 over the meteor's flight
+      const targetR = 12 + tele * (m.radius * 0.6);
+      // Growing ink shadow disc
+      ctx.fillStyle = `rgba(26,22,18,${0.18 + tele * 0.25})`;
+      ctx.beginPath(); ctx.arc(targetX, targetY, targetR, 0, TAU); ctx.fill();
+      // 3 staggered vermilion warning rings
+      for (let i = 0; i < 3; i++) {
+        const phase = ((t * 1.2 + i * 0.33) % 1);
+        const a = (1 - phase) * tele;
+        ctx.strokeStyle = `rgba(168,58,44,${a * 0.9})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(targetX, targetY, 8 + phase * targetR * 0.9, 0, TAU);
+        ctx.stroke();
       }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      // Hot orange core
-      ctx.fillStyle = `rgba(255, 160, 60, 0.80)`;
-      ctx.beginPath(); ctx.arc(x, y, rs * 0.45, 0, TAU); ctx.fill();
+      // Crosshair ticks at NSEW
+      ctx.strokeStyle = `rgba(168,58,44,${tele * 0.85})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      const cr = targetR;
+      ctx.moveTo(targetX - cr - 4, targetY); ctx.lineTo(targetX - cr + 4, targetY);
+      ctx.moveTo(targetX + cr - 4, targetY); ctx.lineTo(targetX + cr + 4, targetY);
+      ctx.moveTo(targetX, targetY - cr - 4); ctx.lineTo(targetX, targetY - cr + 4);
+      ctx.moveTo(targetX, targetY + cr - 4); ctx.lineTo(targetX, targetY + cr + 4);
+      ctx.stroke();
+
+      // ── Comet trail (12 sampled past positions) ─────────────────────
+      const sx = m.startX, sy = m.startY;
+      const k = prog;
+      for (let i = 0; i < 12; i++) {
+        const back = i * 0.04;
+        const k2 = Math.max(0, k - back);
+        const tx = sx + (targetX - sx) * k2;
+        const ty = sy + (targetY - sy) * k2;
+        const fade = 1 - i / 12;
+        // Vermilion outer mote
+        ctx.fillStyle = `rgba(168,58,44,${fade * 0.65})`;
+        ctx.beginPath(); ctx.arc(tx, ty, 5 * fade + 1, 0, TAU); ctx.fill();
+        // Ink shadow alt
+        if (i % 2 === 0) {
+          ctx.fillStyle = `rgba(26,22,18,${fade * 0.55})`;
+          ctx.beginPath(); ctx.arc(tx - 2, ty - 2, 3 * fade, 0, TAU); ctx.fill();
+        }
+      }
+
+      // ── Comet body (vermilion + gold core + ink rim) ────────────────
+      if (k < 1) {
+        ctx.fillStyle = `rgba(168,58,44,1)`;
+        ctx.beginPath(); ctx.arc(x, y, 7, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(26,22,18,1)`; ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.fillStyle = `rgba(200,148,26,1)`;
+        ctx.beginPath(); ctx.arc(x - 1, y - 1, 3, 0, TAU); ctx.fill();
+        // 4 gold sparks streaming back along travel angle
+        const ang = Math.atan2(sy - targetY, sx - targetX);
+        for (let s = 0; s < 4; s++) {
+          const sa = ang + (Math.random() - 0.5) * 0.6;
+          const sd = 8 + Math.random() * 10;
+          ctx.strokeStyle = `rgba(200,148,26,0.7)`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.cos(sa) * sd, y + Math.sin(sa) * sd);
+          ctx.stroke();
+        }
+      }
       ctx.restore();
     }
   },
