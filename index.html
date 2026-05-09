@@ -4733,6 +4733,10 @@ class Player {
       if (m) {
         m.charge -= 1;
         m.rechargeAcc = 0;
+        // Trigger consume flash for the renderer (cool silver pulse +
+        // gold confirm spark at the consuming mirror's last position).
+        aegis.flashAge = 0;
+        aegis._lastConsumed = m;
         const reflected = dmg * aegis.reflectFrac;
         if (attacker?.alive) {
           const a = attacker.takeDamage(reflected, { spell: 'reflective_aegis' });
@@ -6580,6 +6584,8 @@ class Game {
       const A = this.aegisMirrors[i];
       A.t += dt;
       A.angle += dt * 1.2;
+      // Age the consume-flash if one is active.
+      if (A.flashAge !== undefined && A.flashAge < 0.4) A.flashAge += dt;
       // Recharge each mirror that's depleted.
       for (const m of A.mirrors) {
         if (m.charge >= A.charges) continue;
@@ -8444,7 +8450,7 @@ const Renderer = {
     this.drawLensArrays(ctx, game.lensArrays, game.player, game.runElapsed);
     this.drawLighthouses(ctx, game.lighthouses, game.runElapsed);
     this.drawSolarEclipses(ctx, game.solarEclipses, game.runElapsed);
-    this.drawMirrorMazes(ctx, game.mirrorMazes, game.runElapsed);
+    this.drawMirrorMazes(ctx, game.mirrorMazes, game.runElapsed, game.enemies);
     this.drawPrismStrikes(ctx, game.prismStrikes, game.runElapsed);
     this.drawPrismBeams(ctx, game.prismBeams);
     this.drawBeamFlashes(ctx, game._beamFlashes);
@@ -11433,48 +11439,102 @@ const Renderer = {
     }
   },
 
+  /*
+   * Solar Halo — overhead orb + ground wash. Per OPTICIAN_HANDOFF.md
+   * §5: stronger ground wash, dashed perimeter ring, eclipse swap with
+   * white-hot rim corona + 4 cardinal ink spike-rays.
+   */
   drawSolarHalos(ctx, halos, player, t) {
     if (!halos?.length || !player) return;
     for (const H of halos) {
       const fade = Math.min(1, H.t / 0.2) * Math.min(1, (H.life - H.t) / 0.4);
       const isDark = !!H.eclipseHalo;
       const r = H.radius;
-      // Floating orb above the player's head
       const ox = player.x;
       const oy = player.y - player.radius - 22;
-      // Aura wash on the ground
-      const g = ctx.createRadialGradient(player.x, player.y, r * 0.1, player.x, player.y, r);
+
+      // Ground wash — bumped per handoff
+      const g = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, r);
       if (isDark) {
-        g.addColorStop(0,   `rgba(60, 40, 80, ${0.55 * fade})`);
-        g.addColorStop(0.7, `rgba(30, 20, 50, ${0.30 * fade})`);
-        g.addColorStop(1,   `rgba(0, 0, 0, 0)`);
+        g.addColorStop(0,    `rgba(42,28,46,${0.32 * fade})`);
+        g.addColorStop(0.6,  `rgba(70,46,82,${0.20 * fade})`);
+        g.addColorStop(1,    `rgba(90,58,106,0)`);
       } else {
-        g.addColorStop(0,   `rgba(255, 245, 180, ${0.45 * fade})`);
-        g.addColorStop(0.6, `rgba(255, 200,  90, ${0.25 * fade})`);
-        g.addColorStop(1,   `rgba(255, 160,  60, 0)`);
+        g.addColorStop(0,    `rgba(255,243,200,${0.35 * fade})`);
+        g.addColorStop(0.6,  `rgba(232,184,64,${0.18 * fade})`);
+        g.addColorStop(1,    `rgba(232,184,64,0)`);
       }
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(player.x, player.y, r, 0, TAU); ctx.fill();
+
+      // Dashed perimeter — defined edge so the wash reads
+      ctx.save();
+      ctx.strokeStyle = isDark
+        ? `rgba(90,58,106,${0.7 * fade})`
+        : `rgba(232,184,64,${0.7 * fade})`;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 4]);
+      ctx.lineDashOffset = -t * 8;
+      ctx.beginPath(); ctx.arc(player.x, player.y, r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
       // Orb body
       const orbR = 14;
-      const orbColor = isDark ? '#3a2a4a' : '#ffd66a';
-      ctx.fillStyle = orbColor;
-      ctx.beginPath(); ctx.arc(ox, oy, orbR, 0, TAU); ctx.fill();
-      // Halo ring above the orb
-      ctx.strokeStyle = isDark ? `rgba(180, 150, 220, ${0.85 * fade})` : `rgba(255, 240, 180, ${0.95 * fade})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(ox, oy - orbR * 0.7, orbR * 1.1, orbR * 0.35, 0, 0, TAU); ctx.stroke();
-      // Sun rays
-      const rayCount = isDark ? 6 : 8;
-      ctx.strokeStyle = isDark ? `rgba(180, 150, 220, ${0.6 * fade})` : `rgba(255, 220, 130, ${0.85 * fade})`;
-      ctx.lineWidth = 1.4;
-      for (let k = 0; k < rayCount; k++) {
-        const ang = (k / rayCount) * TAU + t * 0.8;
-        const r1 = orbR + 2, r2 = orbR + 6 + 2 * Math.sin(t * 4 + k);
-        ctx.beginPath();
-        ctx.moveTo(ox + Math.cos(ang) * r1, oy + Math.sin(ang) * r1);
-        ctx.lineTo(ox + Math.cos(ang) * r2, oy + Math.sin(ang) * r2);
-        ctx.stroke();
+      if (isDark) {
+        // Eclipse: dark indigo-purple disc + umbra corona + white-hot rim
+        // Outer corona (umbra)
+        const cg = ctx.createRadialGradient(ox, oy, orbR * 0.6, ox, oy, orbR * 1.6);
+        cg.addColorStop(0, `rgba(90,58,106,${0.8 * fade})`);
+        cg.addColorStop(1, `rgba(90,58,106,0)`);
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(ox, oy, orbR * 1.6, 0, TAU); ctx.fill();
+        // Disc
+        ctx.fillStyle = `rgba(42,28,46,${fade})`;
+        ctx.beginPath(); ctx.arc(ox, oy, orbR, 0, TAU); ctx.fill();
+        // White-hot ring of fire
+        ctx.strokeStyle = `rgba(255,243,200,${fade})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(ox, oy, orbR, 0, TAU); ctx.stroke();
+        // 4 cardinal ink spike-rays — eclipse "spike" feel
+        ctx.strokeStyle = `rgba(26,22,18,${0.6 * fade})`;
+        ctx.lineWidth = 1.4;
+        for (let k = 0; k < 4; k++) {
+          const ang = k / 4 * TAU + t * 0.2;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(ang) * (orbR + 4), oy + Math.sin(ang) * (orbR + 4));
+          ctx.lineTo(ox + Math.cos(ang) * (orbR + 22), oy + Math.sin(ang) * (orbR + 22));
+          ctx.stroke();
+        }
+        // 6 umbra rays — slower wobble
+        ctx.strokeStyle = `rgba(90,58,106,${0.5 * fade})`;
+        ctx.lineWidth = 1.2;
+        for (let k = 0; k < 6; k++) {
+          const ang = k / 6 * TAU + t * 0.4;
+          const r1 = orbR + 2, r2 = orbR + 8 + 1.5 * Math.sin(t * 2 + k);
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(ang) * r1, oy + Math.sin(ang) * r1);
+          ctx.lineTo(ox + Math.cos(ang) * r2, oy + Math.sin(ang) * r2);
+          ctx.stroke();
+        }
+      } else {
+        // Bright sun orb
+        ctx.fillStyle = `rgba(232,184,64,${fade})`;
+        ctx.beginPath(); ctx.arc(ox, oy, orbR, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(255,243,200,${0.95 * fade})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(ox, oy - orbR * 0.7, orbR * 1.1, orbR * 0.35, 0, 0, TAU); ctx.stroke();
+        // Sun rays
+        ctx.strokeStyle = `rgba(255,220,130,${0.85 * fade})`;
+        ctx.lineWidth = 1.4;
+        for (let k = 0; k < 8; k++) {
+          const ang = (k / 8) * TAU + t * 0.8;
+          const r1 = orbR + 2, r2 = orbR + 6 + 2 * Math.sin(t * 4 + k);
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(ang) * r1, oy + Math.sin(ang) * r1);
+          ctx.lineTo(ox + Math.cos(ang) * r2, oy + Math.sin(ang) * r2);
+          ctx.stroke();
+        }
       }
     }
   },
@@ -11563,32 +11623,38 @@ const Renderer = {
       ctx.strokeStyle = `rgba(180, 130, 40, ${0.95 * fade})`;
       ctx.lineWidth = 1; ctx.stroke();
       ctx.restore();
-      // Beam(s)
+      // Beam(s) — wedge fill via arc path + linear gradient along aim
+      // axis (per OPTICIAN_HANDOFF.md §6: "hot at lamp → fade at tip").
+      // Centerline + lamp pulse on shared sin(t*4 + phase).
       const beams = L.twinLights ? [L.beamAng, L.beamAng + Math.PI] : [L.beamAng];
+      const pulse = 0.7 + 0.3 * Math.sin(t * 4 + (L.phase || 0));
+      const halfAng = 0.18;
       for (const a of beams) {
-        const halfW = 0.18;
-        const tip1x = L.x + Math.cos(a - halfW) * L.range;
-        const tip1y = L.y + Math.sin(a - halfW) * L.range;
-        const tip2x = L.x + Math.cos(a + halfW) * L.range;
-        const tip2y = L.y + Math.sin(a + halfW) * L.range;
-        const grad = ctx.createLinearGradient(L.x, L.y, L.x + Math.cos(a) * L.range, L.y + Math.sin(a) * L.range);
-        grad.addColorStop(0,   `rgba(255, 240, 170, ${0.55 * fade})`);
-        grad.addColorStop(1,   `rgba(255, 200,  90, 0)`);
-        ctx.fillStyle = grad;
+        const tipX = L.x + Math.cos(a) * L.range;
+        const tipY = L.y + Math.sin(a) * L.range;
+        // Arc-bounded wedge — proper top-down beam shape (ground-aligned)
         ctx.beginPath();
         ctx.moveTo(L.x, L.y);
-        ctx.lineTo(tip1x, tip1y);
-        ctx.lineTo(tip2x, tip2y);
+        ctx.arc(L.x, L.y, L.range, a - halfAng, a + halfAng);
         ctx.closePath();
+        // Linear gradient along the aim axis (hot at lamp, fades at tip)
+        const lg = ctx.createLinearGradient(L.x, L.y, tipX, tipY);
+        lg.addColorStop(0,   `rgba(255,243,200,${0.55 * fade})`);
+        lg.addColorStop(0.6, `rgba(232,184,64,${0.22 * fade})`);
+        lg.addColorStop(1,   `rgba(232,184,64,0)`);
+        ctx.fillStyle = lg;
         ctx.fill();
-        // Bright centerline
-        ctx.strokeStyle = `rgba(255, 248, 200, ${0.9 * fade})`;
+        // Bright pulsing centerline
+        ctx.strokeStyle = `rgba(255,243,200,${pulse * 0.85 * fade})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(L.x, L.y);
-        ctx.lineTo(L.x + Math.cos(a) * L.range, L.y + Math.sin(a) * L.range);
+        ctx.lineTo(tipX, tipY);
         ctx.stroke();
       }
+      // Lamp "lit" pip pulses with the same value
+      ctx.fillStyle = `rgba(255,243,200,${pulse * fade})`;
+      ctx.beginPath(); ctx.arc(L.x, L.y - 10, 2, 0, TAU); ctx.fill();
     }
   },
 
@@ -11598,44 +11664,76 @@ const Renderer = {
       const fade = Math.min(1, E.t / 0.3) * Math.min(1, (E.life - E.t) / 0.5);
       const prog = Math.min(1, E.t / E.life);
       const isDark = !!E.darkness;
-      // Outer wash
+      // Ramp ∈ [0,1] — drives disc alpha, rim contrast, dash speed.
+      const ramp = prog;
+      const discA = lerp(0.18, 0.55, ramp);
+      const rimA  = lerp(0.20, 0.95, ramp);
+      const rimW  = lerp(1.0, 2.5, ramp);
+
+      // Outer wash — alpha breathes with the ramp
       const g = ctx.createRadialGradient(E.x, E.y, E.radius * 0.05, E.x, E.y, E.radius);
       if (isDark) {
-        g.addColorStop(0,   `rgba(20, 10, 30, ${0.65 * fade})`);
-        g.addColorStop(0.7, `rgba(40, 20, 60, ${0.40 * fade})`);
-        g.addColorStop(1,   `rgba(0, 0, 0, 0)`);
+        g.addColorStop(0,    `rgba(42,28,46,${discA * fade})`);
+        g.addColorStop(0.7,  `rgba(70,46,82,${0.6 * discA * fade})`);
+        g.addColorStop(1,    `rgba(90,58,106,0)`);
       } else {
-        const intensity = 0.4 + 0.5 * prog;
-        g.addColorStop(0,   `rgba(255, 245, 200, ${0.55 * fade * intensity})`);
-        g.addColorStop(0.5, `rgba(255, 200, 100, ${0.35 * fade * intensity})`);
-        g.addColorStop(0.85,`rgba(255, 140,  60, ${0.20 * fade * intensity})`);
-        g.addColorStop(1,   `rgba(255, 100,  40, 0)`);
+        g.addColorStop(0,    `rgba(255,243,200,${discA * fade})`);
+        g.addColorStop(0.5,  `rgba(232,184,64,${0.7 * discA * fade})`);
+        g.addColorStop(0.85, `rgba(214,138,30,${0.4 * discA * fade})`);
+        g.addColorStop(1,    `rgba(168,58,44,0)`);
       }
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(E.x, E.y, E.radius, 0, TAU); ctx.fill();
-      // Eclipse ring (corona) — bright thin ring
+
+      // Corona — thin ring just inside the disc edge, scales searing-er
+      // as the ramp climbs.
       ctx.strokeStyle = isDark
-        ? `rgba(180, 150, 220, ${0.7 * fade})`
-        : `rgba(255, 230, 130, ${0.85 * fade})`;
-      ctx.lineWidth = 2;
+        ? `rgba(90,58,106,${rimA * fade})`
+        : `rgba(255,243,200,${rimA * fade})`;
+      ctx.lineWidth = rimW;
       ctx.beginPath(); ctx.arc(E.x, E.y, E.radius * 0.85, 0, TAU); ctx.stroke();
+
+      // Dashed outer ring — flow speed scales with ramp (visual tempo)
+      ctx.save();
+      ctx.strokeStyle = isDark
+        ? `rgba(90,58,106,${0.55 * fade})`
+        : `rgba(232,184,64,${0.55 * fade})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 5]);
+      ctx.lineDashOffset = -t * lerp(6, 22, ramp);
+      ctx.beginPath(); ctx.arc(E.x, E.y, E.radius * 0.92, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
       // Penumbra: outer slow ring
       if (E.penumbra) {
-        ctx.strokeStyle = `rgba(255, 220, 150, ${0.4 * fade})`;
+        ctx.strokeStyle = `rgba(255,220,150,${0.4 * fade})`;
         ctx.lineWidth = 1.0;
         ctx.setLineDash([4, 6]);
         ctx.beginPath(); ctx.arc(E.x, E.y, E.radius * 1.4, 0, TAU); ctx.stroke();
         ctx.setLineDash([]);
       }
+
+      // White-hot crescent at high ramp — eclipse "burning through"
+      if (!isDark && ramp > 0.7) {
+        const k = (ramp - 0.7) / 0.3;
+        ctx.strokeStyle = `rgba(255,243,200,${k * 0.7 * fade})`;
+        ctx.lineWidth = 1.5;
+        const ang = -Math.PI / 2 + Math.sin(t * 0.6) * 0.3;
+        ctx.beginPath();
+        ctx.arc(E.x, E.y, E.radius * 0.78, ang - 1.0, ang + 1.0);
+        ctx.stroke();
+      }
     }
   },
 
-  drawMirrorMazes(ctx, mazes, t) {
+  drawMirrorMazes(ctx, mazes, t, enemies) {
     if (!mazes?.length) return;
     for (const M of mazes) {
       const fade = Math.min(1, M.t / 0.2) * Math.min(1, (M.life - M.t) / 0.5);
-      // Beams between adjacent mirrors
-      ctx.strokeStyle = `rgba(220, 236, 255, ${0.85 * fade})`;
+      // Beams between adjacent mirrors — beam color slightly warmer
+      // than pure silver to read as "reflected light", not raw geometry.
+      ctx.strokeStyle = `rgba(232,184,64,${0.55 * fade})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let k = 0; k < M.mirrors.length; k++) {
@@ -11645,8 +11743,8 @@ const Renderer = {
         ctx.lineTo(b.x, b.y);
       }
       ctx.stroke();
-      // Subtle inner glow
-      ctx.strokeStyle = `rgba(220, 236, 255, ${0.25 * fade})`;
+      // Soft outer halo
+      ctx.strokeStyle = `rgba(232,184,64,${0.18 * fade})`;
       ctx.lineWidth = 7;
       ctx.beginPath();
       for (let k = 0; k < M.mirrors.length; k++) {
@@ -11656,17 +11754,63 @@ const Renderer = {
         ctx.lineTo(b.x, b.y);
       }
       ctx.stroke();
-      // Mirror nodes
+      // Mirror nodes — 4×4 silver squares tilted 45° (per OPTICIAN_HANDOFF.md §8)
       for (const m of M.mirrors) {
-        ctx.fillStyle = `rgba(220, 236, 255, ${0.95 * fade})`;
-        ctx.beginPath(); ctx.arc(m.x, m.y, 5, 0, TAU); ctx.fill();
-        ctx.strokeStyle = `rgba(120, 150, 200, ${fade})`;
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = `rgba(200,196,186,${fade})`;
+        ctx.fillRect(-3, -3, 6, 6);
+        ctx.strokeStyle = `rgba(26,22,18,${fade})`;
         ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(m.x, m.y, 5, 0, TAU); ctx.stroke();
+        ctx.strokeRect(-3, -3, 6, 6);
+        ctx.restore();
+      }
+      // Crystal Cage spec — flickering indigo arcs at boundary segments
+      // where an enemy is hugging the wall. Cap at 6 active arcs/frame.
+      if (M.crystalCage && enemies?.length) {
+        let arcs = 0;
+        for (let k = 0; k < M.mirrors.length && arcs < 6; k++) {
+          const a = M.mirrors[k];
+          const b = M.mirrors[(k + 1) % M.mirrors.length];
+          // Find any enemy within ~12px of this segment.
+          let near = null;
+          const sdx = b.x - a.x, sdy = b.y - a.y;
+          const sLen2 = sdx * sdx + sdy * sdy || 1;
+          for (const e of enemies) {
+            if (!e.alive) continue;
+            const tProj = Math.max(0, Math.min(1,
+              ((e.x - a.x) * sdx + (e.y - a.y) * sdy) / sLen2));
+            const cx2 = a.x + sdx * tProj;
+            const cy2 = a.y + sdy * tProj;
+            if (Math.hypot(e.x - cx2, e.y - cy2) < 12 + e.radius) { near = e; break; }
+          }
+          if (!near) continue;
+          // Bow outward (perpendicular to segment, away from maze centre)
+          const mxp = (a.x + b.x) / 2, myp = (a.y + b.y) / 2;
+          const dirX = mxp - M.cx, dirY = myp - M.cy;
+          const dirL = Math.hypot(dirX, dirY) || 1;
+          const px2 = (dirX / dirL) * 8;
+          const py2 = (dirY / dirL) * 8;
+          ctx.strokeStyle = `rgba(76,108,172,${(0.5 + 0.5 * Math.random()) * fade})`;
+          ctx.setLineDash([2, 3]);
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.quadraticCurveTo(mxp + px2, myp + py2, b.x, b.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          arcs++;
+        }
       }
     }
   },
 
+  /*
+   * Prism Strike — telegraph + descending pillar + brief blow-out flash.
+   * Per OPTICIAN_HANDOFF.md §9: 60ms peak gets a full white-hot pillar
+   * wash + ground star to sell the impact moment.
+   */
   drawPrismStrikes(ctx, strikes, t) {
     if (!strikes?.length) return;
     for (const P of strikes) {
@@ -11698,9 +11842,24 @@ const Renderer = {
       ctx.moveTo(P.x, pillarTop);
       ctx.lineTo(P.x, P.y);
       ctx.stroke();
+      // Blow-out — first 60ms past start: full-pillar white-hot wash +
+      // ground star at impact. Sells the moment the beam connects.
+      const peakK = P.t / 0.06;
+      if (peakK >= 0 && peakK < 1) {
+        const k = peakK;
+        ctx.fillStyle = `rgba(255,243,200,${(1 - k) * 0.85})`;
+        ctx.fillRect(P.x - 18, P.y - 200, 36, 200);
+        drawStarRays(ctx, P.x, P.y, 6, 14, 22, PAL.hot, 1 - k);
+      }
     }
   },
 
+  /*
+   * Prism Burst rays — instant colored beams from impact. Per
+   * OPTICIAN_HANDOFF.md §11: thicker (2.2px), white-hot inner stroke
+   * during first 0.08s blow-out, endpoint sparks (4-line cross — hot
+   * for 0.15s, then warm for next 0.15s).
+   */
   drawPrismBeams(ctx, beams) {
     if (!beams?.length) return;
     for (const B of beams) {
@@ -11709,16 +11868,41 @@ const Renderer = {
       const reach = B.reach * prog;
       const tipX = B.x + Math.cos(B.ang) * reach;
       const tipY = B.y + Math.sin(B.ang) * reach;
-      // Beam halo (color is hex; alpha controlled via globalAlpha)
+      // Beam halo
       ctx.strokeStyle = B.color;
       ctx.globalAlpha = 0.45 * fade;
       ctx.lineWidth = 8;
       ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(tipX, tipY); ctx.stroke();
-      // Bright core
+      // Mid stroke (thicker per handoff)
       ctx.globalAlpha = 0.95 * fade;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.2;
       ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(tipX, tipY); ctx.stroke();
+      // White-hot inner stroke during blow-out (first 0.08s of the burst)
+      if (B.t < 0.08) {
+        ctx.globalAlpha = 1 - B.t / 0.08;
+        ctx.strokeStyle = '#fff3c8';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(tipX, tipY); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
+      // Endpoint spark — 4-line cross. Hot for 0.15s, then warm for 0.15s.
+      const sparkAge = B.t;
+      let sparkColor = null, sparkA = 0;
+      if (sparkAge < 0.15) { sparkColor = '#fff3c8'; sparkA = 1 - sparkAge / 0.15; }
+      else if (sparkAge < 0.30) { sparkColor = '#e8b840'; sparkA = 1 - (sparkAge - 0.15) / 0.15; }
+      if (sparkColor) {
+        ctx.strokeStyle = sparkColor;
+        ctx.globalAlpha = sparkA;
+        ctx.lineWidth = 1.2;
+        const sz = 4;
+        ctx.beginPath();
+        ctx.moveTo(tipX - sz, tipY); ctx.lineTo(tipX + sz, tipY);
+        ctx.moveTo(tipX, tipY - sz); ctx.lineTo(tipX, tipY + sz);
+        ctx.moveTo(tipX - sz * 0.7, tipY - sz * 0.7); ctx.lineTo(tipX + sz * 0.7, tipY + sz * 0.7);
+        ctx.moveTo(tipX + sz * 0.7, tipY - sz * 0.7); ctx.lineTo(tipX - sz * 0.7, tipY + sz * 0.7);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
     }
   },
 
@@ -11837,31 +12021,105 @@ const Renderer = {
       ctx.beginPath(); ctx.arc(tx, ty, 4 + 2 * flicker, 0, TAU); ctx.fill();
     }
     ctx.restore();
+    // Heat shimmer at tip when ramp is near peak (per handoff §10).
+    if (r.intensity > 0.7) drawHeatShimmer(ctx, tx, ty, t);
   },
 
+  /*
+   * Reflective Aegis — hand-mirror sprites orbiting the player.
+   * Per OPTICIAN_HANDOFF.md §4: silver fill rect + highlight strip +
+   * ink frame + corner nubs + diagonal sheen when full. Hall of Mirrors
+   * outer ring reads distinct from inner: smaller, canted +PI/8, frame
+   * uses silverLo instead of ink (3 independent diffs). Charge-consume
+   * flash: cool silver pulse + gold confirm spark at the consumed slot.
+   */
   drawAegisMirrors(ctx, aegises, player, t) {
     if (!aegises?.length || !player) return;
     for (const A of aegises) {
+      // Pre-compute consumed mirror's screen-space position for the
+      // gold confirm spark (so the spark sticks to the correct slot).
+      let lastX = null, lastY = null;
+      if (A._lastConsumed) {
+        const lc = A._lastConsumed;
+        const lcRingR = A.radius + (lc.ringIdx * 22);
+        const lcAng = A.angle * (lc.ringIdx % 2 === 0 ? 1 : -0.7) + (lc.slot / lc.ring) * TAU;
+        lastX = player.x + Math.cos(lcAng) * lcRingR;
+        lastY = player.y + Math.sin(lcAng) * lcRingR;
+      }
+
+      // Hall consume flash: pale silver ring + gold confirm spark.
+      if (A.flashAge !== undefined && A.flashAge < 0.4) {
+        const k = A.flashAge / 0.4;
+        ctx.strokeStyle = `rgba(232,236,222,${(1 - k) * 0.85})`;
+        ctx.lineWidth = 2 + 4 * k;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, lerp(20, 64, k), 0, TAU);
+        ctx.stroke();
+        if (lastX !== null) {
+          ctx.fillStyle = PAL.warm;
+          ctx.beginPath(); ctx.arc(lastX, lastY, 4 * (1 - k), 0, TAU); ctx.fill();
+        }
+      }
+
+      // Mirrors
       for (const m of A.mirrors) {
+        const isOuter = m.ringIdx > 0;
         const ringR = A.radius + (m.ringIdx * 22);
         const ringSlots = m.ring;
-        const ang = A.angle * (m.ringIdx % 2 === 0 ? 1 : -0.7) + (m.slot / ringSlots) * TAU;
+        // Hall outer ring spins reverse + slower
+        const baseAng = A.angle * (isOuter ? -0.7 : 1);
+        const slotAng = (m.slot / ringSlots) * TAU;
+        const ang = baseAng + slotAng;
         const mx = player.x + Math.cos(ang) * ringR;
         const my = player.y + Math.sin(ang) * ringR;
         const charged = m.charge > 0;
+        const full = m.charge >= A.charges;
+
+        // Hall tilt offset — outer ring canted +PI/8 (not radial-perpendicular)
+        const tilt = ang + Math.PI / 2 + (isOuter ? Math.PI / 8 : 0);
+        const w = isOuter ? 10 : 14;       // outer mirrors smaller
+        const h = isOuter ? 7  : 9;
+
         ctx.save();
         ctx.translate(mx, my);
-        ctx.rotate(ang + Math.PI / 2);
-        ctx.fillStyle = charged ? `rgba(220, 236, 255, 0.95)` : `rgba(80, 90, 110, 0.50)`;
-        ctx.fillRect(-9, -2.5, 18, 5);
-        ctx.strokeStyle = charged ? `rgba(120, 150, 200, 0.9)` : `rgba(40, 50, 70, 0.7)`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-9, -2.5, 18, 5);
-        // Highlight gleam on the front face (pointing outward)
+        ctx.rotate(tilt);
+
+        // Silver fill rect
+        ctx.fillStyle = charged
+          ? PAL.silver
+          : `rgba(${0x8a},${0x86},${0x78},0.55)`;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+
+        // Highlight strip along top long edge
         if (charged) {
-          ctx.fillStyle = `rgba(255, 255, 255, 0.85)`;
-          ctx.fillRect(-7, -2, 4, 1);
+          ctx.fillStyle = PAL.silverHi;
+          ctx.fillRect(-w / 2 + 1, -h / 2 + 1, w - 2, 2);
         }
+
+        // Frame stroke — Hall outer ring uses silverLo to read distinct
+        ctx.strokeStyle = charged
+          ? (isOuter ? PAL.silverLo : PAL.ink)
+          : `rgba(${0x6a},${0x60},${0x4f},0.7)`;
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+
+        // Frame nubs (top-left + bottom-right) — small ink dots
+        if (charged) {
+          ctx.fillStyle = PAL.ink;
+          ctx.beginPath(); ctx.arc(-w / 2, -h / 2, 1, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc( w / 2,  h / 2, 1, 0, TAU); ctx.fill();
+        }
+
+        // Diagonal sheen when at full charge
+        if (full) {
+          ctx.strokeStyle = PAL.silverHi;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-w / 2 + 2, h / 2 - 1);
+          ctx.lineTo( w / 2 - 1, -h / 2 + 1);
+          ctx.stroke();
+        }
+
         ctx.restore();
       }
     }
