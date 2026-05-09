@@ -5540,7 +5540,6 @@ class Game {
     this.mirrorMazes = [];
     this.prismStrikes = [];
     this.prismBeams = [];
-    this._beamFlashes = [];
     this.blindFlashes = [];
 
     this.activeSpells = [];      // [{ spellId, cd, cdAcc }]
@@ -5645,7 +5644,6 @@ class Game {
     this.mirrorMazes   = [];
     this.prismStrikes  = [];
     this.prismBeams    = [];
-    this._beamFlashes  = [];
     this.blindFlashes  = [];
     this.damageNumbers = [];
     this.explosions = [];
@@ -5823,7 +5821,6 @@ class Game {
     this.tickBlindingFlashes(dt);
     this.tickLinkBeads(dt);
     this.tickPrismBeams(dt);
-    this.tickBeamFlashes(dt);
     this.tickFocusedBeam(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
@@ -6719,7 +6716,14 @@ class Game {
       if (L.dmgAcc >= tickIv) {
         L.dmgAcc = 0;
         const tickDmg = L.dps * tickIv;
-        const beamHalfWidth = 0.18;        // arc tolerance (radians)
+        // Beam half-width (radians). With rotSpeed 2 rad/s and the
+        // previous 0.18 (≈10° each side), the beam touched any given
+        // enemy for only 5.7% of each revolution — realized DPS was
+        // ~1/10 of the advertised value. Widened to 0.55 rad (≈32°
+        // each side) so an enemy in range eats damage ~35% of the time
+        // and the realized DPS is ~7 (still under lens_array's single-
+        // target convergence, which is correct since lighthouse sweeps).
+        const beamHalfWidth = 0.55;
         const beams = L.twinLights ? [L.beamAng, L.beamAng + Math.PI] : [L.beamAng];
         for (const e of this.enemies) {
           if (!e.alive) continue;
@@ -6968,15 +6972,6 @@ class Game {
     }
   }
 
-  tickBeamFlashes(dt) {
-    if (!this._beamFlashes?.length) return;
-    for (let i = this._beamFlashes.length - 1; i >= 0; i--) {
-      const f = this._beamFlashes[i];
-      f.t += dt;
-      if (f.t >= f.life) this._beamFlashes.splice(i, 1);
-    }
-  }
-
   tickBlindingFlashes(dt) {
     if (!this.blindFlashes?.length) return;
     for (let i = this.blindFlashes.length - 1; i >= 0; i--) {
@@ -7152,7 +7147,12 @@ class Game {
       .sort((a, b) => Vec.dist(a, m) - Vec.dist(b, m))
       .slice(0, maxLinks);
     if (candidates.length < 2) return;
-    const share = 0.20 + (mods.shareBonus || 0);
+    // Cap link share at 50%. Without the cap, max Bleedover (3 pts ×
+    // +15% = +45%) gives 65% share; combined with Web (+3 enemies, max
+    // 6 linked) that's 5 peers × 65% = +325% damage propagation per hit.
+    // Caps the runaway. Player still gets a meaningful 50% share even
+    // at min investment; the dump still pays.
+    const share = Math.min(0.50, 0.20 + (mods.shareBonus || 0));
     const beh = mods.behavior || {};
     const group = {
       members: candidates,
@@ -8412,7 +8412,6 @@ const Renderer = {
     this.drawMirrorMazes(ctx, game.mirrorMazes, game.runElapsed, game.enemies);
     this.drawPrismStrikes(ctx, game.prismStrikes, game.runElapsed);
     this.drawPrismBeams(ctx, game.prismBeams);
-    this.drawBeamFlashes(ctx, game._beamFlashes);
     this.drawFocusedBeam(ctx, game.player, game.runElapsed);
     this.drawAegisMirrors(ctx, game.aegisMirrors, game.player, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
@@ -11264,7 +11263,10 @@ const Renderer = {
       // Centerline + lamp pulse on shared sin(t*4 + phase).
       const beams = L.twinLights ? [L.beamAng, L.beamAng + Math.PI] : [L.beamAng];
       const pulse = 0.7 + 0.3 * Math.sin(t * 4 + (L.phase || 0));
-      const halfAng = 0.18;
+      // Wedge half-angle MUST match Game.tickLighthouses' damage
+      // beamHalfWidth (0.55) so the visual matches what's actually
+      // dealing damage.
+      const halfAng = 0.55;
       for (const a of beams) {
         const tipX = L.x + Math.cos(a) * L.range;
         const tipY = L.y + Math.sin(a) * L.range;
@@ -11539,23 +11541,6 @@ const Renderer = {
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
-    }
-  },
-
-  drawBeamFlashes(ctx, flashes) {
-    if (!flashes?.length) return;
-    for (const f of flashes) {
-      const prog = Math.min(1, f.t / f.life);
-      const fade = 1 - prog;
-      const intensity = 0.5 + (f.stage || 0) * 0.15;
-      // Beam halo grows with stage; peak adds an extra crackle.
-      ctx.strokeStyle = f.peak ? `rgba(255, 250, 200, ${0.9 * fade})` : `rgba(255, 230, 140, ${0.7 * fade})`;
-      ctx.lineWidth = 1.5 + intensity * 3;
-      ctx.beginPath(); ctx.moveTo(f.from.x, f.from.y); ctx.lineTo(f.to.x, f.to.y); ctx.stroke();
-      // Inner core
-      ctx.strokeStyle = `rgba(255, 255, 240, ${0.95 * fade})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(f.from.x, f.from.y); ctx.lineTo(f.to.x, f.to.y); ctx.stroke();
     }
   },
 
