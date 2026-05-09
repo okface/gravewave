@@ -334,6 +334,222 @@ Same checklist as abilities — to add a new companion: 1 entry in
 `MINIONS`, a `kind` discriminator, a `_tickXxx` and `_drawXxx`
 behavior pair, and you're done. Mods come from `computeMinionMods()`.
 
+## The Optician — second class (in development)
+
+**Role thesis:** A meticulous artificer who manipulates light through
+lenses, mirrors, and shadow. Her power comes from *concentration* —
+beams ramp the longer they hit, lenses build heat the longer they
+linger, mirrors fold incoming damage back on itself. Build paths
+fork hard between glass-cannon (max ramp + concentration) and
+defensive-mirror (reflect + blind everything that approaches).
+
+**Identity decisions (must hit all three):**
+- `stats.maxHp = 90`, `moveSpeed = 0` (stationary, like Wizard).
+- Damage-type bias: 9 elemental (light/heat) + 3 arcane (mirrors/
+  geometry warps). Same as Wizard's bias, no new damage type
+  introduced — keeps resists math simple.
+- Two new mechanics introduced by this class:
+  - **Ramp** — several abilities ramp damage over time on the same
+    target / in the same spot. Stationary + ramp = "find a chokepoint
+    and concentrate fire there." Ramp resets when target leaves the
+    beam / when the entity ends.
+  - **Blind status** — a new enemy debuff. Blinded enemies do 50% less
+    contact damage to the player and move 30% slower. Visual: dimmed
+    enemy outline + white shimmer. Wired in `Enemy.applyStatus`,
+    `tickEnemies` (slow factor), and `Player.takeDamage` (contact
+    damage halved when `attacker.statuses?.blind`).
+
+### Tier 1 — Attack (pick 1, lvl 1)
+
+| ability | shape | core twist |
+|---|---|---|
+| **Prism Burst** | Projectile (splash) | Splits into 3 RGB beams on impact, each beam fans outward through enemies |
+| **Focused Beam** | Instant strike | Damage RAMPS from 30% → 160% as you keep hitting the same target |
+| **Burning Lens** | Placed zone | DPS RAMPS over the lens's lifetime — lasts long if undisturbed |
+| **Refraction Bolt** | Piercing line | Beam REFRACTS (angle changes ±15°) on each pierce; blinds on hit |
+
+**Prism Burst** — `dmg 22 / cd 1.5s / radius 80px`. On impact, splits
+into 3 colored beams (R/G/B) that travel ~120u outward through enemies
+in their path, each dealing 60% of the splash damage.
+- Dumps: Heat (+12% dmg/pt), Spread (+10% beam reach/pt), Quick (-5% cd/pt).
+- Specs:
+  - **Spectrum** — fires 7 beams in a full color wheel instead of 3.
+  - **Searing Red** — only the red beam fires, but for ×2.5 damage
+    in a focused line.
+  - **Zenith** — beams travel further and bounce off the engagement
+    ring back inward once.
+
+**Focused Beam** — `dmg 14 base / cd 0.4s / range engagement ring`.
+Instant beam to nearest enemy. Each consecutive cast on the SAME
+target ramps the damage stack: 30% → 65% → 100% → 130% → 160%.
+Switching targets resets the stack.
+- Dumps: Concentrate (+12% peak dmg/pt), Quick (-5% cd/pt), Wide
+  Lens (+1 grace cast before reset / pt, max 5 — rewards patient ramp).
+- Specs:
+  - **Magnifier** — peak goes to 220% but takes 2 extra casts to reach.
+  - **Burnthrough** — at 160%, beam pierces and follows a chain of
+    nearby enemies at falloff 0.7×.
+  - **Prism Lens** — at 160%, beam splits into 3 narrower beams that
+    each strike a different nearby enemy.
+
+**Burning Lens** — `dps 18 base / cd 1.8s / radius 90px / life 1.8s`.
+Drops a lens at the densest cluster. DPS ramps from 50% → 150% over
+its lifetime. Sun-themed visual.
+- Dumps: Heat (+12% dmg/pt), Wider (+8% radius/pt), Lasting (+12%
+  life/pt — extends the ramp tail).
+- Specs:
+  - **Greenhouse** — life ×2, but DPS curve flattened (75% → 110%);
+    longer total damage uptime.
+  - **Solar Forge** — at peak DPS, lens explodes for 200% of total
+    damage in a 1.5× radius.
+  - **Refractor** — when lens dies, leaves 3 small lenses that each
+    burn for 1s at 40% DPS in a tighter radius.
+
+**Refraction Bolt** — `dmg 14 / cd 0.9s / pierces 2`. Beam projectile.
+On each pierce, angle bends randomly ±15°. Applies Blind (1.5s) on
+hit.
+- Dumps: Cold Light (+12% dmg/pt — name is metaphorical), Pierce
+  (+1/pt max +5), Quick (-5% cd/pt).
+- Specs:
+  - **Bouncing** — bounce angle is now ±45° (sharper deflection),
+    pierces +2.
+  - **Mirror Image** — splits into 2 parallel beams on first hit.
+  - **Shatter** — last pierce explodes for AoE damage in 80px.
+
+### Tier 2 — Defensive (pick 1, lvl 4)
+
+| ability | slot | core twist |
+|---|---|---|
+| **Reflective Aegis** | Damage soak | 4 mirrors orbit you; absorb hits and reflect 80% back at attacker |
+| **Solar Halo** | Retaliation | Sunburst above your head; close-range DoT + auto-blinds anything that approaches |
+| **Lens Array** | Crowd control / focus | 3 floating lenses converge a high-DPS beam on the nearest elite |
+| **Lighthouse** | Sentry / sweep | Stationary tower with a rotating beam; sweeps an arc, not a single target |
+
+**Reflective Aegis** — `cd 8s / 4 mirrors / hits 4 / reflect 80%`.
+Mirrors orbit player. Each absorbs one incoming projectile-or-contact
+hit, reflects 80% damage back. Mirrors recharge individually over 5s.
+- Dumps: Polish (+12% reflect strength/pt), Orbit (+10% orbit radius/
+  pt), Recharge (+12% faster recharge/pt).
+- Specs:
+  - **Hall of Mirrors** — adds a 2nd orbiting ring (8 mirrors total).
+  - **Spectrum Aegis** — each reflection blinds the attacker for 3s
+    in a 60u radius.
+  - **Fortified** — mirrors don't shatter — block 8 hits each, no
+    recharge needed but lose the +25% strength bonus.
+
+**Solar Halo** — `cd 9s / dps 16 contact / radius 80px / life 7s`.
+A halo above the player that emits constant sunlight. Enemies in
+contact range take DoT and are blinded for 1s. No block charges.
+- Dumps: Flare (+13% dmg/pt), Reach (+10% radius/pt), Persist (+12%
+  life/pt).
+- Specs:
+  - **Coronal Burst** — every 2s pulses outward for an AoE blast.
+  - **Inferno Halo** — adds Ignite to the DoT.
+  - **Eclipse Halo** — flips to dark mode: no damage, but radius is
+    ×2 and blind duration is ×3.
+
+**Lens Array** — `cd 10s / 3 lenses / dps 20 single-target / life 7s`.
+3 lenses orbit player. They converge their beams on the nearest enemy
+within 200u — pure single-target burst.
+- Dumps: Focus (+13% dmg/pt), Reach (+10% targeting range/pt), Tempo
+  (+10% beam intensity/pt).
+- Specs:
+  - **Convergence** — all 3 lenses focus one super-beam (×3 damage
+    instead of stacking 3× damage).
+  - **Rotation** — lenses rotate around player; beam sweeps wider
+    arc, hits multiple enemies.
+  - **Dispersal** — each lens picks a different target (3 separate
+    beams, no convergence).
+
+**Lighthouse** — `cd 10s / dps 20 / range 240px / life 8s`. Stationary
+tower with a 360° rotating beam (rotates 0.5s per full circle). Damage
+ticks while beam intersects an enemy.
+- Dumps: Voltage (+13% dmg/pt), Reach (+10% range/pt), Rotation (+12%
+  rotation speed/pt).
+- Specs:
+  - **Twin Lights** — second opposing beam (covers 360° in half time).
+  - **Solar Flare** — every full rotation, a wide AoE pulse around it.
+  - **Beacon** — doesn't expire, but you can only have one.
+
+### Tier 3 — Ultimate (pick 1, lvl 9)
+
+| ability | slot | core twist |
+|---|---|---|
+| **Solar Eclipse** | Sustained DoT field | Ramps DPS over its lifetime; blinds everything inside |
+| **Mirror Maze** | Battlefield reshape | 6 mirrors form a hex around you; beams between them form a kill mesh |
+| **Prism Strike** | Single nuke | Concentrated beam from above; massive damage + wide blind |
+| **Blinding Flash** | Lockdown zone | Mass blind 6s; initial damage burst |
+
+**Solar Eclipse** — `cd 18s / dps 22 ramping / radius 240px / life 8s`.
+A massive light disk. DPS ramps 50% → 200% over the eclipse's
+lifetime. Blinds all enemies inside.
+- Dumps: Heat (+14% dmg/pt), Wider (+10% radius/pt), Lasting (+12%
+  life/pt).
+- Specs:
+  - **Total Eclipse** — radius ×1.5, but no blind (just heavy DoT).
+  - **Penumbra** — radius ×0.6, ×2 DPS; outer ring slows.
+  - **Darkness** — flips to shadow mode: no damage, but blinds
+    enemies for the FULL eclipse duration (functionally a mass disable).
+
+**Mirror Maze** — `cd 16s / 6 mirrors / dps 8 per beam / life 6s`.
+6 mirrors spawn in a hexagon around the player. Beams between
+adjacent mirrors form a damaging mesh. Enemies between mirrors take
+beam damage.
+- Dumps: Polish (+14% beam dmg/pt), Lattice (+10% mirror spacing/pt),
+  Lasting (+12% life/pt).
+- Specs:
+  - **Hexagonal Cage** — 12 mirrors total (denser lattice).
+  - **Reflective Burst** — when an enemy dies inside, lattice pulses
+    for AoE damage.
+  - **Crystal Cage** — mirrors function as walls; enemies inside
+    can't leave (blocked at boundary).
+
+**Prism Strike** — `cd 14s / dmg 220 / radius 80px impact / blind 200px`.
+A focused beam from above strikes a target spot. Massive damage to
+enemies in impact radius + 4s blind in a wider radius.
+- Dumps: Mass (+16% dmg/pt), Crater (+10% impact radius/pt), Cycle
+  (-6% cd/pt).
+- Specs:
+  - **Collateral** — fires 3 secondary beams in a Y pattern after
+    impact, each at 50% damage.
+  - **Searing Glare** — extends blind radius to 350u and duration to 8s.
+  - **Chained Solar** — instakills any enemy below 25% HP in the
+    blind radius.
+
+**Blinding Flash** — `cd 16s / dmg 100 initial / blind 6s / radius 320px`.
+A massive flashbang. All enemies in range take damage and are
+blinded for 6s.
+- Dumps: Brightness (+14% dmg/pt), Wider (+10% radius/pt), Glare
+  (+12% blind duration/pt).
+- Specs:
+  - **Searing Flash** — adds 80% extra burn damage on top of the disable.
+  - **Cascading Light** — every 1s of blind, deals an additional
+    small damage tick to each blinded enemy.
+  - **Eternal Glare** — blind duration ×2 (12s); halve initial damage.
+
+### Build identity targets
+
+The goal: every Optician build should have a clear playstyle the
+player can speak in one sentence. Examples:
+
+| build | T1 / T2 / T3 / Companion | playstyle |
+|---|---|---|
+| **Glass Cannon** | Focused Beam / Lens Array / Prism Strike / Drummer | Stack damage, kill elites, hope nothing reaches you |
+| **Mirror Defender** | Refraction Bolt / Reflective Aegis / Mirror Maze / Decoy | Stand still, bounce damage back, walls everywhere |
+| **Greedy Sun** | Burning Lens / Lighthouse / Solar Eclipse / Linker | Multiple ramping zones overlap; high uptime |
+| **Blind Tank** | Prism Burst / Solar Halo / Blinding Flash / Mender | Disable everything; tank what gets through |
+
+If two builds end up feeling the same in playtest, a spec is too
+weak / too good / too samey — fix it before shipping more abilities.
+
+### Common companion advice for Optician
+
+The class works fine with all four existing minions. Future
+Optician-specific companion idea (not in scope yet): **Lens Imp** —
+a small mascot that refracts the player's nearest spell, creating
+a 40% damage echo at a different angle. Pairs with a build that
+spams low-CD casts.
+
 ## What's deprecated
 
 The following systems were removed in this rebuild — preserved in
