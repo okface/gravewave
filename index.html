@@ -11086,98 +11086,104 @@ const Renderer = {
 
       const pr = h.radius ? h.radius * 0.45 : 22; // portal visual radius
 
-      // Connection thread between portals. Echo spec — render a glowing
-      // beam instead of a passive dashed thread so the damage zone reads.
+      // ── Connection seam between portals ─────────────────────────────
+      // Echo spec: pulsing glow beam (kill lane). Default: wavy dashed
+      // ink seam with sin-wobble + flowing offset (per design).
       if (portals.length === 2) {
         ctx.save();
+        const ax = portals[0].x, ay = portals[0].y;
+        const bx = portals[1].x, by = portals[1].y;
         if (h.spec?.echoTrail) {
-          // Two-pass glow: outer halo + inner bright core, pulsing.
           const pulse = 0.65 + 0.35 * Math.sin(t * 7);
           ctx.strokeStyle = `rgba(180, 130, 255, ${0.35 * alpha * pulse})`;
           ctx.lineWidth = 14;
-          ctx.beginPath();
-          ctx.moveTo(portals[0].x, portals[0].y);
-          ctx.lineTo(portals[1].x, portals[1].y);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
           ctx.strokeStyle = `rgba(220, 180, 255, ${0.75 * alpha})`;
           ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(portals[0].x, portals[0].y);
-          ctx.lineTo(portals[1].x, portals[1].y);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
         } else {
-          ctx.strokeStyle = `rgba(160, 124, 255, ${0.22 * alpha})`;
-          ctx.setLineDash([3, 7]);
+          // Design-spec wavy dashed seam
+          const dx = bx - ax, dy = by - ay;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const px = -uy, py = ux;
+          ctx.strokeStyle = `rgba(26,22,18,${0.55 * alpha})`;
           ctx.lineWidth = 1.2;
+          ctx.setLineDash([6, 5]);
+          ctx.lineDashOffset = -t * 16;
           ctx.beginPath();
-          ctx.moveTo(portals[0].x, portals[0].y);
-          ctx.lineTo(portals[1].x, portals[1].y);
+          // Start a pr-radius away from each portal
+          const startX = ax + ux * pr;
+          const startY = ay + uy * pr;
+          const endX = bx - ux * pr;
+          const endY = by - uy * pr;
+          const segLen = Math.hypot(endX - startX, endY - startY);
+          ctx.moveTo(startX, startY);
+          for (let s = 0; s <= segLen; s += 5) {
+            const k = s / segLen;
+            const cx2 = startX + (endX - startX) * k;
+            const cy2 = startY + (endY - startY) * k;
+            const wob = Math.sin(k * Math.PI * 4 + t * 3) * 5;
+            ctx.lineTo(cx2 + px * wob, cy2 + py * wob);
+          }
           ctx.stroke();
           ctx.setLineDash([]);
         }
         ctx.restore();
       }
 
+      // ── Portals — design pinch + spinning swirl + star marker ────────
       for (let pi = 0; pi < portals.length; pi++) {
         const p = portals[pi];
-        const isIn  = pi === 0; // portal A sucks in, portal B ejects
-
+        const isIn = pi === 0;
         ctx.save();
         ctx.translate(p.x, p.y);
 
-        // Dark void fill
-        const voidGrad = ctx.createRadialGradient(0, 0, pr * 0.15, 0, 0, pr);
-        voidGrad.addColorStop(0,   `rgba(8, 2, 22, ${0.96 * alpha})`);
-        voidGrad.addColorStop(0.55, `rgba(28, 10, 58, ${0.80 * alpha})`);
-        voidGrad.addColorStop(1,   `rgba(60, 30, 120, 0)`);
-        ctx.fillStyle = voidGrad;
-        ctx.beginPath(); ctx.arc(0, 0, pr, 0, TAU); ctx.fill();
+        // Background pinch — radial gradient ink → indigo → 0
+        const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, pr * 2.2);
+        grd.addColorStop(0,   `rgba(26,22,18,${0.5 * alpha})`);
+        grd.addColorStop(0.5, `rgba(44,74,140,${0.18 * alpha})`);
+        grd.addColorStop(1,   `rgba(26,22,18,0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(0, 0, pr * 2.2, 0, TAU); ctx.fill();
 
-        // Distortion ring — two counter-rotating arcs suggesting pinch
-        const rot1 = t * (isIn ? 1.8 : -1.4);
-        const rot2 = t * (isIn ? -2.2 : 1.9);
-        for (const [rot, sweep, col] of [
-          [rot1, TAU * 0.70, `rgba(180, 130, 255, ${0.70 * alpha})`],
-          [rot2, TAU * 0.55, `rgba(120, 200, 255, ${0.50 * alpha})`],
-        ]) {
-          ctx.save();
-          ctx.rotate(rot);
-          ctx.strokeStyle = col;
-          ctx.lineWidth = 1.8;
-          ctx.beginPath(); ctx.arc(0, 0, pr * 0.82, 0, sweep); ctx.stroke();
-          ctx.lineWidth = 1.0;
-          ctx.strokeStyle = col.replace(/[\d.]+\)$/, `${0.35 * alpha})`);
-          ctx.beginPath(); ctx.arc(0, 0, pr * 0.92, 0, sweep * 0.6); ctx.stroke();
-          ctx.restore();
+        // Outer ink ring
+        ctx.strokeStyle = `rgba(26,22,18,${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, pr, 0, TAU); ctx.stroke();
+
+        // Inner spinning logarithmic spiral (indigo)
+        ctx.save();
+        ctx.rotate(t * (isIn ? 1.4 : -1.4));
+        ctx.strokeStyle = `rgba(44,74,140,${alpha})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (let a = 0; a < TAU * 2; a += 0.1) {
+          const r = pr * 0.85 * (1 - a / (TAU * 2));
+          const sx = Math.cos(a) * r, sy = Math.sin(a) * r;
+          if (a === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
         }
+        ctx.stroke();
+        ctx.restore();
 
-        // Swirling particles being sucked in (portal A) or flung out (portal B)
-        const PARTS = 7;
-        for (let k = 0; k < PARTS; k++) {
-          const phase  = ((t * (isIn ? 1.1 : -0.9)) + k / PARTS) % 1;
-          const ang    = (k / PARTS) * TAU + t * (isIn ? 2.0 : -1.6);
-          const dist   = isIn
-            ? pr * (1 - phase)          // spiral inward
-            : pr * (0.15 + phase * 0.9); // spiral outward
-          const px = Math.cos(ang - phase * TAU * 0.5) * dist;
-          const py = Math.sin(ang - phase * TAU * 0.5) * dist;
-          const pa  = (isIn ? (1 - phase) : phase) * alpha * 0.75;
-          const pSize = isIn ? (1 + phase * 1.8) : (2.2 - phase * 1.4);
-          ctx.fillStyle = `rgba(${isIn ? '160,100,255' : '200,160,255'}, ${pa})`;
-          ctx.beginPath(); ctx.arc(px, py, Math.max(0.5, pSize), 0, TAU); ctx.fill();
+        // Center ink pip
+        ctx.fillStyle = `rgba(26,22,18,${alpha})`;
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
+
+        // Star marker above — vermilion for A, gold for B
+        const starColor = isIn ? `rgba(168,58,44,${alpha})` : `rgba(200,148,26,${alpha})`;
+        ctx.fillStyle = starColor;
+        ctx.beginPath();
+        const starR = 3, innerR = 1.2, points = 5;
+        for (let i = 0; i < points * 2; i++) {
+          const r = i % 2 === 0 ? starR : innerR;
+          const ang = (i / (points * 2)) * TAU - Math.PI / 2;
+          const sx = Math.cos(ang) * r;
+          const sy = -pr - 6 + Math.sin(ang) * r;
+          if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
         }
-
-        // Bright event-horizon rim
-        const rimGrad = ctx.createRadialGradient(0, 0, pr * 0.72, 0, 0, pr * 1.05);
-        rimGrad.addColorStop(0,   `rgba(200, 160, 255, 0)`);
-        rimGrad.addColorStop(0.6, `rgba(200, 160, 255, ${0.55 * alpha})`);
-        rimGrad.addColorStop(1,   `rgba(255, 255, 255, 0)`);
-        ctx.fillStyle = rimGrad;
-        ctx.beginPath(); ctx.arc(0, 0, pr * 1.05, 0, TAU); ctx.fill();
-
-        // Tiny bright core pip
-        ctx.fillStyle = `rgba(255, 240, 255, ${0.90 * alpha})`;
-        ctx.beginPath(); ctx.arc(0, 0, 2.0, 0, TAU); ctx.fill();
+        ctx.closePath();
+        ctx.fill();
 
         ctx.restore();
       }
@@ -11579,6 +11585,12 @@ const Renderer = {
     }
   },
 
+  /*
+   * Fire Shield — vermilion orbs with woodcut detail (ink core + gold
+   * highlight) on an elliptical orbit, with analytic flame ribbons
+   * (sample 8 past positions). Gold pulse on block. Vermilion ⬨
+   * charge marks above the player. Ported from spellFireShield.
+   */
   drawFireShield(ctx, shields, player, t) {
     if (!shields || !shields.length || !player) return;
     for (const sh of shields) {
@@ -11586,37 +11598,71 @@ const Renderer = {
       const fadeOut = sh.life ? Math.min(1, (sh.life - sh.t) / 0.4) : 1;
       const a = Math.min(fadeIn, fadeOut);
       const orbCount = sh.orbCount || 3;
-      const radius   = sh.orbitRadius || sh.radius || 38;
-      const spin     = (sh.spin || 0) + t * 1.8;
-      const TRAIL    = 10; // trail segment count
-      const trailArc = 0.9; // radians behind the orb
-      for (let i = 0; i < orbCount; i++) {
-        const ang = spin + (i / orbCount) * TAU;
-        // Flame trail (behind the orb)
-        for (let k = TRAIL; k >= 1; k--) {
-          const ta   = ang - (k / TRAIL) * trailArc;
-          const tx   = player.x + Math.cos(ta) * radius;
-          const ty   = player.y + Math.sin(ta) * radius;
-          const tf   = 1 - k / TRAIL;        // 0 at tail, 1 at orb
-          const tAlpha = tf * tf * a * 0.60;
-          const tSize  = 2 + tf * 5;
-          ctx.fillStyle = `rgba(${200 + Math.round(55 * tf)}, ${Math.round(80 + 80 * tf)}, 20, ${tAlpha})`;
-          ctx.beginPath(); ctx.arc(tx, ty, tSize, 0, TAU); ctx.fill();
+      const orbR = sh.radius || 26;
+      const cx = player.x, cy = player.y;
+      const orbits = (sh.angle !== undefined ? sh.angle : t * 1.4);
+
+      // ── Block flash — gold concentric pulse on charge consumed ───────
+      const charges = player._shieldCharges || 0;
+      const maxC = player._shieldChargesMax || charges;
+      sh._lastCharges = sh._lastCharges === undefined ? charges : sh._lastCharges;
+      if (charges < sh._lastCharges) {
+        sh._blockFlashT = 0.4;
+        sh._lastCharges = charges;
+      }
+      sh._blockFlashT = Math.max(0, (sh._blockFlashT || 0) - (1 / 60));
+      if (sh._blockFlashT > 0) {
+        const bp = 1 - sh._blockFlashT / 0.4;
+        const fA = (1 - bp);
+        for (let i = 0; i < 3; i++) {
+          const r = 24 + bp * 22 + i * 8;
+          ctx.strokeStyle = `rgba(200,148,26,${fA * (1 - i * 0.3) * a})`;
+          ctx.lineWidth = 1.6 - i * 0.4;
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
         }
-        // Main orb
-        const ox = player.x + Math.cos(ang) * radius;
-        const oy = player.y + Math.sin(ang) * radius;
-        ctx.save();
-        const grad = ctx.createRadialGradient(ox, oy, 1, ox, oy, 10);
-        grad.addColorStop(0,   `rgba(255, 240, 160, ${0.98 * a})`);
-        grad.addColorStop(0.4, `rgba(255, 130, 60,  ${0.75 * a})`);
-        grad.addColorStop(1,   `rgba(255, 60,  20,  0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(ox, oy, 10, 0, TAU); ctx.fill();
-        // Bright core
-        ctx.fillStyle = `rgba(255, 255, 240, ${0.95 * a})`;
-        ctx.beginPath(); ctx.arc(ox, oy, 2.5, 0, TAU); ctx.fill();
-        ctx.restore();
+      }
+
+      // ── 3 orbs orbiting on an elliptical path ────────────────────────
+      for (let i = 0; i < orbCount; i++) {
+        const ang = orbits + (i / orbCount) * TAU;
+        const ox = cx + Math.cos(ang) * orbR;
+        const oy = cy + Math.sin(ang) * orbR * 0.55 - 4;
+        // Flame ribbon — sample 8 past positions analytically
+        for (let k = 0; k < 8; k++) {
+          const back = k * 0.06;
+          const a2 = (orbits - back) + (i / orbCount) * TAU;
+          const tx = cx + Math.cos(a2) * orbR;
+          const ty = cy + Math.sin(a2) * orbR * 0.55 - 4;
+          const fade = (1 - k / 8);
+          ctx.fillStyle = `rgba(168,58,44,${fade * 0.6 * a})`;
+          ctx.beginPath(); ctx.arc(tx, ty, 3.5 * fade, 0, TAU); ctx.fill();
+        }
+        // Orb body — vermilion w/ ink core + gold highlight
+        ctx.fillStyle = `rgba(168,58,44,${a})`;
+        ctx.beginPath(); ctx.arc(ox, oy, 5, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(26,22,18,${a})`; ctx.lineWidth = 0.9;
+        ctx.stroke();
+        ctx.fillStyle = `rgba(26,22,18,${a})`;
+        ctx.beginPath(); ctx.arc(ox + 0.5, oy + 0.3, 1.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(200,148,26,${a})`;
+        ctx.beginPath(); ctx.arc(ox - 1.3, oy - 1.6, 1.0, 0, TAU); ctx.fill();
+      }
+
+      // ── Charge marks above the player (⬨ vermilion lit, hollow unlit) ─
+      if (maxC > 0) {
+        for (let i = 0; i < maxC; i++) {
+          const x = cx - (maxC - 1) * 9 + i * 18;
+          const y = cy - player.radius - 22;
+          const lit = i < charges;
+          ctx.strokeStyle = `rgba(26,22,18,${a})`; ctx.lineWidth = 1;
+          ctx.fillStyle = lit ? `rgba(168,58,44,${a})` : 'rgba(0,0,0,0)';
+          ctx.beginPath();
+          ctx.moveTo(x, y - 4); ctx.lineTo(x + 3.5, y);
+          ctx.lineTo(x, y + 4); ctx.lineTo(x - 3.5, y);
+          ctx.closePath();
+          if (lit) ctx.fill();
+          ctx.stroke();
+        }
       }
     }
   },
