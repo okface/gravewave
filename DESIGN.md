@@ -146,7 +146,8 @@ the *i*th dump. Sum determines spec eligibility (≥ 6 → spec slot opens).
 
 ## Adding a new class — checklist
 
-1. Add `CHARACTERS.<class>` definition.
+1. Add `CHARACTERS.<class>` definition (id, name, title, description,
+   color, accent, stats: { maxHp, moveSpeed }, available: true).
 2. Define **12 abilities** under `ABILITIES`:
    - 4 with `tier: 1, classId: '<class>'`
    - 4 with `tier: 2, classId: '<class>'`
@@ -156,10 +157,154 @@ the *i*th dump. Sum determines spec eligibility (≥ 6 → spec slot opens).
    - 3 dumps (id, name, desc, stat, perPoint)
    - 3 specs (id, name, desc, behavior flags)
 4. Implement any new entity classes if the ability needs new world state.
+5. Audit every spec's behavior flag — `grep <flag>` should hit ≥ 3
+   places (declaration + at least one read). Orphan flags break build
+   diversity silently.
 
 That's it. No rebalancing of card pools. No editing of UI. The level
 flow + tier picker + level-up screen all read from `ABILITIES` and
 work for any class.
+
+## Class authoring guide — what each tier should provide
+
+A class's 12 abilities aren't 12 random spells; they fill specific
+**role slots** inside each tier. Hitting all the slots makes every
+build viable; missing a slot makes some build paths feel hollow.
+
+### Class-level identity
+
+Decide three things first — they determine which abilities feel
+right:
+
+- **Role thesis** — one sentence. Wizard's: "stationary caster who
+  pulls fire/frost/lightning/gravity out of the air; the ground holds,
+  the spells decide." If you can't write the sentence, you're not
+  ready to design the kit.
+- **Movement model** — `stats.moveSpeed`. Wizard is 0 (stationary).
+  A faster class would need `Player.update` to read keyboard input
+  and apply velocity (currently dead — Wizard never moves).
+- **Damage-type bias** — across the 12 abilities, how many are
+  physical / elemental / arcane? Bias matters because enemies have
+  resists (`bulwark` resists physical 0.55×, `wraith` weak to
+  elemental 1.30×, `hexer` weak to arcane 1.40×, `goliath` 0.9× all
+  + 1.5× when statused). A 12/0/0 single-type class gets walled by
+  one boss archetype. Aim for at least 2 types in the kit.
+
+### Tier 1 — Attack (4 ABILITIES)
+
+The four T1 picks are how the player engages combat for the entire
+run. They have to feel **mechanically distinct**, not just numerically.
+Wizard's existing slots are the canonical set:
+
+| slot | shape | wizard example |
+|---|---|---|
+| **Projectile (splash)** | Slow/medium projectile, AoE on impact | Fireball |
+| **Instant strike** | Hitscan / instant target with chain or pierce | Chain Lightning |
+| **Placed zone** | DPS over time in a fixed spot | Black Hole |
+| **Piercing line** | Fast pierce projectile, often with status | Frost Bolt |
+
+You can re-skin or remix, but the four shapes should each be
+present. Two projectile-splash abilities means the player has no
+real choice between them — same gameplay loop.
+
+**T1 base damage baseline** (post 2026-05 rebalance):
+- Single-target instant: ~22 dmg / 0.9s CD ≈ 24 dps
+- Splash projectile:     ~24 direct + 14 splash / 1.5s CD
+- Placed zone:           ~36 dps over 1.4s / 1.7s CD
+- Pierce line:           ~16 dmg per hit / 1.0s CD, pierces 2
+
+**T1 dumps** are always 3 stat tracks at 5 pts each:
+- One **damage** track at +12% / pt (dmgMult)
+- One **shape** track (radius +8% / pt, OR pierce/chain +1 / pt)
+- One **cooldown** track at −5% / pt (cdMult, negative perPoint)
+
+**T1 specs** are 3 build-defining picks at ≥ 6 invested. Aim for one
+per archetype:
+- Status / DoT amp (e.g. Ignite — adds a burn over time)
+- Summon / multiplication (e.g. Hydra — chance to spawn helper)
+- Targeting / placement transform (e.g. Meteor Path — falls from
+  above with stun)
+
+### Tier 2 — Defensive (4 ABILITIES)
+
+T2 is "how do you stay alive long enough to scale." Each pick has to
+solve a different threat shape. Wizard's existing slots:
+
+| slot | what it solves | wizard example |
+|---|---|---|
+| **Damage soak** | Takes hits for you, recharges | Snow Fort |
+| **Retaliation** | Punishes attackers on contact / on-block | Fire Shield |
+| **Crowd control** | Pulls/slows enemies to safe zones | Gravital Anomalies |
+| **Sentry / DPS extension** | Auto-attacking turret that buys uptime | Shock Tower |
+
+**T2 baselines** (defensive-tier abilities):
+- Cooldown 8–10s (they're not constant DPS, they're situational)
+- Effect duration 4–8s
+- Per-point dump scaling typically +13% / pt
+- "On-expire" specs (Avalanche / Phoenix) need a clear trigger; if
+  the entity has a recharging-shield model (Snow Fort), "expire"
+  means shield-break, not life-elapse — wire the trigger in
+  `Player.takeDamage`, not the entity's tick.
+
+### Tier 3 — Ultimate (4 ABILITIES)
+
+T3 is the big once-per-fight payoff. ~12–18s cooldowns. Each pick
+should occupy a different "ultimate fantasy":
+
+| slot | fantasy | wizard example |
+|---|---|---|
+| **Sustained DoT field** | "I dropped a storm and walked away" | Storm Cloud |
+| **Battlefield reshape** | "I changed where enemies are" | Wormhole |
+| **Single nuke** | "I deleted that elite" | Meteor |
+| **Lockdown zone** | "Nothing in this circle moves" | Snow Storm |
+
+**T3 baselines:**
+- Cooldown 12–18s
+- Per-point dump scaling +14–16% / pt (steeper than T1/T2 because
+  fewer casts per wave)
+- Spec scaling: hard-coded damage values must multiply by
+  `mods.dmgMult` or they fall off the wave-10 HP curve.
+
+### Companion (1 of 4)
+
+Companions are the lighter slot — 2 dumps × 3 pts (max 6) + 2 specs
+(pick 1 at 4 invested). Wizard's existing roles:
+
+| role | function |
+|---|---|
+| **Damage redirect** | Spreads damage to clustered enemies (Linker) |
+| **Tank / decoy** | Absorbs hits, taunts enemies away from player (Decoy) |
+| **Sustain** | Periodic heal + lifeline spec (Mender) |
+| **Aura buff** | Cycles offensive/defensive/utility buffs (Drummer) |
+
+Each role has a clear "if you pick me, here's what your build needs
+less of." Mender = you don't need defensive picks as hard. Drummer =
+multiplies whatever you already do. Linker = makes your single-target
+specs feel AoE. Decoy = lets you ignore positioning.
+
+For a new class, **don't reskin all four** — pick at least one role
+that genuinely changes how the class plays. A dedicated Ninja class
+might add a "shadow clone" companion that spawns extra projectiles,
+or a "spirit weapon" that auto-attacks in melee.
+
+### Common pitfalls
+
+- **Orphan spec flags.** Every `behavior: { foo: ... }` declaration
+  must be read by the engine — usually inside the spell's `cast()`,
+  the entity's `tickXxx`, or `Player.takeDamage`. Picking an orphan
+  spec gives the player nothing. `grep` the flag name; ≥ 3 hits =
+  wired (declaration + read + maybe a renderer hook).
+- **Hard-coded spec damage.** A spec like "explode for 240 damage on
+  expire" needs `* mods.dmgMult` so investments matter at wave 20.
+- **"On expire" semantics.** If the entity has `life: 999` and just
+  recharges (Snow Fort model), "expire" must mean shield-break, not
+  life-elapse. Wire the trigger where the state actually changes.
+- **Targeting outside the engagement ring.** Player-side targeting
+  (`findNearestEnemy` / `findFarthestEnemy` / `findEnemyCluster`)
+  caps to the dueling-ring radius (`game.combatRadius()`) so the
+  player can see what their abilities are killing. Entity-scoped
+  targeting (turrets with their own range) uses `findNearestEnemyTo`
+  and bypasses the cap. Don't reach past the ring.
 
 ## Companions (minions)
 
