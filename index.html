@@ -12148,210 +12148,573 @@ const Renderer = {
     }
   },
 
+  /*
+   * Sigil Linker — full port from art-lab-v4.js compSigilLinker:
+   *   - Threads from sigil → each linked enemy as quadratic curves
+   *     with a wandering mid-control point (drift on sin(t*0.7+i))
+   *   - Two-pass thread render: dark ink line + vermilion glow under
+   *   - Sigil body is a rotating HEXAGRAM (two interlocked triangles)
+   *     in a circle, with vermilion halo + center red pip
+   *   - Cascade beads (game._linkBeads) animate along the curve
+   *   - Ink shadow under the sigil
+   */
   _drawLinker(ctx, m, t) {
-    // Threads first (under the sigil)
+    const sx = m.x, sy = m.y;
+
+    // --- Curved threads with wandering mid-point + 2-stroke render ---
     if (m.links && m.links.length >= 2) {
-      ctx.save();
-      ctx.strokeStyle = `rgba(160, 124, 255, ${0.55 + 0.25 * Math.sin(t * 4)})`;
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([3, 4]);
-      // Connect each pair
       for (let i = 0; i < m.links.length; i++) {
-        const a = m.links[i];
-        if (!a?.alive) continue;
-        for (let j = i + 1; j < m.links.length; j++) {
-          const b = m.links[j];
-          if (!b?.alive) continue;
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.stroke();
-        }
+        const e = m.links[i];
+        if (!e?.alive) continue;
+        const mx = (sx + e.x) / 2 + Math.sin(t * 0.7 + i) * 6;
+        const my = (sy + e.y) / 2 - 14 - Math.cos(t * 0.9 + i) * 5;
+        // Vermilion glow underneath
+        ctx.strokeStyle = 'rgba(168,58,44,0.18)';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.quadraticCurveTo(mx, my, e.x, e.y - 4);
+        ctx.stroke();
+        // Dark ink line on top
+        ctx.strokeStyle = 'rgba(26,22,18,0.55)';
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.quadraticCurveTo(mx, my, e.x, e.y - 4);
+        ctx.stroke();
       }
-      ctx.setLineDash([]);
-      ctx.restore();
     }
-    // Damage-cascade beads — vermilion mote travels source → receiver.
-    // Beads live on the game so they survive minion ticks; pulled via
-    // the parent draw chain (see drawMinion's caller).
-    const beads = (this._currentGame || {})._linkBeads;
+
+    // --- Cascade beads (game-owned, animate sigil → receiver via curve) ---
+    const beads = this._currentGame?._linkBeads;
     if (beads && beads.length) {
       for (const b of beads) {
         const k = b.t / b.life;
         if (k >= 1 || k < 0) continue;
-        // Quadratic curve toward the linker as the apex (sells "sigil routes the share")
-        const apexX = m.x, apexY = m.y;
+        // Apex at the sigil so the bead curves through it
+        const apexX = sx, apexY = sy;
         const oneMinusK = 1 - k;
         const px = oneMinusK * oneMinusK * b.fromX + 2 * oneMinusK * k * apexX + k * k * b.toX;
         const py = oneMinusK * oneMinusK * b.fromY + 2 * oneMinusK * k * apexY + k * k * b.toY;
-        ctx.fillStyle = `rgba(168,58,44,${1 - k * 0.4})`;
-        ctx.beginPath(); ctx.arc(px, py, 3, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(216,98,76,${0.95 * (1 - k * 0.4)})`;
+        ctx.beginPath(); ctx.arc(px, py, 2.2, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(232,184,64,${0.85 * (1 - k * 0.4)})`;
+        ctx.beginPath(); ctx.arc(px, py, 1.0, 0, TAU); ctx.fill();
       }
     }
-    // Sigil — rotating triangle inside a circle
+
+    // --- Ink shadow under the sigil ---
+    ctx.fillStyle = 'rgba(26,22,18,0.42)';
+    ctx.beginPath(); ctx.ellipse(sx, sy + 22, 9, 3, 0, 0, TAU); ctx.fill();
+
+    // --- Sigil body: hexagram inside a ring + halo + pip ---
     ctx.save();
-    ctx.translate(m.x, m.y + Math.sin(m.bob || 0) * 3);
-    ctx.rotate(t * 0.9);
-    ctx.fillStyle = 'rgba(28, 12, 50, 0.85)';
-    ctx.strokeStyle = '#a07cff';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.arc(0, 0, 9, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-      const a = i / 3 * TAU - Math.PI / 2;
-      const px = Math.cos(a) * 5, py = Math.sin(a) * 5;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    ctx.translate(sx, sy);
+    ctx.rotate(t * 0.3);
+    // Halo
+    ctx.strokeStyle = 'rgba(168,58,44,0.25)';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(0, 0, 11, 0, TAU); ctx.stroke();
+    // Ring
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.stroke();
+    // Hexagram — two interlocked triangles
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.1;
+    for (let s = 0; s < 2; s++) {
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const a = i / 3 * TAU + (s ? Math.PI / 3 : 0) - Math.PI / 2;
+        const x = Math.cos(a) * 7, y = Math.sin(a) * 7;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
     }
-    ctx.closePath();
-    ctx.fillStyle = '#a07cff';
-    ctx.fill();
+    // Center vermilion pip
+    ctx.fillStyle = PAL.red;
+    ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, TAU); ctx.fill();
     ctx.restore();
   },
 
+  /*
+   * Decoy Effigy — full port from art-lab-v4.js compDecoyEffigy:
+   *   - Straw mannequin: stake + burlap rect body with cross-stitches +
+   *     vermilion twine belt + twig arms + burlap-sack head with X eyes
+   *     and stitched mouth + crown-of-thorns horns
+   *   - Pulsing concentric vermilion taunt bands (3 staggered)
+   *   - Strain phase (HP < 30%): wobble + red cracks + leaking embers
+   *   - Detonate animation: vermilion fill flash + 14 straw shards
+   *     flying outward + black ink puff + outer ink ring
+   *   - Ink shadow at base
+   */
   _drawDecoy(ctx, m, t) {
-    if (!m.alive) {
-      // Faint silhouette while respawning
+    const cx = m.x, cy = m.y;
+    // Persistent state for pieces — survives across frames
+    m._embers = m._embers || [];
+    m._detonatePhase = m._detonatePhase || 0;
+
+    // Detonate one-shot trigger: if just died this frame, start animation
+    if (!m.alive && m._detonatePhase === 0 && !m._detonateDone) {
+      m._detonatePhase = 0.001;
+      m._detonateStart = t;
+    }
+
+    // Respawn placeholder while dead AND past detonate animation
+    if (!m.alive && m._detonatePhase >= 1) {
       ctx.save();
       const cd = Math.max(0, m.respawnTime - m.respawnAcc);
       const a = 0.25;
-      ctx.strokeStyle = `rgba(200, 154, 255, ${a})`;
+      ctx.strokeStyle = `rgba(168,58,44,${a})`;
       ctx.setLineDash([2, 4]);
-      ctx.beginPath(); ctx.arc(m.x, m.y, 14, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, 14, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = `rgba(60, 50, 90, ${a})`;
+      ctx.fillStyle = `rgba(26,22,18,${a + 0.1})`;
       ctx.font = '11px JetBrains Mono, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(cd.toFixed(1) + 's', m.x, m.y + 4);
+      ctx.fillText(cd.toFixed(1) + 's', cx, cy + 4);
+      ctx.textAlign = 'start';
       ctx.restore();
       return;
     }
-    // Body — short stake with crossbeam, wax-seal accent
+
+    // Detonate animation
+    if (!m.alive && m._detonatePhase > 0 && m._detonatePhase < 1) {
+      m._detonatePhase = Math.min(1, m._detonatePhase + 1 / 60 / 0.6);
+      const dp = m._detonatePhase;
+      const a = 1 - dp;
+      // Big vermilion ring + outer ink
+      ctx.strokeStyle = `rgba(168,58,44,${a})`;
+      ctx.lineWidth = 3 - dp * 2;
+      ctx.beginPath(); ctx.arc(cx, cy + 6, 12 + dp * 70, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = `rgba(26,22,18,${a * 0.7})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy + 6, 18 + dp * 78, 0, TAU); ctx.stroke();
+      // Fill flash
+      ctx.fillStyle = `rgba(168,58,44,${a * 0.35})`;
+      ctx.beginPath(); ctx.arc(cx, cy + 6, 12 + dp * 70, 0, TAU); ctx.fill();
+      // 14 straw shards flying outward
+      for (let i = 0; i < 14; i++) {
+        const ang = i / 14 * TAU + 0.2;
+        const dist = dp * (50 + (i % 3) * 20);
+        const sxp = cx + Math.cos(ang) * dist;
+        const syp = cy + Math.sin(ang) * dist;
+        ctx.save();
+        ctx.translate(sxp, syp);
+        ctx.rotate(ang + dp * 2);
+        ctx.strokeStyle = `rgba(168,140,80,${a})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.stroke();
+        ctx.restore();
+      }
+      // Black ink puff
+      ctx.fillStyle = `rgba(26,22,18,${a * 0.55})`;
+      ctx.beginPath(); ctx.arc(cx, cy + 6, 8 + dp * 22, 0, TAU); ctx.fill();
+      if (dp >= 1) m._detonateDone = true;
+      return;
+    }
+
+    // Reset for next-life cycle
+    if (m.alive) {
+      m._detonatePhase = 0;
+      m._detonateDone = false;
+    }
+
+    // Ink shadow
+    ctx.fillStyle = 'rgba(26,22,18,0.42)';
+    ctx.beginPath(); ctx.ellipse(cx, cy + 22, 18, 6, 0, 0, TAU); ctx.fill();
+
+    // Pulsing concentric taunt bands (3 staggered) — only when alive
+    const tauntR = m.tauntRange || 70;
+    for (let i = 0; i < 3; i++) {
+      const ph = ((t * 0.6 + i * 0.33) % 1);
+      const rr = tauntR * (0.4 + ph * 0.6);
+      ctx.strokeStyle = `rgba(168,58,44,${(1 - ph) * 0.42})`;
+      ctx.lineWidth = 1.2 - ph * 0.6;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.arc(cx, cy + 10, rr, 0, TAU); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Faint floor stain
+    ctx.fillStyle = 'rgba(168,58,44,0.06)';
+    ctx.beginPath(); ctx.arc(cx, cy + 10, tauntR, 0, TAU); ctx.fill();
+
+    // Strain phase — when HP < 30%, body wobbles + cracks appear + embers leak
+    const hpFrac = m.hp / m.maxHp;
+    const strain = hpFrac < 0.3;
+
     ctx.save();
-    ctx.translate(m.x, m.y);
-    ctx.strokeStyle = '#3a2d1c';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(0, 14); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-10, -6); ctx.lineTo(10, -6); ctx.stroke();
-    // Head
-    ctx.fillStyle = '#c89aff';
-    ctx.strokeStyle = '#1d150c';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(0, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
-    // HP bar
-    const w = 26, h = 4;
-    ctx.fillStyle = 'rgba(29, 21, 12, 0.6)';
-    ctx.fillRect(-w / 2, -28, w, h);
-    ctx.fillStyle = '#9af0c8';
-    ctx.fillRect(-w / 2, -28, w * Math.max(0, m.hp / m.maxHp), h);
-    ctx.strokeStyle = '#1d150c';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-w / 2, -28, w, h);
-    // Taunt range halo (very faint)
-    ctx.strokeStyle = 'rgba(200, 154, 255, 0.10)';
-    ctx.beginPath(); ctx.arc(0, 0, m.tauntRange, 0, TAU); ctx.stroke();
+    ctx.translate(cx, cy);
+    if (strain) ctx.rotate(Math.sin(t * 40) * 0.05);
+
+    // Stake (the "nailed to ground")
+    ctx.strokeStyle = PAL.inkSoft;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, 22); ctx.lineTo(0, 30); ctx.stroke();
+    // Burlap rect body
+    ctx.fillStyle = '#c8a56e';
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-12, -4); ctx.lineTo(12, -4);
+    ctx.lineTo(10, 22); ctx.lineTo(-10, 22);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Cross stitches
+    ctx.strokeStyle = PAL.inkSoft;
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 3; i++) {
+      const yy = -1 + i * 7;
+      ctx.beginPath(); ctx.moveTo(-10, yy); ctx.lineTo(10, yy); ctx.stroke();
+    }
+    // Vermilion twine belt
+    ctx.strokeStyle = PAL.red;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-11, 12); ctx.lineTo(11, 12); ctx.stroke();
+    // Twig arms
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-12, 0); ctx.lineTo(-22, 5);
+    ctx.moveTo(-22, 5); ctx.lineTo(-21, 11);
+    ctx.moveTo(12, 0); ctx.lineTo(22, 5);
+    ctx.moveTo(22, 5); ctx.lineTo(21, 11);
+    ctx.stroke();
+    // Burlap-sack head
+    ctx.fillStyle = '#d6b07a';
+    ctx.beginPath(); ctx.arc(0, -12, 9, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, -12, 9, 0, TAU); ctx.stroke();
+    // X eyes
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-4, -14); ctx.lineTo(-2, -12);
+    ctx.moveTo(-2, -14); ctx.lineTo(-4, -12);
+    ctx.moveTo( 2, -14); ctx.lineTo( 4, -12);
+    ctx.moveTo( 4, -14); ctx.lineTo( 2, -12);
+    ctx.stroke();
+    // Stitched mouth
+    ctx.strokeStyle = PAL.red;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let i = -3; i <= 3; i++) {
+      ctx.moveTo(i, -8); ctx.lineTo(i + 0.5, -8 + ((i % 2) ? 1 : -1));
+    }
+    ctx.stroke();
+    // Crown of thorns horns
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(-6, -19); ctx.lineTo(-7, -23);
+    ctx.moveTo( 0, -20); ctx.lineTo( 0, -25);
+    ctx.moveTo( 6, -19); ctx.lineTo( 7, -23);
+    ctx.stroke();
+    // Strain cracks + ember spawns
+    if (strain) {
+      ctx.strokeStyle = PAL.red;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-6, 4); ctx.lineTo(-2, 8); ctx.lineTo(-4, 14);
+      ctx.moveTo( 5, 0); ctx.lineTo( 7, 8); ctx.lineTo( 4, 16);
+      ctx.stroke();
+      if (Math.random() < 1 / 60 * 30) {
+        m._embers.push({
+          x: (Math.random() - 0.5) * 16,
+          y: (Math.random() - 0.5) * 16,
+          vx: (Math.random() - 0.5) * 8,
+          vy: -15 - Math.random() * 10,
+          t: 0,
+        });
+      }
+    }
     ctx.restore();
+
+    // Ember loop (drawn in world space with offset back to entity)
+    for (let i = m._embers.length - 1; i >= 0; i--) {
+      const p = m._embers[i];
+      p.t += 1 / 60;
+      if (p.t >= 0.5) { m._embers.splice(i, 1); continue; }
+      p.x += p.vx / 60; p.y += p.vy / 60;
+      p.vx *= 0.94; p.vy *= 0.94;
+      const a = 1 - p.t / 0.5;
+      ctx.fillStyle = `rgba(168,58,44,${a})`;
+      ctx.beginPath(); ctx.arc(cx + p.x, cy + p.y, 1.2, 0, TAU); ctx.fill();
+    }
+
+    // HP bar above the head
+    const w = 30, h = 3;
+    ctx.fillStyle = 'rgba(26,22,18,0.4)';
+    ctx.fillRect(cx - w / 2, cy - 36, w, h);
+    ctx.fillStyle = PAL.red;
+    ctx.fillRect(cx - w / 2, cy - 36, w * Math.max(0, hpFrac), h);
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 0.8;
+    ctx.strokeRect(cx - w / 2, cy - 36, w, h);
   },
 
   /*
-   * Mender Wisp — paper-disc body + warm + glyph + breathing paper halo.
-   * Per OPTICIAN_HANDOFF.md companion polish.
+   * Mender Wisp — full port from art-lab-v4.js compMenderWisp:
+   *   - 7-dot analytic past-position trail along the orbit
+   *   - paper core w/ ink stroke + warm-gold cross glyph
+   *   - paper-glow halo (outer + inner discs) + ink shadow
+   *   - cadence pip: dashed ink ring + gold arc filling 0→TAU as
+   *     pulseAcc/pulseIv climbs (visible "next heal in X")
+   *   - on heal pulse: thick gold ribbon (4-stroke bezier) from wisp
+   *     to player + 3 + glyphs that drift up over 1s + concentric
+   *     gold heal pulse on the player
    */
   _drawMender(ctx, m, t) {
-    ctx.save();
-    ctx.translate(m.x, m.y);
-    // Breathing paper halo
-    const haloA = 0.35 * (0.7 + 0.3 * Math.sin(t * 2));
-    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, 8);
-    grad.addColorStop(0, `rgba(232,220,192,${haloA})`);
-    grad.addColorStop(1, `rgba(232,220,192,0)`);
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
-    // Paper body disc
+    const game = this._currentGame;
+    const player = game?.player;
+    if (!player) return;
+    const wx = m.x, wy = m.y;
+
+    // --- Trail: 7 sampled past positions along the same float path ---
+    // Reconstruct using the bob phase: drummer/mender float toward an
+    // anchor point with a sin/cos drift. Simulate by rendering at slight
+    // offsets back along the apparent motion vector.
+    const driftAng = t * 0.9;
+    for (let k = 1; k <= 7; k++) {
+      const back = k * 0.06;
+      const tx = wx + Math.cos(driftAng - back * 0.9) * (3 + Math.sin(t * 0.6) * 1.5);
+      const ty = wy + Math.sin((driftAng - back * 0.9) * 1.5) * 2;
+      const fade = (1 - k / 8) * 0.7;
+      ctx.fillStyle = `rgba(232,184,64,${fade * 0.6})`;
+      ctx.beginPath(); ctx.arc(tx, ty, 1.6 - k * 0.15, 0, TAU); ctx.fill();
+    }
+
+    // --- Heal pulse visuals (active during the brief pulse window) ---
+    m._healActive = m._healActive || 0;          // counts down 0.35s on each pulse
+    if (m.pulseAcc < 0.05 && m._lastPulseAcc !== undefined && m.pulseAcc < m._lastPulseAcc) {
+      // pulseAcc just reset → heal just fired
+      m._healActive = 0.35;
+      // spawn 3 + glyphs rising at the player
+      m._plusGlyphs = m._plusGlyphs || [];
+      for (let i = 0; i < 3; i++) {
+        m._plusGlyphs.push({
+          x: player.x + (Math.random() - 0.5) * 14,
+          y: player.y - 18,
+          vx: (Math.random() - 0.5) * 5,
+          vy: -22 - Math.random() * 8,
+          t: 0,
+        });
+      }
+    }
+    m._lastPulseAcc = m.pulseAcc;
+    if (m._healActive > 0) m._healActive -= 1 / 60;
+
+    // Healing ribbon — 4-stroke bezier from wisp to player while active
+    if (m._healActive > 0) {
+      const hp = 1 - m._healActive / 0.35;
+      const mx = (wx + player.x) / 2;
+      const my = (wy + player.y) / 2 - 24 - hp * 10;
+      for (let s = 0; s < 4; s++) {
+        ctx.strokeStyle = `rgba(232,184,64,${(1 - hp) * (0.55 - s * 0.13)})`;
+        ctx.lineWidth = 5 - s * 1.1;
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.quadraticCurveTo(mx, my, player.x, player.y - 8);
+        ctx.stroke();
+      }
+      // Concentric gold pulse on player
+      const a = 1 - hp;
+      ctx.strokeStyle = `rgba(232,184,64,${a * 0.8})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(player.x, player.y - 6, 18 + hp * 22, 0, TAU); ctx.stroke();
+    }
+
+    // Plus glyphs rising at player (live for 1s each)
+    if (m._plusGlyphs) {
+      for (let i = m._plusGlyphs.length - 1; i >= 0; i--) {
+        const p = m._plusGlyphs[i];
+        p.t += 1 / 60;
+        if (p.t >= 1) { m._plusGlyphs.splice(i, 1); continue; }
+        p.x += p.vx / 60; p.y += p.vy / 60;
+        p.vx *= 0.99; p.vy *= 0.99;
+        const a = 1 - p.t;
+        ctx.strokeStyle = `rgba(200,148,26,${a})`;
+        ctx.lineWidth = 1.4;
+        const sz = 3;
+        ctx.beginPath();
+        ctx.moveTo(p.x - sz, p.y); ctx.lineTo(p.x + sz, p.y);
+        ctx.moveTo(p.x, p.y - sz); ctx.lineTo(p.x, p.y + sz);
+        ctx.stroke();
+      }
+    }
+
+    // --- Ink shadow under the wisp ---
+    ctx.fillStyle = 'rgba(26,22,18,0.42)';
+    ctx.beginPath(); ctx.ellipse(wx, wy + 8, 4, 1.3, 0, 0, TAU); ctx.fill();
+
+    // --- Wisp body — outer halo, inner halo, paper core, gold + glyph ---
+    ctx.fillStyle = 'rgba(232,184,64,0.32)';
+    ctx.beginPath(); ctx.arc(wx, wy, 8, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(232,184,64,0.55)';
+    ctx.beginPath(); ctx.arc(wx, wy, 5.4, 0, TAU); ctx.fill();
     ctx.fillStyle = PAL.paper;
-    ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.stroke();
-    // + glyph in warm gold
+    ctx.beginPath(); ctx.arc(wx, wy, 3.4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(wx, wy, 3.4, 0, TAU); ctx.stroke();
     ctx.strokeStyle = PAL.warm;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(-2.5, 0); ctx.lineTo(2.5, 0);
-    ctx.moveTo(0, -2.5); ctx.lineTo(0, 2.5);
+    ctx.moveTo(wx - 1.6, wy); ctx.lineTo(wx + 1.6, wy);
+    ctx.moveTo(wx, wy - 1.6); ctx.lineTo(wx, wy + 1.6);
     ctx.stroke();
-    ctx.restore();
+
+    // --- Cadence pip: dashed ink ring + gold arc filling toward next pulse ---
+    const mods = game?.computeMinionMods ? game.computeMinionMods() : null;
+    const pulseIv = mods ? Math.max(2.0, 5.0 - (mods.pulseFaster || 0)) : 5.0;
+    const phase = Math.min(1, (m.pulseAcc || 0) / pulseIv);
+    const pipR = 11;
+    ctx.strokeStyle = 'rgba(26,22,18,0.4)';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.arc(wx, wy, pipR, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = PAL.warm;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(wx, wy, pipR, -Math.PI / 2, -Math.PI / 2 + phase * TAU); ctx.stroke();
   },
 
   /*
-   * War Drummer — small drum sprite at the drummer's pos + on each beat,
-   * a colored aura ring expands at the PLAYER's feet (not the drum's),
-   * making the active aura legible without reading the drum's glyph.
-   * Per OPTICIAN_HANDOFF.md companion polish.
+   * War Drummer — full port from art-lab-v4.js compWarDrummer:
+   *   - Drum cylinder body (rect + paper top ellipse) with active-aura
+   *     glyph stamped on the skin (sword/shield/wing for V/W/H)
+   *   - Animated stick that strikes the drum on each beat
+   *   - Aura color cords (X laces) on the cylinder
+   *   - Two ink legs at the base + ink shadow
+   *   - Aura field around the player: soft color fill + dashed perimeter
+   *   - Beat ring decay: each beat spawns a colored ring at the drum
+   *     that expands outward and fades over 0.6s; up to 3 alive at once
+   *   - Aura banner over the player with name + underline
    */
   _drawDrummer(ctx, m, t, player) {
-    // 1) Player-feet aura ring on each beat (vigor / ward / haste color)
-    if (m.flashT > 0 && player) {
-      // Track ring expansions in m._beatRing — spawned on a fresh beat.
-      // m.flashT decreases from 0.25 → 0 in tick; convert to a 0→1 phase.
-      m._auraRings = m._auraRings || [];
-      // If a new beat just landed (flashT just set high), push a ring.
-      if (m.flashT > 0.24 && !m._lastBeatLogged) {
-        const colors = ['#a83a2c', '#2c4a8c', '#c8941a']; // Vigor / Ward / Haste
-        m._auraRings.push({ color: colors[m.beatIdx % 3], t: 0 });
-        m._lastBeatLogged = true;
-      }
-      if (m.flashT < 0.05) m._lastBeatLogged = false;
-    } else {
-      if (m) m._lastBeatLogged = false;
+    if (!player) return;
+    const dx = m.x, dy = m.y;
+    const auras = [
+      { id: 'vigor', name: 'VIGOR', color: PAL.red,  glyph: 'sword'  },
+      { id: 'ward',  name: 'WARD',  color: PAL.blue, glyph: 'shield' },
+      { id: 'haste', name: 'HASTE', color: PAL.gold, glyph: 'wing'   },
+    ];
+    const aura = auras[m.beatIdx % 3];
+
+    // --- Aura field around the player (soft fill + dashed perimeter) ---
+    const auraR = 60;
+    ctx.fillStyle = aura.color + '22';
+    ctx.beginPath(); ctx.arc(player.x, player.y, auraR, 0, TAU); ctx.fill();
+    ctx.strokeStyle = aura.color + '55';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.arc(player.x, player.y, auraR, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // --- Beat-ring decay: spawn a ring on the rising edge of flashT ---
+    m._beatRings = m._beatRings || [];
+    if (m.flashT > 0.24 && !m._lastBeatLogged) {
+      m._beatRings.push({ color: aura.color, t: 0 });
+      m._lastBeatLogged = true;
     }
-    if (m._auraRings) {
-      for (let i = m._auraRings.length - 1; i >= 0; i--) {
-        const r = m._auraRings[i];
-        r.t += 1 / 60;
-        if (r.t >= 0.4 || !player) { m._auraRings.splice(i, 1); continue; }
-        const k = r.t / 0.4;
-        const radius = lerp(0, 28, k);
-        const a = (1 - k) * 0.7;
-        // Convert hex to rgb for alpha control
-        const hex = r.color.slice(1);
-        const rr = parseInt(hex.slice(0, 2), 16);
-        const gg = parseInt(hex.slice(2, 4), 16);
-        const bb = parseInt(hex.slice(4, 6), 16);
-        ctx.strokeStyle = `rgba(${rr},${gg},${bb},${a})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(player.x, player.y, radius, 0, TAU); ctx.stroke();
-      }
+    if (m.flashT < 0.05) m._lastBeatLogged = false;
+    // Cap at 3 active rings
+    while (m._beatRings.length > 3) m._beatRings.shift();
+    // Render expanding rings centered on the drum
+    for (let i = m._beatRings.length - 1; i >= 0; i--) {
+      const r = m._beatRings[i];
+      r.t += 1 / 60;
+      const phase = r.t / 0.6;
+      if (phase >= 1) { m._beatRings.splice(i, 1); continue; }
+      const a = (1 - phase) * 0.55;
+      const radius = 4 + phase * 72;
+      ctx.strokeStyle = r.color + Math.floor(a * 255).toString(16).padStart(2, '0');
+      ctx.lineWidth = 1.6 - phase * 1.2;
+      ctx.beginPath(); ctx.arc(dx, dy - 6, radius, 0, TAU); ctx.stroke();
     }
 
-    // 2) Drum sprite
+    // --- Ink shadow ---
+    ctx.fillStyle = 'rgba(26,22,18,0.42)';
+    ctx.beginPath(); ctx.ellipse(dx, dy + 22, 16, 5, 0, 0, TAU); ctx.fill();
+
+    // --- Drum body ---
     ctx.save();
-    ctx.translate(m.x, m.y);
-    // Body
-    ctx.fillStyle = '#3a2d1c';
-    ctx.strokeStyle = '#1d150c';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(0, -4, 5, 0, TAU); ctx.fill(); ctx.stroke();
-    // Drum
-    ctx.fillStyle = '#d7a648';
-    ctx.beginPath(); ctx.arc(0, 4, 6, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = '#1d150c';
-    ctx.beginPath(); ctx.arc(0, 4, 6, 0, TAU); ctx.stroke();
-    // Beat indicator — three dots, one lit per beat
-    const colors = ['#a83a2c', '#2c4a8c', '#c8941a']; // Vigor / Ward / Haste
-    for (let i = 0; i < 3; i++) {
-      const px = (i - 1) * 6;
-      ctx.fillStyle = (i === m.beatIdx)
-        ? colors[i]
-        : `rgba(120, 100, 70, 0.4)`;
-      ctx.beginPath(); ctx.arc(px, -14, 2, 0, TAU); ctx.fill();
+    const struck = m.flashT > 0;
+    ctx.translate(dx, dy + (struck ? 1 : 0));
+    // Legs
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-9, 12); ctx.lineTo(-12, 22);
+    ctx.moveTo( 9, 12); ctx.lineTo( 12, 22);
+    ctx.stroke();
+    // Cylinder body — paper rect with ink frame
+    ctx.fillStyle = PAL.paper2;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-13, -8); ctx.lineTo(13, -8);
+    ctx.lineTo(13, 12); ctx.lineTo(-13, 12);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Skin top — paper ellipse
+    ctx.fillStyle = PAL.paper;
+    ctx.beginPath(); ctx.ellipse(0, -8, 13, 5, 0, 0, TAU); ctx.fill();
+    ctx.stroke();
+    // Glyph stamp on skin in aura color
+    ctx.fillStyle = aura.color;
+    ctx.strokeStyle = aura.color;
+    ctx.lineWidth = 1.4;
+    if (aura.glyph === 'sword') {
+      ctx.beginPath();
+      ctx.moveTo(-3, -11); ctx.lineTo(3, -5);
+      ctx.moveTo(-1, -8);  ctx.lineTo(-3, -7);
+      ctx.stroke();
+    } else if (aura.glyph === 'shield') {
+      ctx.beginPath();
+      ctx.moveTo(0, -11); ctx.lineTo(4, -10); ctx.lineTo(3, -6);
+      ctx.lineTo(0, -4); ctx.lineTo(-3, -6); ctx.lineTo(-4, -10);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (aura.glyph === 'wing') {
+      ctx.beginPath();
+      ctx.moveTo(-5, -8); ctx.quadraticCurveTo(-1, -12, 5, -8);
+      ctx.moveTo(-3, -7); ctx.quadraticCurveTo( 0, -10, 4, -7);
+      ctx.stroke();
     }
-    // Drum-local beat flash
-    if (m.flashT > 0) {
-      ctx.strokeStyle = `rgba(255, 230, 160, ${m.flashT / 0.25})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, 4, 9, 0, TAU); ctx.stroke();
+    // Aura-color X laces on the cylinder
+    ctx.strokeStyle = aura.color;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const lx = -13 + i * 7;
+      ctx.moveTo(lx, -6); ctx.lineTo(lx + 5, 10);
     }
+    ctx.stroke();
+    // Drumstick — animated strike (rotates from rest to strike on flashT)
+    const beatPhase = struck ? (1 - m.flashT / 0.25) : 0;
+    const stickAng = struck ? -0.3 + beatPhase * 1.0 : 1.0;
+    ctx.save();
+    ctx.translate(-2, -10);
+    ctx.rotate(-stickAng);
+    ctx.strokeStyle = PAL.inkSoft;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -16); ctx.stroke();
+    ctx.fillStyle = PAL.ink;
+    ctx.beginPath(); ctx.arc(0, -17, 1.8, 0, TAU); ctx.fill();
     ctx.restore();
+    ctx.restore();
+
+    // --- Aura banner above player (slide-in animation on aura swap) ---
+    ctx.font = '600 9px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = aura.color;
+    ctx.fillText(aura.name, player.x, player.y - 38);
+    ctx.strokeStyle = aura.color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(player.x - 14, player.y - 34);
+    ctx.lineTo(player.x + 14, player.y - 34);
+    ctx.stroke();
+    ctx.textAlign = 'start';
   },
 
   drawDamageNumbers(ctx, nums) {
