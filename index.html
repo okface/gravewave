@@ -2428,7 +2428,6 @@ const CONFIG = {
     iframes: 0.85,           // up from 0.6 — kamikaze model means each hit is bigger,
                              // so a longer recovery window prevents back-to-back deaths
                              // when a pack of enemies lands together.
-    pickupRadius: 0,
   },
 
   // Camera / world scale.
@@ -4942,10 +4941,6 @@ class Enemy {
       null;
     if (resistMult < 0.95) this.resistShimmer = 0.28;
     if (resistMult > 1.10) this.vulnShimmer   = 0.22;
-    // Track the damage type that scored the killing blow so the
-    // affinity system can credit it. Updated every hit; on death,
-    // tickEnemies reads this to bump playerState.affinity.
-    this._lastDamageType = dtype;
     // ---- Sigil Linker propagation ----
     // If this enemy is a member of a link group AND the damage was not
     // already a propagation hop, distribute share% to the other members.
@@ -5553,12 +5548,6 @@ class Game {
     this.state = 'menu';         // 'menu' | 'playing' | 'upgrade' | 'item' | 'gameover'
     this.lastTime = 0;
 
-    // For static_field tick visualization
-    this.auraPulse = 0;
-
-    // Items proc cooldown to avoid runaway
-    this.procCdAcc = 0;
-
     // Screen shake — accumulated magnitude that decays each frame.
     // Triggered by impacts; renderer reads this each frame and applies
     // a small random offset to the whole world transform.
@@ -5795,6 +5784,9 @@ class Game {
     this.runElapsed += dt;
     this.player.update(dt);
     this.waveMgr.update(dt);
+    // Snow Fort tick must run BEFORE tickSpells so the Crystalline
+    // crit-bonus is set this-frame, not stale from last-frame.
+    this.tickSnowForts(dt);
     this.tickSpells(dt);
     this.tickEnemies(dt);
     this.tickProjectiles(dt);
@@ -5802,7 +5794,6 @@ class Game {
     this.tickPullFields(dt);
     this.tickFlamePatches(dt);
     this.tickStormClouds(dt);
-    this.tickSnowForts(dt);
     this.tickFireShields(dt);
     this.tickShockTowers(dt);
     this.tickWormholes(dt);
@@ -7984,7 +7975,6 @@ class Game {
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.92; p.vy *= 0.92;
     }
-    if (this.auraPulse > 0) this.auraPulse -= dt;
   }
 
   /*
