@@ -10460,8 +10460,15 @@ const Renderer = {
    * and out at end of life so the appearance/disappearance is readable.
    */
   /*
-   * Storm Cloud — overlapping ink-puff silhouette with golden internal
-   * shimmer + dashed AoE ground ellipse. Ported from spellStormCloud3.
+   * Storm Cloud — TOP-DOWN reading, not the design bundle's side-on
+   * silhouette. We're looking down at the arena, so the cloud reads
+   * as a translucent disc you can see THROUGH. Internal anatomy:
+   *  - Soft ink wash + clipped paper hatch (the cloud body texture)
+   *  - 4 wispy puffs orbiting slowly inside the disc (volumetric feel)
+   *  - Periodic full-disc gold shimmer + radial fork crackle on each
+   *    strike (the player sees lightning flashing through the cloud
+   *    and striking down at a target)
+   *  - Frayed ink rim
    */
   drawStormClouds(ctx, clouds, t) {
     for (const c of clouds) {
@@ -10469,110 +10476,142 @@ const Renderer = {
       const fadeOut = Math.min(1, (c.life - c.t) / 0.4);
       const alpha = Math.min(fadeIn, fadeOut);
       const cx = c.x, cy = c.y;
-      const aoeR = c.radius;
+      const r  = c.radius;
 
-      // ── Faint dashed AoE ellipse on the ground (under the cloud) ─────
-      ctx.strokeStyle = `rgba(44,74,140,${0.45 * alpha})`;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 4]);
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + aoeR * 0.35, aoeR, aoeR * 0.25, 0, 0, TAU);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // ── Cloud silhouette: 5 overlapping ink puffs at slight drift ────
-      const cloudW = aoeR * 1.6;
-      const drift = Math.sin(t * 0.4) * 8;
-      const puffs = [
-        { x: cx - cloudW * 0.35 + drift, y: cy - aoeR * 0.32 + 6, r: aoeR * 0.18 },
-        { x: cx - cloudW * 0.18 + drift, y: cy - aoeR * 0.42 - 4, r: aoeR * 0.24 },
-        { x: cx + drift,                  y: cy - aoeR * 0.40,     r: aoeR * 0.28 },
-        { x: cx + cloudW * 0.20 + drift, y: cy - aoeR * 0.42 - 2, r: aoeR * 0.22 },
-        { x: cx + cloudW * 0.36 + drift, y: cy - aoeR * 0.32 + 4, r: aoeR * 0.18 },
-      ];
-      ctx.fillStyle = `rgba(26,22,18,${alpha})`;
-      ctx.beginPath();
-      for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
-      ctx.fill();
-      // Bottom-edge highlight hatch (paper colour, clipped)
       ctx.save();
-      ctx.beginPath();
-      for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
-      ctx.clip();
+      // ── Cloud body — soft ink wash with radial gradient ──────────────
+      const grad = ctx.createRadialGradient(cx, cy, r * 0.05, cx, cy, r);
+      grad.addColorStop(0,    `rgba(40, 34, 28,  ${0.42 * alpha})`);
+      grad.addColorStop(0.55, `rgba(30, 24, 20,  ${0.28 * alpha})`);
+      grad.addColorStop(0.92, `rgba(26, 22, 18,  ${0.10 * alpha})`);
+      grad.addColorStop(1,    `rgba(26, 22, 18,  0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+      // ── Cloud anatomy — 4 lighter puffs orbiting inside (volumetric) ─
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.96, 0, TAU); ctx.clip();
+      const puffOrbit = t * 0.18;
+      for (let i = 0; i < 4; i++) {
+        const a = puffOrbit + (i / 4) * TAU;
+        const dist = r * 0.45;
+        const px = cx + Math.cos(a) * dist;
+        const py = cy + Math.sin(a) * dist;
+        const pr = r * 0.30;
+        const pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        pg.addColorStop(0,   `rgba(60, 52, 44, ${0.32 * alpha})`);
+        pg.addColorStop(0.7, `rgba(40, 34, 28, ${0.10 * alpha})`);
+        pg.addColorStop(1,   `rgba(30, 24, 20, 0)`);
+        ctx.fillStyle = pg;
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
+      }
+      // Diagonal paper hatch (clipped) — gives the cloud "fur"
+      ctx.strokeStyle = `rgba(232,220,192,${0.10 * alpha})`;
+      ctx.lineWidth = 0.5;
       const hAng = Math.PI / 3.5;
       const ux = Math.cos(hAng), uy = Math.sin(hAng);
-      const px = -uy, py = ux;
-      ctx.strokeStyle = `rgba(232,220,192,${0.18 * alpha})`;
-      ctx.lineWidth = 0.5;
-      for (let s = -aoeR; s < aoeR; s += 2.4) {
+      const hpx = -uy, hpy = ux;
+      for (let s = -r; s < r; s += 4) {
         ctx.beginPath();
-        ctx.moveTo(cx + drift + px * s - ux * cloudW, cy - aoeR * 0.4 + py * s - uy * cloudW);
-        ctx.lineTo(cx + drift + px * s + ux * cloudW, cy - aoeR * 0.4 + py * s + uy * cloudW);
+        ctx.moveTo(cx + hpx * s - ux * r, cy + hpy * s - uy * r);
+        ctx.lineTo(cx + hpx * s + ux * r, cy + hpy * s + uy * r);
         ctx.stroke();
       }
       ctx.restore();
 
-      // ── Internal lightning shimmer (gold flash on cloud silhouette) ───
+      // ── Internal lightning shimmer (gold disc-flash) ─────────────────
       if (Math.sin(t * 8) > 0.7) {
-        ctx.fillStyle = `rgba(232,184,64,${0.16 * alpha})`;
-        ctx.beginPath();
-        for (const p of puffs) { ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU); }
-        ctx.fill();
+        const fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        fg.addColorStop(0,   `rgba(232,184,64,${0.22 * alpha})`);
+        fg.addColorStop(0.7, `rgba(232,184,64,${0.08 * alpha})`);
+        fg.addColorStop(1,   `rgba(232,184,64,0)`);
+        ctx.fillStyle = fg;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
       }
 
-      // ── Strike fork — full bolt cloud→ground when a strike just landed ─
+      // ── Strike crackle — radial forks inside the disc on each strike ─
       const sinceStrike = c.strikeAcc;
       if (sinceStrike < 0.22) {
         const a = (0.22 - sinceStrike) / 0.22 * alpha;
         const seed = Math.floor(c.t * 100) || 1;
         const sR = (n) => { const x = Math.sin(seed + n * 7919) * 10000; return x - Math.floor(x); };
-        const sx = cx + (sR(2) - 0.5) * cloudW * 0.5 + drift;
-        const sy = cy - aoeR * 0.40;
-        const ex = cx + (sR(3) - 0.5) * aoeR * 0.6;
-        const ey = cy + aoeR * 0.18 + (sR(4) - 0.5) * aoeR * 0.15;
-        const segs = 9;
+        // Strike anchor — center of the cloud
+        const sx = cx, sy = cy;
+        // Pick a target inside the disc (where the bolt goes)
+        const tang = sR(2) * TAU;
+        const tdist = r * (0.4 + sR(3) * 0.5);
+        const ex = cx + Math.cos(tang) * tdist;
+        const ey = cy + Math.sin(tang) * tdist;
+
+        // Jagged forking bolt center→target (ink + gold double-stroke)
+        const segs = 7;
         const dx = ex - sx, dy = ey - sy;
         const len = Math.hypot(dx, dy) || 1;
         const perpX = -dy / len, perpY = dx / len;
         const points = [{ x: sx, y: sy }];
         for (let i = 1; i < segs; i++) {
           const k = i / segs;
-          const j = (sR(i) - 0.5) * 18;
+          const j = (sR(i) - 0.5) * 14;
           points.push({ x: sx + dx * k + perpX * j, y: sy + dy * k + perpY * j });
         }
         points.push({ x: ex, y: ey });
-        ctx.lineCap = 'square';
-        // Outer ink trace
+        ctx.lineCap = 'round';
         ctx.strokeStyle = `rgba(26,22,18,${a * 0.95})`;
         ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.stroke();
-        // Gold inner core
         ctx.strokeStyle = `rgba(232,184,64,${a})`;
         ctx.lineWidth = 0.9;
         ctx.stroke();
-        // Forks — ~30% chance per mid-segment
+        // Forks
         for (let i = 2; i < points.length - 1; i++) {
           if (sR(i * 1097) < 0.3) {
             const dx2 = points[i + 1].x - points[i - 1].x;
             const dy2 = points[i + 1].y - points[i - 1].y;
             const len2 = Math.hypot(dx2, dy2) || 1;
             const side = sR(i * 131) < 0.5 ? 1 : -1;
-            const fx = points[i].x + (-dy2 / len2) * 14 * side;
-            const fy = points[i].y + (dx2 / len2) * 14 * side;
-            ctx.strokeStyle = `rgba(26,22,18,${a * 0.7})`;
-            ctx.lineWidth = 1.4;
+            const fx = points[i].x + (-dy2 / len2) * 12 * side;
+            const fy = points[i].y + (dx2 / len2) * 12 * side;
+            ctx.strokeStyle = `rgba(26,22,18,${a * 0.6})`;
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
             ctx.moveTo(points[i].x, points[i].y);
             ctx.lineTo(fx, fy); ctx.stroke();
           }
         }
-        // Endpoint flash
-        ctx.fillStyle = `rgba(232,184,64,${a * 0.45})`;
-        ctx.beginPath(); ctx.arc(ex, ey, 12 * a, 0, TAU); ctx.fill();
+        // Bright impact spark + ground scorch
+        ctx.fillStyle = `rgba(255,250,200,${a})`;
+        ctx.beginPath(); ctx.arc(ex, ey, 4 + a * 4, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(200,148,26,${a * 0.7})`;
+        ctx.lineWidth = 0.8;
+        const starR = 6, innerR = 1.8, points6 = 6;
+        ctx.beginPath();
+        for (let i = 0; i < points6 * 2; i++) {
+          const sr = i % 2 === 0 ? starR : innerR;
+          const sa2 = i / (points6 * 2) * TAU;
+          const px2 = ex + Math.cos(sa2) * sr, py2 = ey + Math.sin(sa2) * sr;
+          if (i === 0) ctx.moveTo(px2, py2); else ctx.lineTo(px2, py2);
+        }
+        ctx.closePath(); ctx.stroke();
       }
+
+      // ── Frayed ink rim ───────────────────────────────────────────────
+      ctx.strokeStyle = `rgba(26,22,18,${0.45 * alpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      const rimSeg = 24;
+      for (let i = 0; i <= rimSeg; i++) {
+        const a = (i / rimSeg) * TAU;
+        const fray = 1 + Math.sin(a * 5 + t * 0.6) * 0.04 + Math.sin(a * 13 - t * 0.3) * 0.02;
+        const px = cx + Math.cos(a) * r * fray;
+        const py = cy + Math.sin(a) * r * fray;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+
+      ctx.restore();
     }
   },
 

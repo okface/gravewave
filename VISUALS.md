@@ -1,134 +1,215 @@
-# Visual & Animation Handoff
+# Visual & Animation Status
 
-> Hand this list to Claude Code (or any contributor) to work through.
-> Tasks are roughly in order of player impact. Each one is small enough
-> to do in a single pass. Tick the box once shipped.
+> Living list. Tick the box when shipped, strike it when retired,
+> add new asks as we discover them. The renderer is in `index.html`
+> under `const Renderer = { ... }`.
 
-The renderer is in `index.html` under `const Renderer = { ... }`. Most
-draw methods take `(ctx, list, t)` where `t = game.runElapsed`.
+## Established design language (lock these in)
+
+The look is **woodcut on aged parchment** — ink linework over a warm
+vellum background, gold sigils, vermilion danger marks, indigo for
+frost / electric cores / arcane wards. Avoid soft glow gradients
+unless they're paying for a specific moment (block flash, comet
+core, lens body).
+
+Canonical palette (mirrored in `art-lab-v3.js` `PAL` constant in the
+`.codex_design/project/` bundle):
+
+```
+paper    #e8dcc0  paper2 #ddcfae  paper3 #c8b88c
+ink      #1a1612  inkSoft #3a322a inkMid #6a604f inkDim #8a7e68
+red      #a83a2c  redDeep #7a2820 redLight #d8624c
+blue     #2c4a8c  blueLight #4c6cac
+gold     #c8941a  goldLight #e8b840
+violet   #6a3a8a  (gravity-only)
+```
+
+Camera shake fingerprints (use `Camera.shake('light'/'medium'/
+'heavy'/'catastrophic')`): light(2/0.12s) · medium(5/0.22s) · heavy
+(9/0.40s) · catastrophic(14/0.70s). Catastrophic is reserved for the
+single biggest event of the moment (Meteor impact, Apocalypse).
+
+**Top-down arena.** This is the hard rule the codex bundle violates
+in places: the camera is always looking *down*. Anything drawn from
+"the side" (cloud-as-silhouette-above-AoE-ring, lighthouse with a
+ground shadow ellipse, decoy effigy as a totem) is a translation
+mistake. When porting from the bundle, re-think geometry to read
+top-down — clouds are translucent discs you look *through*, not
+overhead silhouettes.
+
+## Wizard ability art — shipped from the design bundle
+
+All ported from `.codex_design/project/art-lab-v3.js`. If you want
+to tweak: edit the corresponding `Renderer.draw…` method in
+`index.html`. Search by name.
+
+- [x] **Snow Fort** — hex with frost-crystal diamond posts, dashed
+      indigo inner wall, drifting flake particles, paper-clipped
+      hatch interior. Recharge state shows a `REFORMING` arc.
+- [x] **Fire Shield** — vermilion orbs (ink core + gold highlight)
+      on elliptical orbit, analytic flame ribbons, gold pulse on
+      block, ⬨ charge marks above the player.
+- [x] **Shock Tower** — woodcut paper pillar with clipped ink hatch,
+      ink coil head, gold flicker eye + antenna rods + crackle dot,
+      dashed gold range halo pulsing per cast.
+- [x] **Black Hole** (gravity_bolt cast → wells) — ink pull halo,
+      8 light-bend arcs, 64-segment spinning accretion disk (gold
+      every 8th + bright inner ring), spiral motes, ink event
+      horizon with bright photon ring.
+- [x] **Gravital Anomaly** (small wells) — dashed quadratic tether
+      to player, indigo pull ring + 5 spiral ticks, vermilion pop +
+      6 spark dots on expire.
+- [x] **Storm Cloud** — TOP-DOWN translucent disc (we look through
+      it). 4 inner puff orbs orbiting slowly, paper-hatch fur, gold
+      shimmer flash, jagged forking strike from center to target
+      with bright spark + 6-point gold scorch star, frayed ink rim.
+- [x] **Wormhole** — radial pinch (ink → indigo → 0) + ink ring +
+      spinning logarithmic spiral (indigo) + center pip + star
+      marker (vermilion A / gold B). Default seam is a wavy dashed
+      ink line that flows; Echo spec replaces it with a pulsing
+      kill-beam.
+- [x] **Meteor** — proper telegraph (ink shadow disc + 3 staggered
+      vermilion warning rings + NSEW crosshair), 12-sample analytic
+      comet trail, vermilion comet body with gold core + ink rim +
+      4 trailing gold sparks. Impact handled by `spawnExplosion` +
+      `Camera.shake('catastrophic')` from `tickMeteors`.
+- [x] **Snow Storm** — pale frost fill + double-clipped indigo
+      hatch (5px @ PI/3.5 + 7px @ -PI/4.5), dashed indigo perimeter
+      flowing -t*10, 50 falling 3-line crossed flakes, 4 sweeping
+      gust whips (pale main + indigo trailing line).
+- [x] **Hydra Head** (Fireball spec) — small ink+vermilion serpent
+      head with eye flicker + life bar above.
+- [x] **Engagement ring** — faint dotted vermilion circle around
+      player, marks the auto-target boundary so the player can see
+      what their abilities will reach.
+
+## Tier 1 attack art — done
+
+- [x] **Fireball** — projectile with fire trail particles, splash
+      explosion, Conflagration flame patch (deprecated keystone but
+      patches still render).
+- [x] **Chain Lightning** — electric-blue + gold double-stroke,
+      jitter offsets per segment, endpoint particle bursts.
+- [x] **Frost Bolt** — frost crystal with cyan trail, splinter
+      fragments on Shatter spec.
+
+## Optician ability art — first pass shipped, polish pending
+
+Optician is the second class. Each entity has its own draw method.
+The first pass works but uses simpler primitives than the Wizard's
+ported versions. Worth a polish pass that gives Optician its own
+woodcut vocabulary (gold/white-hot for light, mirror silver for
+arcane, dark-eclipse purple for shadow).
+
+- [ ] **Burning Lens** — currently a heat-haze ring + simple lens
+      ellipse + sun rays. Could read more "magnifying glass focused
+      beam burning the ground": a real lens disc with a focused
+      light cone hitting the ground + scorched circle that grows
+      with the ramp curve.
+- [ ] **Reflective Aegis** — small white-rectangle mirrors orbiting
+      the player. Should be a more substantial mirror sprite
+      (silver fill + ink frame + paper highlight to read like a
+      hand mirror). Reflection flashes when a charge is consumed
+      could borrow from the Fire Shield gold-pulse pattern.
+- [ ] **Solar Halo** — sun orb above the player with rays. Decent.
+      Could add a faint warm-yellow ground wash (currently has the
+      radial gradient but it could pop more). Eclipse spec needs a
+      darker, more sinister visual swap.
+- [ ] **Lens Array** — 3 ellipse lenses orbit the player. Beams
+      currently routed through `this.lightnings` (which were tuned
+      for Chain Lightning — orange/blue) so the converged-beam look
+      is muddy. A dedicated `drawLensBeam` that draws thick warm-
+      yellow→white-hot beams from each lens to the target would
+      read better.
+- [ ] **Lighthouse** — paper pillar + lamp + cone beam with bright
+      centerline. Decent but the cone is a flat triangle — could
+      use a soft gradient + slight pulse.
+- [ ] **Solar Eclipse** — radial wash + dashed ring. Works but the
+      RAMPING DPS isn't visualized — the disc should visibly grow
+      brighter as the ramp climbs.
+- [ ] **Mirror Maze** — line lattice. Functional. Crystal Cage spec
+      should make the wall *read as a wall* — maybe add little
+      indigo "force-field" arcs between mirrors when an enemy
+      bumps the boundary.
+- [ ] **Prism Strike** — pillar of light from above + telegraph
+      ring. Decent but very fast (0.55s). Could use a brighter
+      blow-out at impact.
+- [ ] **Focused Beam** (continuous ray) — three-layer beam (warm
+      halo + orange mid + white-hot core) plus crackle at peak.
+      Already pretty good. Might want a small heat shimmer at
+      impact point.
+- [ ] **Blinding Flash** — currently the spawnExplosion default.
+      Should be a true white-out: full-canvas paper flash that
+      fades over ~0.3s + radial blind-rings expanding outward.
+- [ ] **Prism Burst beams** — instant rays in 7 colors at peak
+      Spectrum. The colors are correct but the lines could be
+      thicker + have a brief endpoint spark.
+
+## Status / hit visuals — shipped
+
+- [x] **Player cast flash** — gold ring pulse on `castFlash > 0`.
+- [x] **Damage number readability** — crits scale + gold outline.
+- [x] **RESIST / VULN tags** — pearlescent shimmer on resist,
+      red wash on vuln (with rgba shimmer overlay).
+- [x] **Enemy death** — particle burst + ring.
+- [x] **Boss spawn** — telegraph + mist trail + ground crack.
+- [x] **Game over** — slow desaturation pass + smog overlay.
+- [x] **Wave banner** — overshoot + settle.
+- [x] **Spawn zones** — chevrons pulse stronger near wave start.
+- [x] **Blind status** — pulsing white veil + ✕ eyes (Optician).
+
+## Outstanding asks
+
+- [ ] **Reflective Aegis spec — Hall of Mirrors** — the second ring
+      of mirrors should be visually distinct from the inner ring.
+      Currently they look identical. Maybe smaller mirrors at a
+      slightly different tilt, or a different stroke color.
+- [ ] **Mender Wisp** companion — current visual is a small green
+      cross. Could be a tiny floating spirit (paper flame? ✚-rune
+      with a pale halo?).
+- [ ] **War Drummer** companion — the cycling-aura state isn't
+      strongly readable. The active aura (vigor/ward/haste) should
+      flash a colored pulse on the player on each beat.
+- [ ] **Sigil Linker** companion — link threads currently are flat
+      dashed lines. Could pulse along the chain when damage is
+      shared (small mote travelling along the line).
+- [ ] **Shock Tower watchtower spec (permanent)** — there's no
+      visual cue that this tower won't expire. A faint ground
+      anchor / additional cardinal sigils around the base would
+      help.
+- [ ] **Snow Fort permafrost patches** — when the fort breaks and
+      Permafrost spec drops a lingering icy patch, it currently
+      looks identical to a tiny fort. Could be more clearly a
+      "ground patch" (no walls, just a frosted disc with hatch).
+
+## Retired / no-op
+
+These were on the list but the underlying feature is gone or the
+work is shipped:
+
+- ~~Pyroclasm~~ — spell removed.
+- ~~Ninja class draws~~ — class deferred; supporting draws are dead
+  code that can be deleted.
+- ~~Background lantern flickers~~ — added (corner lanterns +
+  drifting smog).
+- ~~Tier picker stagger~~ — already animated (`animationDelay` on
+  cards).
+- ~~Pip pop on level-up~~ — shipped.
+
+## Code-quality cleanups (still open)
+
+- [ ] Pass over `Renderer` to refresh docstrings. Many reference
+      removed entities (e.g. SmokeBomb / SpringTrap / Caltrops).
+- [ ] `drawNinja` (if it still exists) — delete; Ninja class is
+      deferred indefinitely.
+- [ ] Standardize arg order across `drawXxx` — most take `(ctx,
+      list, t)`; a few take `(ctx, list, player, t)` because they
+      need the player position. Document that `player` arg or pull
+      from `game.player` inside.
 
 ---
 
-## Tier 2 / Tier 3 ability visuals
-
-These were stubbed in the rebuild and are functional but plain.
-
-- [ ] **Snow Fort** (`drawSnowForts`, ~line 7564). Currently a soft
-      gradient + dashed inner ring. Suggested: a stylized hexagonal
-      ice wall outline with frost crystals bloom-growing on first
-      0.3s, then a slow rotating particle drift (snowflakes ↘) inside.
-      Death animation: 6-piece shatter outwards on expire.
-- [ ] **Fire Shield** (`drawFireShield`, ~line 7712). 3 simple radial
-      gradient orbs orbiting the player. Add: trailing flame ribbon
-      behind each orb (decay 0.3s, paper-warm reds), micro-spark
-      burst when an orb collides with an enemy, satisfying "block"
-      flash when `Player._shieldCharges` consumes a charge.
-- [ ] **Shock Tower** (`drawShockTowers`, ~line 7646). Plain pillar
-      with a flickering yellow head. Add: arc-to-target lightning
-      visual when it fires (reuse `drawLightnings` segment logic),
-      base micro-jitter on each shot, range halo pulse on each cast
-      tick rather than static dashed line.
-- [ ] **Wormhole** (`drawWormholes`, ~line 7676). Two spinning rings
-      with a dashed connection line. Add: swirling particles drawn
-      *into* portal A, ejected from portal B with a brief stretch
-      effect on the enemy sprite during transit. Background distort
-      ring (radial pinch) inside each portal.
-- [ ] **Snow Storm** (`drawSnowStorms`, ~line 7615). Faint ring + a
-      few drifting flake dots. Add: 30-50 falling-snowflake particles
-      across the radius (each falls + drifts), occasional gust lines
-      sweeping across, ground-frost overlay accumulating then fading
-      over the storm's lifetime.
-- [ ] **Black Hole** (Tier 1, gravity_bolt cast). Currently uses the
-      generic `drawWells` blob. Make it visually distinct: bright
-      event horizon, dark accretion disk pulled inward, light bend
-      streaks coming off enemies caught in the pull radius.
-- [ ] **Meteor** (Tier 3). At cast: shadow circle on ground that
-      grows for ~0.6s before impact (telegraph), sparking comet
-      trail descending, dust plume + cracks radiating from impact
-      point, screen shake.
-- [ ] **Gravital Anomaly** (Tier 2). Pulse-spawning small wells.
-      Each pull well needs a faint connection thread back to the
-      player, and a "pop" when it expires.
-
-## Tier 1 ability polish
-
-- [ ] **Fireball** — currently a yellow-orange dot. Add a curved-arc
-      lob trail (it's a ranged splash spell), short flame puffs along
-      the arc, ember particles trailing. Spec **Hydra** spawns nothing
-      visually — needs a tiny "head" sprite (orange triangle with eye?)
-      that lasts 6s then fades.
-- [ ] **Chain Lightning** — `drawLightnings` works but is monochrome.
-      Add an electric-blue inner core + warm-white outer halo, slight
-      jitter offsets per frame, particle sparks at each chain endpoint.
-- [ ] **Frost Bolt** — straight pierce projectile. Add a rotating ice
-      crystal sprite, frost mist trail (cyan particles fading), screen
-      tint when piercing (very subtle).
-
-## Player / enemy feedback
-
-- [ ] **Player cast flash** — currently `player.castFlash = 0.2` sets
-      a value but isn't read by the renderer. Wire it up: a gold ring
-      pulse around the wizard for 0.2s on each cast (already triggered
-      in `Game.tickSpells`).
-- [ ] **Damage number readability** — `drawDamageNumbers` works, but
-      crit numbers don't pop enough. Suggested: scale from 1.0 → 1.4 →
-      1.0 over the first 0.25s, slight red-shift, gold outline.
-- [ ] **Enemy "RESIST" / "VULN" tags** — these are emitted from
-      `Enemy.takeDamage` when a damage type is mismatched but the
-      visual is just text. Add a brief shimmer over the enemy when
-      resisting (pearlescent flash) or a subtle red overlay on vuln.
-- [ ] **Enemy spawn telegraph** — `drawSpawnZones` exists but is
-      static. Add a 0.4s "dust kicks up" particle flurry at each
-      spawn site for the wave start so the player tracks where the
-      pressure is coming from.
-- [ ] **Boss spawn** — currently just bigger HP. Add a ground-crack
-      animation expanding from spawn point + a dark mist trail
-      behind the boss as it walks.
-
-## HUD / overlays
-
-- [ ] **Wave banner** has CSS in place but the animation curve is
-      flat. Make it slide in from above with a brief overshoot
-      (cubic-bezier easing), settle, then fade.
-- [ ] **Level-up panel** (lu-panel) — when a pip is filled, it pops
-      in instantly. Add a 0.18s scale-in animation + a subtle ink
-      splash particle behind the pip.
-- [ ] **Tier picker** cards have hover lift but no entrance animation.
-      Stagger them in 0.06s apart, sliding up from +12px with fade.
-- [ ] **Game over** screen is a flat overlay. Add a slow desaturation
-      pass on the canvas behind it (currently the canvas keeps
-      drawing in full colour through the overlay).
-
-## Background / environment
-
-- [ ] **Background** (`drawBackground`) is a flat parchment. Consider:
-      a slow-drifting smog layer, occasional flickers (lantern light?)
-      at the corners, faint ink-blot stains that fade in/out.
-- [ ] **Spawn zones** — the chevrons (`drawSpawnChevrons`) are
-      decent but always on. Make them pulse stronger 0.5s before
-      a wave starts, then dim during the wave.
-- [ ] **Camera shake** — `addShake` is wired, but big ultimates
-      (Meteor, Pyroclasm) deserve a 0.3-0.5s shake, not the same
-      0.18s as a basic crit.
-
-## Sound (out of scope but listing)
-
-The game is silent. If/when audio is added: cast SFX per ability,
-hit/crit punches, enemy death thuds, wave-clear chime, level-up
-chime, low rumble for boss waves.
-
-## Code-quality cleanups (renderer-adjacent)
-
-- [ ] Many old draw methods reference removed entity types in their
-      docstrings. A pass over `Renderer` to refresh docstrings would
-      help future contributors.
-- [ ] Some draw methods take `(ctx, list, t)` and others take
-      `(ctx, list, ...extras)`. Standardize argument order.
-- [ ] `drawNinja` is dead — Ninja class is gone for now. Either keep
-      it commented for future class reuse or remove entirely.
-
----
-
-Working order suggestion: knock out **Snow Fort → Fire Shield → Shock
-Tower → Black Hole → Meteor** first — those are the 5 abilities the
-player will look at the most. Then HUD polish. Background last.
+**Working order suggestion:** finish the Optician polish (Burning
+Lens + Lens Array beams + Blinding Flash white-out are the three
+that read poorly right now), then the companion polish, then code
+cleanups.
