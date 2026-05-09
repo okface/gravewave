@@ -3286,7 +3286,7 @@ const ABILITIES = {
     dumps: [
       { id: 'chill',   name: 'Fortify',     desc: '+15% shield HP and chip damage per point.', stat: 'dmgMult',      perPoint: 0.15 },
       { id: 'wider',   name: 'Wider Wall',  desc: '+8% radius per point.',                     stat: 'radiusMult',   perPoint: 0.08 },
-      { id: 'longer',  name: 'Quick Reform', stat: 'durationMult', perPoint: 0.12, invertedDuration: true },
+      { id: 'longer',  name: 'Quick Reform', stat: 'durationMult', perPoint: 0.12, invertedDuration: true, base: 8 },
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
@@ -3867,7 +3867,7 @@ const ABILITIES = {
     dumps: [
       { id: 'polish',    name: 'Polish',    desc: '+12% reflect strength per point.', stat: 'dmgMult',     perPoint: 0.12 },
       { id: 'orbit',     name: 'Orbit',     desc: '+10% orbit radius per point.',     stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'recharge',  name: 'Recharge',  stat: 'durationMult', perPoint: 0.12, invertedDuration: true },
+      { id: 'recharge',  name: 'Recharge',  stat: 'durationMult', perPoint: 0.12, invertedDuration: true, base: 5 },
     ],
     specs: [
       { id: 'hall_of_mirrors', name: 'Hall of Mirrors',
@@ -12921,13 +12921,14 @@ function formatDumpAt(dump, ab, pts) {
       break;
     }
     case 'durationMult': {
-      if (ab && ab.duration) {
+      const baseDur = (ab && ab.duration) || dump.base;
+      if (baseDur) {
         // Inverted-duration stats (Snow Fort Quick Reform, Aegis Recharge):
         // perPoint is "% faster" and divides the base.
         if (dump.invertedDuration) {
-          return `${(ab.duration / Math.max(1.001, 1 + total)).toFixed(1)}s`;
+          return `${(baseDur / Math.max(1.001, 1 + total)).toFixed(1)}s`;
         }
-        return `${(ab.duration * (1 + total)).toFixed(1)}s`;
+        return `${(baseDur * (1 + total)).toFixed(1)}s`;
       }
       break;
     }
@@ -12995,15 +12996,17 @@ function formatDumpPerPoint(dump, ab) {
       if (base) line = `${sign(Math.round(base * pp))}px per dump`;
       break;
     }
-    case 'durationMult':
-      if (ab && ab.duration && ab.duration < 100) {
+    case 'durationMult': {
+      const baseDur = (ab && ab.duration && ab.duration < 100) ? ab.duration : dump.base;
+      if (baseDur) {
         if (dump.invertedDuration) {
           line = `${Math.round(pp * 100)}% faster per dump`;
         } else {
-          line = `${sign(+(ab.duration * pp).toFixed(1))}s duration per dump`;
+          line = `${sign(+(baseDur * pp).toFixed(1))}s duration per dump`;
         }
       }
       break;
+    }
     case 'dmgMult':
       if (ab && ab.damage) line = `${sign(Math.round(ab.damage * pp))} ${ab.damageNote || 'dmg'} per dump`;
       break;
