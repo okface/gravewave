@@ -5509,7 +5509,12 @@ class Game {
           this.spawnFlamePatch(m.targetX, m.targetY,
             radius * 0.85, lc.dur || 4, damage * (lc.dpsFrac || 0.20));
         }
-        Camera.shake(m.apocalypse ? 'catastrophic' : 'heavy');
+        // Smaller meteor (cosmic_storm fragments) shakes less so 3 back-
+        // to-back impacts don't blow the screen out. Apocalypse stacks
+        // a second catastrophic shake on top for emphasis.
+        const small = (m.radius < 130);
+        Camera.shake(small ? 'heavy' : 'catastrophic');
+        if (m.apocalypse) Camera.shake('catastrophic');
         this.meteors.splice(i, 1);
       }
     }
