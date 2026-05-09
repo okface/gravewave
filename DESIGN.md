@@ -5,7 +5,7 @@
 
 ## Core loop
 
-1. Pick a **class** at run start (currently: **Wizard**).
+1. Pick a **class** at run start (**Wizard** or **Optician**).
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
 3. Pick a **Companion** (1 of 4 minions). Stays with you the whole run.
 4. Fight wave 1.
@@ -334,7 +334,7 @@ Same checklist as abilities — to add a new companion: 1 entry in
 `MINIONS`, a `kind` discriminator, a `_tickXxx` and `_drawXxx`
 behavior pair, and you're done. Mods come from `computeMinionMods()`.
 
-## The Optician — second class (in development)
+## The Optician — second class (shipped)
 
 **Role thesis:** A meticulous artificer who manipulates light through
 lenses, mirrors, and shadow. Her power comes from *concentration* —
@@ -364,7 +364,7 @@ defensive-mirror (reflect + blind everything that approaches).
 | ability | shape | core twist |
 |---|---|---|
 | **Prism Burst** | Projectile (splash) | Splits into 3 RGB beams on impact, each beam fans outward through enemies |
-| **Focused Beam** | Instant strike | Damage RAMPS from 30% → 160% as you keep hitting the same target |
+| **Focused Beam** | Continuous beam | DPS RAMPS exponentially 30% → 200% over ~2s of focus on one target |
 | **Burning Lens** | Placed zone | DPS RAMPS over the lens's lifetime — lasts long if undisturbed |
 | **Refraction Bolt** | Piercing line | Beam REFRACTS (angle changes ±15°) on each pierce; blinds on hit |
 
@@ -379,18 +379,23 @@ in their path, each dealing 60% of the splash damage.
   - **Zenith** — beams travel further and bounce off the engagement
     ring back inward once.
 
-**Focused Beam** — `dmg 14 base / cd 0.4s / range engagement ring`.
-Instant beam to nearest enemy. Each consecutive cast on the SAME
-target ramps the damage stack: 30% → 65% → 100% → 130% → 160%.
-Switching targets resets the stack.
-- Dumps: Concentrate (+12% peak dmg/pt), Quick (-5% cd/pt), Wide
-  Lens (+1 grace cast before reset / pt, max 5 — rewards patient ramp).
+**Focused Beam** — `base 32 dps / cd 0.5s / range engagement ring`.
+A CONTINUOUS beam locked on the nearest enemy. cast() refreshes the
+beam intent on cooldown; Game.tickFocusedBeam runs every frame,
+ramping `time-on-target` exponentially:
+  factor(t) = 0.30 + 1.70 × (1 − exp(−t / 0.6))
+  → t=0 30% · t=0.5 110% · t=1.0 162% · t=2.0+ ~200%.
+Switching targets soft-decays the ramp (drop time-on-target by 0.4s
+on a player-driven swap, 0.6s on auto re-acquire).
+- Dumps: Concentrate (+12% beam DPS/pt), Quick (−5% retarget cadence
+  /pt), Wide Lens (+1 grace re-target before the ramp resets/pt, max +5).
 - Specs:
-  - **Magnifier** — peak goes to 220% but takes 2 extra casts to reach.
-  - **Burnthrough** — at 160%, beam pierces and follows a chain of
-    nearby enemies at falloff 0.7×.
-  - **Prism Lens** — at 160%, beam splits into 3 narrower beams that
-    each strike a different nearby enemy.
+  - **Magnifier** — plateau rises to 260% with tau 1.0s (slower climb,
+    higher ceiling — patient elite-killer).
+  - **Burnthrough** — at peak intensity, the beam continuously chains
+    60% of its damage to the nearest other enemy.
+  - **Prism Lens** — at peak intensity, three smaller side-beams
+    continuously strike nearby enemies for 40% damage each.
 
 **Burning Lens** — `dps 18 base / cd 1.8s / radius 90px / life 1.8s`.
 Drops a lens at the densest cluster. DPS ramps from 50% → 150% over
@@ -431,7 +436,9 @@ hit, reflects 80% damage back. Mirrors recharge individually over 5s.
 - Dumps: Polish (+12% reflect strength/pt), Orbit (+10% orbit radius/
   pt), Recharge (+12% faster recharge/pt).
 - Specs:
-  - **Hall of Mirrors** — adds a 2nd orbiting ring (8 mirrors total).
+  - **Hall of Mirrors** — adds a smaller 2nd orbiting ring of 2 mirrors
+    (6 total) with slower 7s recharge so it's frontloaded absorption,
+    not infinite scaling.
   - **Spectrum Aegis** — each reflection blinds the attacker for 3s
     in a 60u radius.
   - **Fortified** — mirrors don't shatter — block 8 hits each, no
@@ -462,8 +469,10 @@ within 200u — pure single-target burst.
     beams, no convergence).
 
 **Lighthouse** — `cd 10s / dps 20 / range 240px / life 8s`. Stationary
-tower with a 360° rotating beam (rotates 0.5s per full circle). Damage
-ticks while beam intersects an enemy.
+tower with a 360° rotating beam (~3.1s per full circle at base
+rotation speed). Beam half-width 0.55 rad (≈32° each side) → realized
+DPS on a stationary enemy is ~7 (advertised 20 dps × ~35% beam-arc
+uptime). Damage ticks while beam intersects an enemy.
 - Dumps: Voltage (+13% dmg/pt), Reach (+10% range/pt), Rotation (+12%
   rotation speed/pt).
 - Specs:
@@ -498,7 +507,8 @@ beam damage.
 - Dumps: Polish (+14% beam dmg/pt), Lattice (+10% mirror spacing/pt),
   Lasting (+12% life/pt).
 - Specs:
-  - **Hexagonal Cage** — 12 mirrors total (denser lattice).
+  - **Hexagonal Cage** — 9 mirrors total (~50% more beam edges, not 100%
+    — kept it from dominating Crystal Cage / Reflective Burst).
   - **Reflective Burst** — when an enemy dies inside, lattice pulses
     for AoE damage.
   - **Crystal Cage** — mirrors function as walls; enemies inside

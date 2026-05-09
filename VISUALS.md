@@ -221,23 +221,47 @@ These are quality-of-life polish, not blockers:
 - ~~Background lantern flickers~~ — added.
 - ~~Tier picker stagger~~ — already animated.
 - ~~Pip pop on level-up~~ — shipped.
+- ~~`pyroclasm` in `SPELL_DAMAGE_TYPES`~~ — purged; explosion-kind tag survives as a separate render enum.
+- ~~`lingeringFlame` dead branch in fireball.cast~~ — deleted.
+- ~~`_safeZoneUntil` legacy permafrost branch~~ — deleted.
+- ~~`w.lightning` storm-singularity dead branch~~ — deleted.
+- ~~Wall of Flame subsystem~~ — never wired, full subsystem deleted.
+- ~~Ninja explosion handlers (slash/smoke/flicker)~~ — deleted with the rest of the ninja-deferred surface.
+- ~~`_beamFlashes` dead system~~ — initialized + ticked + drawn, never produced. Deleted.
+- ~~Lighthouse beam width~~ — was 5.7% uptime → 1.1 realized DPS. Widened to 0.55 rad → ~35% uptime → ~7 realized DPS.
+- ~~Linker propagation runaway~~ — Web at full was +325% damage multiplier. Capped link share at 0.50.
 
 ## Code-quality cleanups (still open)
 
 - [ ] Pass over `Renderer` to refresh docstrings. Some still
       reference removed entities (SmokeBomb / SpringTrap / Caltrops).
-- [ ] `pyroclasm` is in `SPELL_DAMAGE_TYPES` but the spell is gone —
-      can be removed.
-- [ ] `lingeringFlame` behavior flag is checked in fireball.cast but
-      never set by any spec — dead branch.
 - [ ] `drawXxx` arg order — most take `(ctx, list, t)`, some take
       `(ctx, list, player, t)`, one takes `(ctx, list, t, enemies)`.
-      `_currentGame` stash on Renderer was added so subs can access
-      cross-system state — if we keep using that, retire the
-      explicit threading.
+      The `_currentGame` stash on Renderer is the escape hatch for
+      cross-system state. The drift is intentional (each renderer
+      gets exactly what it couples to) so probably leave it.
+- [ ] Particle pools (`_motes`, `_embers`, `_plusGlyphs`) use
+      hardcoded `1/60` dt instead of real frame delta. On 30fps
+      machines particles live ~2× as long. Bounded but inconsistent.
+
+## Open balance items (from second-pass audit)
+
+- [ ] **>13 of 24 specs are auto-picks** (~1.7× value of siblings).
+      Most concerning: Watchtower, Beacon, Crystalline (build-defining
+      rather than choice), Storm God (free AoE every cast).
+- [ ] **Optician has no arcane T1** — typical Optician build has 0
+      arcane abilities, which means Bulwark (arcane neutral) + Hexer
+      combo waves are punishing.
+- [ ] **Meteor T3 underperforms Prism Strike** — 5.3 dps headline vs
+      15.7 dps, both T3. Meteor is the boss-killing archetype but
+      Prism Strike out-damages it 2.75× per cast at shorter cd.
+- [ ] **Drummer Resonance > Triple Time** by ~50% sustained value.
+- [ ] **Fire Shield realized DPS ~9** vs advertised 24 (orb gating —
+      enemy crossing the orbit zone touches ~1 orb at a time, not 3).
+- [ ] **Shock Tower Reach dump** is a trap — tower auto-targets
+      within range, so extending range adds nothing.
 
 ---
 
-**Where we are:** Wizard + Optician + companion art is now at design
-parity. Outstanding items above are nice-to-haves. Code cleanups are
-the next "owed work" — easy gains, low risk.
+**Where we are:** Wizard + Optician + companion art at design parity.
+Most outstanding items are balance polish — see open list above.
