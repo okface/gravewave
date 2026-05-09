@@ -3614,7 +3614,10 @@ const ABILITIES = {
       let beamDmgMul = 1;
       let beamReachMul = 1;
       if (b.spectrum)    beamCount = 7;
-      if (b.searingRed) { beamCount = 1; beamDmgMul = 2.5; beamReachMul = 1.4; }
+      // Searing Red — single focused mega-beam. Bumped to ×3.5 dmg + ×1.6
+      // reach so the 1-beam pick actually competes with 7-beam Spectrum's
+      // total throughput on a clustered target.
+      if (b.searingRed) { beamCount = 1; beamDmgMul = 3.5; beamReachMul = 1.6; }
       const speed = 320;
       game.spawnProjectile({
         x: caster.x, y: caster.y,
@@ -3703,12 +3706,13 @@ const ABILITIES = {
       const dps    = 18 * mods.dmgMult;
       let life = 1.8 * (mods.durationMult || 1);
       let dpsCurve = { start: 0.5, end: 1.5 };
-      if (b.greenhouse) { life *= 2; dpsCurve = { start: 0.75, end: 1.10 }; }
+      if (b.greenhouse) { life *= 2; dpsCurve = { start: 0.85, end: 1.20 }; }
       game.spawnBurningLens({
         x: target.x, y: target.y, radius, dps, life,
         dpsCurve,
         solarForge: !!b.solarForge,
         refractor:  !!b.refractor,
+        greenhouseSlow: !!b.greenhouse,
         spell: 'burning_lens',
       });
       game.spawnExplosion(target.x, target.y, 24, '#ffd66a');
@@ -3720,7 +3724,7 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'greenhouse',  name: 'Greenhouse',
-        desc: 'Lens lasts twice as long but the DPS curve flattens (75% → 110%).',
+        desc: 'Lens lasts twice as long, slows enemies inside by 40%, and the DPS curve climbs higher (85% → 120%).',
         behavior: { greenhouse: true } },
       { id: 'solar_forge', name: 'Solar Forge',
         desc: 'At peak DPS, the lens explodes for 200% of total damage in 1.5× radius.',
@@ -3745,7 +3749,11 @@ const ABILITIES = {
       const baseDmg = 14 * mods.dmgMult;
       const pierce = 2 + (mods.pierceBonus || 0) + (b.bouncing ? 2 : 0);
       const bounceAng = b.bouncing ? 0.78 : 0.26;            // 45° vs 15°
-      const blindStatus = { blind: { duration: 1.5 } };
+      // Mirror Image — the parallel beam is identity-distinct only if it
+      // also delivers DOUBLE blind duration. Otherwise it's just "more
+      // hits", which Bouncing already gives via extra pierce.
+      const blindDuration = b.mirrorImage ? 3.5 : 1.5;
+      const blindStatus = { blind: { duration: blindDuration } };
       const statusToApply = mods.applyStatus
         ? { ...mods.applyStatus, ...blindStatus }
         : blindStatus;
@@ -3786,7 +3794,7 @@ const ABILITIES = {
         desc: 'Bounce angle is now ±45° (sharper deflection). +2 pierce.',
         behavior: { bouncing: true } },
       { id: 'mirror_image', name: 'Mirror Image',
-        desc: 'Splits into 2 parallel beams from the start.',
+        desc: 'Splits into 2 parallel beams from the start, and each hit blinds for 3.5s instead of 1.5s.',
         behavior: { mirrorImage: true } },
       { id: 'shatter',      name: 'Shatter',
         desc: 'Last pierce explodes for AoE damage in 80px.',
@@ -3805,15 +3813,23 @@ const ABILITIES = {
     cooldown: 8.0, damage: 80, damageNote: '%-reflect', radius: 90,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
-      const mirrorCount = 4 + (beh.hallOfMirrors ? 4 : 0);
+      // Hall of Mirrors: adds a second smaller ring of 2 mirrors (6 total)
+      // and slows the recharge a little so it isn't a strict upgrade over
+      // the other specs. Net absorbs/sec ≈ 6/7 = 0.86 vs 4/5 = 0.8 — small
+      // but real, with the upside of more burst absorption frontloaded.
+      const mirrorCountInner = 4;
+      const mirrorCountOuter = beh.hallOfMirrors ? 2 : 0;
       const reflectFrac = beh.fortified ? 0.80 : (0.80 + (mods.dmgMult - 1));
       const radius = 90 * (mods.radiusMult || 1);
-      const recharge = beh.fortified ? 999 : 5 / (mods.durationMult || 1);
+      const recharge = beh.fortified ? 999 : (beh.hallOfMirrors ? 7 : 5) / (mods.durationMult || 1);
       const charges = beh.fortified ? 8 : 1;       // per-mirror charge count
       game.aegisMirrors = game.aegisMirrors || [];
       game.aegisMirrors.length = 0;
       game.aegisMirrors.push(new ReflectiveAegis({
-        caster, mirrorCount, reflectFrac, radius, recharge, charges,
+        caster,
+        mirrorCount: mirrorCountInner,
+        outerMirrorCount: mirrorCountOuter,
+        reflectFrac, radius, recharge, charges,
         rings: beh.hallOfMirrors ? 2 : 1,
         spec: beh,
       }));
@@ -3827,7 +3843,7 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'hall_of_mirrors', name: 'Hall of Mirrors',
-        desc: 'A second orbiting ring of 4 mirrors (8 mirrors total).',
+        desc: 'Adds a second outer ring of 2 mirrors (6 total). Recharge slows to 7s — more frontloaded absorbs, not infinite scaling.',
         behavior: { hallOfMirrors: true } },
       { id: 'spectrum_aegis',  name: 'Spectrum Aegis',
         desc: 'Each reflection blinds the attacker and any enemy in a 60u radius for 3s.',
@@ -3957,7 +3973,7 @@ const ABILITIES = {
         desc: 'Every full rotation, a wide AoE pulse erupts around the tower.',
         behavior: { solarFlare: true } },
       { id: 'beacon',      name: 'Beacon',
-        desc: 'Tower lasts forever, but you can only have one at a time.',
+        desc: 'Tower lasts forever (only one at a time) AND heals you 2 HP/s while you stand in its range.',
         behavior: { beacon: true } },
     ],
   },
@@ -3978,7 +3994,9 @@ const ABILITIES = {
       let life   = 8 * (mods.durationMult || 1);
       let blind  = true;
       let dpsCurve = { start: 0.5, end: 2.0 };
-      if (beh.totalEclipse) { radius *= 1.5; blind = false; dpsCurve = { start: 0.7, end: 2.0 }; }
+      // Total Eclipse: trade blind for raw DPS — curve goes 0.8 → 2.5 so
+      // it matches the other specs' total damage even without lockdown.
+      if (beh.totalEclipse) { radius *= 1.5; blind = false; dpsCurve = { start: 0.8, end: 2.5 }; }
       else if (beh.penumbra) { radius *= 0.6; dps *= 2; }
       else if (beh.darkness) { dps = 0; blind = true; life = life; }
       game.solarEclipses = game.solarEclipses || [];
@@ -3998,7 +4016,7 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'total_eclipse', name: 'Total Eclipse',
-        desc: 'Radius ×1.5, but no blind — pure heavy DoT.',
+        desc: 'Radius ×1.5, no blind, but DPS curve climbs higher (80% → 250%). Trade lockdown for raw burn.',
         behavior: { totalEclipse: true } },
       { id: 'penumbra',      name: 'Penumbra',
         desc: 'Radius ×0.6, ×2 DPS. Outer ring slows enemies that approach.',
@@ -4017,7 +4035,10 @@ const ABILITIES = {
     cooldown: 16.0, damage: 8, damageNote: 'dps/edge', radius: 180, duration: 6,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
-      const count = beh.hexagonalCage ? 12 : 6;
+      // Hexagonal Cage: 9 mirrors (50% more edges) instead of 12 (100% more)
+      // so it's a real choice vs Reflective Burst / Crystal Cage rather
+      // than a strict damage upgrade.
+      const count = beh.hexagonalCage ? 9 : 6;
       const radius = 180 * (mods.radiusMult || 1);
       const dps = 8 * mods.dmgMult;
       const life = 6 * (mods.durationMult || 1);
@@ -4038,13 +4059,13 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'hexagonal_cage', name: 'Hexagonal Cage',
-        desc: '12 mirrors instead of 6 — denser lattice, more beam edges.',
+        desc: '9 mirrors instead of 6 — denser lattice, ~50% more beam edges.',
         behavior: { hexagonalCage: true } },
       { id: 'reflective_burst', name: 'Reflective Burst',
         desc: 'When an enemy dies inside the maze, the lattice pulses for AoE damage.',
         behavior: { reflectiveBurst: true } },
       { id: 'crystal_cage',   name: 'Crystal Cage',
-        desc: 'Mirrors function as walls — enemies inside are blocked at the boundary.',
+        desc: 'Mirrors form a hard wall — enemies inside are pinned and shoved back. Bosses are slowed at the wall too.',
         behavior: { crystalCage: true } },
     ],
   },
@@ -4101,7 +4122,10 @@ const ABILITIES = {
       const radius   = 320 * (mods.radiusMult || 1);
       const baseDmg  = 100 * mods.dmgMult * (beh.eternalGlare ? 0.5 : 1) * (beh.searingFlash ? 1.8 : 1);
       const blindDur = (beh.eternalGlare ? 12 : 6) * (mods.durationMult || 1);
-      const cascadeDps = beh.cascadingLight ? 18 * mods.dmgMult : 0;
+      // Cascading Light deals chip damage per second of blind. Tuned so
+      // total cascade dmg < Searing Flash's burst — the choice is "DoT
+      // over the disable" vs "burst with the disable".
+      const cascadeDps = beh.cascadingLight ? 10 * mods.dmgMult : 0;
       for (const e of game.enemies) {
         if (!e.alive) continue;
         if (Vec.dist(caster, e) > radius + e.radius) continue;
@@ -5171,23 +5195,27 @@ class BurningLens {
 class ReflectiveAegis {
   // Mirrors orbiting the player. Each absorbs an incoming hit and
   // reflects a fraction back. Charges recharge individually.
+  // Inner ring: opts.mirrorCount mirrors. Outer ring (Hall spec):
+  // opts.outerMirrorCount mirrors at a wider orbit.
   constructor(opts) {
     Object.assign(this, opts);
     this.t = 0;
     this.angle = Math.random() * TAU;
-    // Per-mirror state. Each mirror = { charge, rechargeAcc, ringIdx, slot }
+    // Per-mirror state. Each mirror = { charge, rechargeAcc, ringIdx, slot, ring }
     this.mirrors = [];
-    for (let r = 0; r < (opts.rings || 1); r++) {
-      const ringMirrors = opts.mirrorCount;
-      for (let i = 0; i < ringMirrors; i++) {
-        this.mirrors.push({
-          ringIdx: r,
-          slot: i,
-          ring: ringMirrors,
-          charge: opts.charges,
-          rechargeAcc: 0,
-        });
-      }
+    const inner = opts.mirrorCount || 4;
+    for (let i = 0; i < inner; i++) {
+      this.mirrors.push({
+        ringIdx: 0, slot: i, ring: inner,
+        charge: opts.charges, rechargeAcc: 0,
+      });
+    }
+    const outer = opts.outerMirrorCount || 0;
+    for (let i = 0; i < outer; i++) {
+      this.mirrors.push({
+        ringIdx: 1, slot: i, ring: outer,
+        charge: opts.charges, rechargeAcc: 0,
+      });
     }
   }
 }
@@ -6472,15 +6500,22 @@ class Game {
       const dpsNow = L.dps * (curve.start + (curve.end - curve.start) * prog);
       L.dmgAcc += dt;
       const tickIv = 0.2;
-      if (L.dmgAcc >= tickIv) {
-        L.dmgAcc = 0;
-        const tickDmg = dpsNow * tickIv;
-        for (const e of this.enemies) {
-          if (!e.alive) continue;
-          if (Vec.dist(L, e) < L.radius + e.radius) {
-            const a = e.takeDamage(tickDmg, { spell: L.spell || 'burning_lens' });
-            this.totalDamageDealt += a;
-          }
+      const wantTick = L.dmgAcc >= tickIv;
+      if (wantTick) L.dmgAcc = 0;
+      const tickDmg = dpsNow * tickIv;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(L, e) >= L.radius + e.radius) continue;
+        if (wantTick) {
+          const a = e.takeDamage(tickDmg, { spell: L.spell || 'burning_lens' });
+          this.totalDamageDealt += a;
+        }
+        // Greenhouse spec — anything inside the lens slows by 40%, so
+        // enemies linger and eat the whole DPS curve. Distinct identity:
+        // "the lens is also a tar-pit", differentiating it from Forge's
+        // detonation and Refractor's mini-lens drop.
+        if (L.greenhouseSlow) {
+          e.applyStatus('slow', { duration: 0.6, factor: 0.6 }, this.runElapsed);
         }
       }
       // Solar Forge — at peak DPS, detonate.
@@ -6681,6 +6716,16 @@ class Game {
           this.addShake(0.18);
         }
       }
+      // Beacon: passive 1.5 HP/sec heal while you're inside its range.
+      // Differentiates it from Twin Lights / Solar Flare which are pure
+      // offence — Beacon is the "park here and recover" pick.
+      if (L.beacon && this.player?.alive && Vec.dist(L, this.player) < L.range) {
+        L._healAcc = (L._healAcc || 0) + dt;
+        if (L._healAcc >= 1.0) {
+          L._healAcc -= 1.0;
+          this.healPlayer(2);
+        }
+      }
     }
   }
 
@@ -6765,18 +6810,22 @@ class Game {
             this.addShake(0.18);
           }
         }
-        // Crystal Cage: enemies inside the maze are blocked at the boundary.
+        // Crystal Cage: enemies inside the maze are HARD-walled at the
+        // boundary. Strong pushback that even bosses feel. The wall only
+        // pushes inward — enemies can still freely walk around outside.
         if (M.crystalCage) {
           const dFromCentre = Vec.dist({ x: M.cx, y: M.cy }, e);
-          if (dFromCentre < M.radius - 4) {
-            // Block egress: push them back toward centre if they try to leave.
-            // Cheap repulsion only at the boundary — tickEnemies has already
-            // run, so we counter their step on the next frame.
-            if (dFromCentre > M.radius * 0.85) {
-              const dir = Vec.norm(Vec.sub({ x: M.cx, y: M.cy }, e));
-              e.pvx += dir.x * 60;
-              e.pvy += dir.y * 60;
-            }
+          if (dFromCentre < M.radius * 1.05 && dFromCentre > M.radius * 0.85) {
+            const dir = Vec.norm(Vec.sub({ x: M.cx, y: M.cy }, e));
+            // Snap them just inside the boundary + apply strong pushback.
+            const targetD = M.radius * 0.85;
+            e.x = M.cx - dir.x * targetD;
+            e.y = M.cy - dir.y * targetD;
+            // Bosses: only nudge (still feel the wall but can chip out
+            // over time). Non-bosses: hard pushback.
+            const force = e.boss ? 80 : 220;
+            e.pvx += dir.x * force;
+            e.pvy += dir.y * force;
           }
         }
       }
