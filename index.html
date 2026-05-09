@@ -4194,6 +4194,21 @@ const ABILITIES = {
   },
 };
 
+/*
+ * Targeting: which abilities NEED an enemy in range to cast usefully.
+ * Defensive/zone abilities (snow fort, fire shield, gravital, halos,
+ * lighthouses, lens array, mirror maze, blinding flash, aegis, eclipse)
+ * can fire freely on cooldown. Targeted attacks + nukes hold their
+ * cooldown at threshold and re-attempt every frame until a target is
+ * available, instead of wasting the full cd on a null-target cast.
+ */
+const NEEDS_TARGET_ABILITIES = new Set([
+  'fireball', 'chain_lightning', 'black_hole', 'frost_bolt',
+  'storm_cloud', 'wormhole', 'meteor',
+  'prism_burst', 'focused_beam', 'burning_lens', 'refraction_bolt',
+  'prism_strike',
+]);
+
 
 /* --- Damage Types ------------------------------------------------------
  * Every spell has one of three damage types:
@@ -4474,7 +4489,9 @@ const MINIONS = {
     ],
     spawn: (game, player) => ({
       kind: 'decoy',
-      x: player.x, y: player.y,
+      // Sit 75px ahead-and-up of the player so the taunt circle actually
+      // pulls enemies AWAY from us, and the model isn't hidden behind us.
+      x: player.x + 75, y: player.y - 75,
       hp: 120, maxHp: 120,
       respawnAcc: 0,
       respawnTime: 6,
@@ -5439,8 +5456,16 @@ class WaveManager {
     // Reset per-wave item flags (Abyssal Mantle "spared once" cooldown).
     if (this.game.player) this.game.player._mantleUsedThisWave = false;
     // Re-arm once-per-wave spells (Time Dilation, Doom Sigil, Howl).
+    // Also prime cdAcc to its threshold so the first cast of the wave
+    // fires on the next eligible frame rather than after a full cd
+    // wait — eliminates the awkward "wave just started, nothing's
+    // happening" dead time.
     if (this.game.activeSpells) {
-      for (const s of this.game.activeSpells) s.castThisWave = false;
+      for (const s of this.game.activeSpells) {
+        s.castThisWave = false;
+        const cd = this.game.computeAbilityCooldown(s.id);
+        s.cdAcc = cd;
+      }
     }
     this.game.waveStartT = this.game.runElapsed; // renderer uses for chevron pulse boost
     Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
@@ -6049,8 +6074,11 @@ class Game {
    * axis, minus a small margin so we're not targeting things off-screen.
    */
   combatRadius() {
+    // Cap reaches just past the spawn line — enemies become targetable
+    // as soon as they enter the world, not only when they cross some
+    // inner boundary.
     const long = Math.max(this.width || 0, this.height || 0);
-    return long * 0.5 - 24;
+    return long * 0.5 + (CONFIG.spawn.edgePadding + 8);
   }
   findNearestEnemy(from) {
     const cap = this.combatRadius();
@@ -7283,7 +7311,10 @@ class Game {
 
   _respawnDecoy(m) {
     if (!this.player) return;
-    m.x = this.player.x; m.y = this.player.y;
+    // Same offset as initial spawn — re-anchor 75px ahead-and-up so
+    // it doesn't materialize inside us.
+    m.x = this.player.x + 75;
+    m.y = this.player.y - 75;
     m.hp = m.maxHp;
     m.alive = true;
     m.respawnAcc = 0;
@@ -7418,18 +7449,27 @@ class Game {
       if (!ab) continue;
       const cd = this.computeAbilityCooldown(s.id);
       s.cdAcc += dt;
-      if (s.cdAcc >= cd) {
-        s.cdAcc = 0;
-        const mods = this.computeAbilityMods(s.id);
-        // Drummer Vigor aura — flat % damage bonus to every cast.
-        const vigor = this.player?._drummerAura?.vigor || 0;
-        if (vigor > 0) mods.dmgMult *= (1 + vigor);
-        // Snow Fort Crystalline spec — bonus crit while fort is alive.
-        const fortCrit = this.player?._fortCritBonus || 0;
-        if (fortCrit > 0) mods.critChance = Math.min(1, (mods.critChance || 0) + fortCrit);
-        ab.cast(this, this.player, mods);
-        this.player.castFlash = 0.2;
+      if (s.cdAcc < cd) continue;
+      // Some abilities NEED an enemy to target (T1 attacks + targeted
+      // T3s). Without one, the cast() bails — but we used to reset the
+      // cooldown anyway, which meant 1.5s of fireball downtime when no
+      // enemy was in range. Hold the cooldown at threshold so the spell
+      // fires on the very next frame an enemy walks into range.
+      const needsTarget = NEEDS_TARGET_ABILITIES.has(ab.id);
+      if (needsTarget && !this.findNearestEnemy(this.player)) {
+        s.cdAcc = cd;        // pinned: retry every frame, no spam waste
+        continue;
       }
+      s.cdAcc = 0;
+      const mods = this.computeAbilityMods(s.id);
+      // Drummer Vigor aura — flat % damage bonus to every cast.
+      const vigor = this.player?._drummerAura?.vigor || 0;
+      if (vigor > 0) mods.dmgMult *= (1 + vigor);
+      // Snow Fort Crystalline spec — bonus crit while fort is alive.
+      const fortCrit = this.player?._fortCritBonus || 0;
+      if (fortCrit > 0) mods.critChance = Math.min(1, (mods.critChance || 0) + fortCrit);
+      ab.cast(this, this.player, mods);
+      this.player.castFlash = 0.2;
     }
   }
 
