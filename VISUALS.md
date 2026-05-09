@@ -4,16 +4,48 @@
 > add new asks as we discover them. The renderer is in `index.html`
 > under `const Renderer = { ... }`.
 
+---
+
+## ⚠️ Handoff process — read this before starting a visual session
+
+**Claude Design bundles ship in two layers** and we've been missing the
+bottom one:
+
+1. **The handoff markdown** (`OPTICIAN_HANDOFF.md`, `HANDOFF.md`) — these
+   list **deltas** to add on top of the existing art. They assume the
+   *base* render is already canonical.
+2. **`art-lab-v*.js`** in the bundle's `project/` dir — this is the
+   actual canvas-draw source for every spell + companion. The handoff
+   markdown imports these implicitly. If a section says
+   "polish bullets: paper halo, breath wobble, cadence pip", that's
+   the polish ON TOP of the full geometry in `compMenderWisp` / etc.
+
+**The mistake we've made repeatedly:** treating the markdown as the
+whole spec, implementing only the polish bullets, skipping the
+underlying lab JS. The result is placeholder-grade companions and
+spells that look nothing like the design mocks.
+
+**Process going forward:**
+1. Open `.codex_design*/project/art-lab-v*.js` and find the relevant
+   function (e.g. `compWarDrummer`, `spellHydra`).
+2. Port that function's geometry as the **baseline** render.
+3. Apply the handoff markdown's polish bullets **on top** of that baseline.
+4. Then verify nothing in the markdown's "common pitfalls" or
+   "acceptance" sections is violated.
+
+The two `.codex_design*/` directories in the repo are the canonical
+references — don't delete them.
+
+---
+
 ## Established design language (lock these in)
 
 The look is **woodcut on aged parchment** — ink linework over a warm
 vellum background, gold sigils, vermilion danger marks, indigo for
 frost / electric cores / arcane wards. Avoid soft glow gradients
-unless they're paying for a specific moment (block flash, comet
-core, lens body).
+unless they're paying for a specific moment.
 
-Canonical palette (mirrored in `art-lab-v3.js` `PAL` constant in the
-`.codex_design/project/` bundle):
+Canonical palette (`PAL` constant in `index.html`):
 
 ```
 paper    #e8dcc0  paper2 #ddcfae  paper3 #c8b88c
@@ -24,192 +56,188 @@ gold     #c8941a  goldLight #e8b840
 violet   #6a3a8a  (gravity-only)
 ```
 
-Camera shake fingerprints (use `Camera.shake('light'/'medium'/
-'heavy'/'catastrophic')`): light(2/0.12s) · medium(5/0.22s) · heavy
-(9/0.40s) · catastrophic(14/0.70s). Catastrophic is reserved for the
-single biggest event of the moment (Meteor impact, Apocalypse).
+**Optician extension** (light/mirror/shadow vocabulary):
 
-**Top-down arena.** This is the hard rule the codex bundle violates
-in places: the camera is always looking *down*. Anything drawn from
-"the side" (cloud-as-silhouette-above-AoE-ring, lighthouse with a
-ground shadow ellipse, decoy effigy as a totem) is a translation
-mistake. When porting from the bundle, re-think geometry to read
-top-down — clouds are translucent discs you look *through*, not
-overhead silhouettes.
+```
+warm     #e8b840  hot      #fff3c8  amber    #d68a1e
+silver   #c8c4ba  silverHi #f0ecde  silverLo #8a8678
+eclipse  #2a1c2e  umbra    #5a3a6a
+```
+
+**Camera shake:** `Camera.shake('light' / 'medium' / 'heavy' /
+'catastrophic')`. Catastrophic is reserved for one-event-of-the-moment
+(Meteor impact, Apocalypse).
+
+**Top-down arena.** The camera always looks down. Anything drawn from
+"the side" is a translation mistake — clouds are translucent discs
+you look *through*, not silhouettes above an AoE ring.
+
+**Engagement boundary.** Targeted abilities cap at the long-axis
+spawn line + edge padding (`combatRadius()` in Game). Player-side
+auto-target uses this; entity-scoped targeting (turrets, wells with
+their own `range`) bypasses it via `findNearestEnemyTo`. The boundary
+renders as **two horizontal dashed lines** at top + bottom of the
+targeting cone (because spawns are vertical), not a circle.
+
+---
 
 ## Wizard ability art — shipped from the design bundle
 
-All ported from `.codex_design/project/art-lab-v3.js`. If you want
-to tweak: edit the corresponding `Renderer.draw…` method in
-`index.html`. Search by name.
+All ported from `.codex_design/project/art-lab-v3.js`.
 
-- [x] **Snow Fort** — hex with frost-crystal diamond posts, dashed
-      indigo inner wall, drifting flake particles, paper-clipped
-      hatch interior. Recharge state shows a `REFORMING` arc.
+- [x] **Snow Fort** — hex with paper-fill + indigo hatch + dashed
+      indigo inner wall + diamond crystal posts at vertices.
+      Recharging shows REFORMING arc.
 - [x] **Fire Shield** — vermilion orbs (ink core + gold highlight)
-      on elliptical orbit, analytic flame ribbons, gold pulse on
-      block, ⬨ charge marks above the player.
-- [x] **Shock Tower** — woodcut paper pillar with clipped ink hatch,
-      ink coil head, gold flicker eye + antenna rods + crackle dot,
-      dashed gold range halo pulsing per cast.
-- [x] **Black Hole** (gravity_bolt cast → wells) — ink pull halo,
-      8 light-bend arcs, 64-segment spinning accretion disk (gold
-      every 8th + bright inner ring), spiral motes, ink event
-      horizon with bright photon ring.
-- [x] **Gravital Anomaly** (small wells) — dashed quadratic tether
-      to player, indigo pull ring + 5 spiral ticks, vermilion pop +
-      6 spark dots on expire.
-- [x] **Storm Cloud** — TOP-DOWN translucent disc (we look through
-      it). 4 inner puff orbs orbiting slowly, paper-hatch fur, gold
-      shimmer flash, jagged forking strike from center to target
-      with bright spark + 6-point gold scorch star, frayed ink rim.
+      on elliptical orbit + analytic flame ribbons + gold pulse on
+      block + ⬨ charge marks above the player.
+- [x] **Shock Tower** — woodcut paper pillar + clipped ink hatch +
+      ink coil head + gold flicker eye + antenna rods + dashed gold
+      range halo pulsing per cast.
+- [x] **Black Hole** — ink pull halo + 8 light-bend arcs + 64-segment
+      spinning accretion disk (gold every 8th + bright inner ring) +
+      spiral motes + ink event horizon with bright photon ring.
+- [x] **Gravital Anomaly** — dashed quadratic tether to player +
+      indigo pull ring + 5 spiral ticks + vermilion pop + 6 spark
+      dots on expire.
+- [x] **Storm Cloud** — TOP-DOWN translucent disc you look through.
+      4 inner puff orbs + paper-hatch fur + gold disc-flash + jagged
+      forking strikes + 6-point gold scorch star + frayed ink rim.
 - [x] **Wormhole** — radial pinch (ink → indigo → 0) + ink ring +
-      spinning logarithmic spiral (indigo) + center pip + star
-      marker (vermilion A / gold B). Default seam is a wavy dashed
-      ink line that flows; Echo spec replaces it with a pulsing
-      kill-beam.
-- [x] **Meteor** — proper telegraph (ink shadow disc + 3 staggered
-      vermilion warning rings + NSEW crosshair), 12-sample analytic
-      comet trail, vermilion comet body with gold core + ink rim +
-      4 trailing gold sparks. Impact handled by `spawnExplosion` +
-      `Camera.shake('catastrophic')` from `tickMeteors`.
-- [x] **Snow Storm** — pale frost fill + double-clipped indigo
-      hatch (5px @ PI/3.5 + 7px @ -PI/4.5), dashed indigo perimeter
-      flowing -t*10, 50 falling 3-line crossed flakes, 4 sweeping
-      gust whips (pale main + indigo trailing line).
-- [x] **Hydra Head** (Fireball spec) — small ink+vermilion serpent
-      head with eye flicker + life bar above.
-- [x] **Engagement ring** — faint dotted vermilion circle around
-      player, marks the auto-target boundary so the player can see
-      what their abilities will reach.
+      spinning logarithmic spiral + center pip + star marker
+      (vermilion A / gold B). Wavy dashed seam between portals; Echo
+      spec replaces seam with pulsing kill-beam.
+- [x] **Meteor** — telegraph (ink shadow + 3 vermilion warning rings
+      + NSEW crosshair) + 12-sample analytic comet trail + vermilion
+      body with gold core + ink rim + 4 trailing gold sparks.
+- [x] **Snow Storm** — pale frost fill + double-clipped indigo hatch
+      + dashed indigo perimeter (-t*10 flow) + 50 falling 3-line
+      crossed flakes + 4 sweeping gust whips.
+- [x] **Hydra Head** (Fireball spec) — full port: triangle body
+      (vermilion + ink) + gold inner ember + ink eye dot inside
+      ember + hatched neck stalks + dashed vermilion charge ring.
+- [x] **Engagement boundary** — two horizontal dashed lines at the
+      targeting cap, vermilion, flowing.
 
-## Tier 1 attack art — done
+## Tier 1 attack art — shipped
 
-- [x] **Fireball** — projectile with fire trail particles, splash
-      explosion, Conflagration flame patch (deprecated keystone but
-      patches still render).
-- [x] **Chain Lightning** — electric-blue + gold double-stroke,
-      jitter offsets per segment, endpoint particle bursts.
-- [x] **Frost Bolt** — frost crystal with cyan trail, splinter
-      fragments on Shatter spec.
+- [x] **Fireball** — projectile with fire trail + brown-grey smoke
+      puffs (per-design dust pattern) + ember floaters + splash
+      explosion.
+- [x] **Chain Lightning** — electric-blue + gold double-stroke +
+      jitter offsets per segment + endpoint particle bursts.
+- [x] **Frost Bolt** — frost crystal with cyan trail; Shatter spec
+      splits into 3 fragments.
 
-## Optician ability art — first pass shipped, polish pending
+## Optician ability art — shipped (priority 1-11 from OPTICIAN_HANDOFF)
 
-Optician is the second class. Each entity has its own draw method.
-The first pass works but uses simpler primitives than the Wizard's
-ported versions. Worth a polish pass that gives Optician its own
-woodcut vocabulary (gold/white-hot for light, mirror silver for
-arcane, dark-eclipse purple for shadow).
+- [x] **Burning Lens** — scorch disc growing with ramp + dashed gold
+      ground halo + vertical-gradient light cone + silver lens disc
+      (ink frame + top-left highlight + warm pip + ink handle).
+- [x] **Lens Array** — circular lens sprites with mirror frame +
+      pivot tang aimed at player + warm/ink center pip; beams now
+      use dedicated `drawLensBeam` helper (warm halo + amber mid +
+      hot core gated above 0.6); convergence shimmer at target.
+- [x] **Blinding Flash** — true white-out: full-canvas paper wash
+      drawn outside camera-shake + 3 staggered radial blind-rings +
+      8-ray gold star.
+- [x] **Reflective Aegis** — hand-mirror sprites (silver fill +
+      highlight strip + ink frame + corner nubs + diagonal sheen at
+      full); Hall of Mirrors outer ring distinguished via 3 diffs
+      (smaller, +π/8 cant, silverLo frame); silver consume-pulse +
+      gold confirm spark.
+- [x] **Solar Halo** — bumped ground wash + dashed warm perimeter;
+      Eclipse spec proper "ring of fire" (eclipse disc + umbra
+      corona + white-hot rim + cardinal ink spike rays).
+- [x] **Lighthouse** — arc-bounded wedge (top-down) with linear
+      gradient along aim axis + pulsing centerline + lamp pip.
+- [x] **Solar Eclipse** — disc alpha + rim alpha/width + dash flow
+      speed all bind to ramp; white-hot crescent at ramp > 0.7.
+- [x] **Mirror Maze** — beams shifted to warm yellow; nodes as 4×4
+      silver squares tilted 45°; Crystal Cage spec arcs at boundary
+      (dashed indigo, capped at 6).
+- [x] **Prism Strike** — 60ms blow-out at impact (white-hot pillar
+      wash + 6-ray gold ground star) + telegraph + descending pillar.
+- [x] **Focused Beam** — three-layer continuous ray (warm halo +
+      orange mid + white-hot core) + heat shimmer at tip when
+      intensity > 0.7 + flickering crackle at peak.
+- [x] **Prism Burst** — thicker mid-stroke (2.2px) + white-hot inner
+      core during 0.08s blow-out + 4-line endpoint sparks (hot →
+      warm fade).
 
-- [ ] **Burning Lens** — currently a heat-haze ring + simple lens
-      ellipse + sun rays. Could read more "magnifying glass focused
-      beam burning the ground": a real lens disc with a focused
-      light cone hitting the ground + scorched circle that grows
-      with the ramp curve.
-- [ ] **Reflective Aegis** — small white-rectangle mirrors orbiting
-      the player. Should be a more substantial mirror sprite
-      (silver fill + ink frame + paper highlight to read like a
-      hand mirror). Reflection flashes when a charge is consumed
-      could borrow from the Fire Shield gold-pulse pattern.
-- [ ] **Solar Halo** — sun orb above the player with rays. Decent.
-      Could add a faint warm-yellow ground wash (currently has the
-      radial gradient but it could pop more). Eclipse spec needs a
-      darker, more sinister visual swap.
-- [ ] **Lens Array** — 3 ellipse lenses orbit the player. Beams
-      currently routed through `this.lightnings` (which were tuned
-      for Chain Lightning — orange/blue) so the converged-beam look
-      is muddy. A dedicated `drawLensBeam` that draws thick warm-
-      yellow→white-hot beams from each lens to the target would
-      read better.
-- [ ] **Lighthouse** — paper pillar + lamp + cone beam with bright
-      centerline. Decent but the cone is a flat triangle — could
-      use a soft gradient + slight pulse.
-- [ ] **Solar Eclipse** — radial wash + dashed ring. Works but the
-      RAMPING DPS isn't visualized — the disc should visibly grow
-      brighter as the ramp climbs.
-- [ ] **Mirror Maze** — line lattice. Functional. Crystal Cage spec
-      should make the wall *read as a wall* — maybe add little
-      indigo "force-field" arcs between mirrors when an enemy
-      bumps the boundary.
-- [ ] **Prism Strike** — pillar of light from above + telegraph
-      ring. Decent but very fast (0.55s). Could use a brighter
-      blow-out at impact.
-- [ ] **Focused Beam** (continuous ray) — three-layer beam (warm
-      halo + orange mid + white-hot core) plus crackle at peak.
-      Already pretty good. Might want a small heat shimmer at
-      impact point.
-- [ ] **Blinding Flash** — currently the spawnExplosion default.
-      Should be a true white-out: full-canvas paper flash that
-      fades over ~0.3s + radial blind-rings expanding outward.
-- [ ] **Prism Burst beams** — instant rays in 7 colors at peak
-      Spectrum. The colors are correct but the lines could be
-      thicker + have a brief endpoint spark.
+## Companion art — full ports from art-lab-v4.js
+
+- [x] **Sigil Linker** — quadratic-curve threads with wandering
+      mid-point + 2-pass render (vermilion glow under + ink line on
+      top); rotating HEXAGRAM body (two interlocked triangles in a
+      ring + halo + center red pip); cascade beads with vermilion
+      outer + gold inner core.
+- [x] **Decoy Effigy** — full straw mannequin: stake + burlap rect
+      body with cross-stitches + vermilion twine belt + twig arms +
+      burlap-sack head with X eyes + stitched red mouth + crown-of-
+      thorns horns; pulsing taunt bands; strain phase below 30% HP
+      (wobble + cracks + leaking embers); detonate animation (fill
+      flash + 14 straw shards + ink puff).
+- [x] **Mender Wisp** — 7-dot analytic past-position trail +
+      breathing paper halo + paper core + warm-gold cross + dashed
+      cadence pip with gold arc filling 0→TAU; on heal pulse: 4-stroke
+      gold ribbon + 3 plus glyphs at player + concentric gold pulse.
+- [x] **War Drummer** — full drum cylinder + animated stick striking
+      on beat + glyph stamp on skin (sword/shield/wing for V/W/H) +
+      aura-color X laces + ink legs + ink shadow; aura field around
+      player; beat-ring decay (3 alive at once); aura banner above
+      player with name + underline.
 
 ## Status / hit visuals — shipped
 
-- [x] **Player cast flash** — gold ring pulse on `castFlash > 0`.
-- [x] **Damage number readability** — crits scale + gold outline.
-- [x] **RESIST / VULN tags** — pearlescent shimmer on resist,
-      red wash on vuln (with rgba shimmer overlay).
-- [x] **Enemy death** — particle burst + ring.
-- [x] **Boss spawn** — telegraph + mist trail + ground crack.
-- [x] **Game over** — slow desaturation pass + smog overlay.
-- [x] **Wave banner** — overshoot + settle.
-- [x] **Spawn zones** — chevrons pulse stronger near wave start.
-- [x] **Blind status** — pulsing white veil + ✕ eyes (Optician).
+- [x] Player cast flash, damage number readability, RESIST/VULN tags,
+      enemy death burst, boss spawn telegraph, game-over desat,
+      wave banner overshoot, spawn-zone chevrons, Blind status veil.
 
-## Outstanding asks
+## Outstanding / nice-to-have
 
-- [ ] **Reflective Aegis spec — Hall of Mirrors** — the second ring
-      of mirrors should be visually distinct from the inner ring.
-      Currently they look identical. Maybe smaller mirrors at a
-      slightly different tilt, or a different stroke color.
-- [ ] **Mender Wisp** companion — current visual is a small green
-      cross. Could be a tiny floating spirit (paper flame? ✚-rune
-      with a pale halo?).
-- [ ] **War Drummer** companion — the cycling-aura state isn't
-      strongly readable. The active aura (vigor/ward/haste) should
-      flash a colored pulse on the player on each beat.
-- [ ] **Sigil Linker** companion — link threads currently are flat
-      dashed lines. Could pulse along the chain when damage is
-      shared (small mote travelling along the line).
-- [ ] **Shock Tower watchtower spec (permanent)** — there's no
-      visual cue that this tower won't expire. A faint ground
-      anchor / additional cardinal sigils around the base would
-      help.
-- [ ] **Snow Fort permafrost patches** — when the fort breaks and
-      Permafrost spec drops a lingering icy patch, it currently
-      looks identical to a tiny fort. Could be more clearly a
-      "ground patch" (no walls, just a frosted disc with hatch).
+These are quality-of-life polish, not blockers:
+
+- [ ] **Decoy taunt** — currently spawns at `(player.x + 75, player.y - 75)`.
+      Could be smarter: sample direction toward `findEnemyCluster` so
+      it always sits "between you and the swarm".
+- [ ] **War Drummer aura banner** — currently always renders. Should
+      slide in / out on aura swap (sub < 0.1 / sub > 0.9 like the lab
+      version) so the swap is readable.
+- [ ] **Snow Fort permafrost** — patch already drops the wall geometry
+      and uses ground-frost style. Could add tiny snowflake spawns
+      inside the patch for life.
+- [ ] **Lens Array Hall of Mirrors** — design has the smaller outer
+      mirrors at +π/8 cant which we did. Could go further with a
+      slight color tint difference if it still doesn't read distinct.
+- [ ] **Linker thread cap when many enemies** — design connects
+      sigil → each enemy. With Web spec at +3, that's 6 threads
+      from one sigil — verify it doesn't get visually noisy.
 
 ## Retired / no-op
 
-These were on the list but the underlying feature is gone or the
-work is shipped:
-
 - ~~Pyroclasm~~ — spell removed.
-- ~~Ninja class draws~~ — class deferred; supporting draws are dead
-  code that can be deleted.
-- ~~Background lantern flickers~~ — added (corner lanterns +
-  drifting smog).
-- ~~Tier picker stagger~~ — already animated (`animationDelay` on
-  cards).
+- ~~Ninja class draws~~ — class deferred; `drawNinja` now stubbed.
+- ~~Background lantern flickers~~ — added.
+- ~~Tier picker stagger~~ — already animated.
 - ~~Pip pop on level-up~~ — shipped.
 
 ## Code-quality cleanups (still open)
 
-- [ ] Pass over `Renderer` to refresh docstrings. Many reference
-      removed entities (e.g. SmokeBomb / SpringTrap / Caltrops).
-- [ ] `drawNinja` (if it still exists) — delete; Ninja class is
-      deferred indefinitely.
-- [ ] Standardize arg order across `drawXxx` — most take `(ctx,
-      list, t)`; a few take `(ctx, list, player, t)` because they
-      need the player position. Document that `player` arg or pull
-      from `game.player` inside.
+- [ ] Pass over `Renderer` to refresh docstrings. Some still
+      reference removed entities (SmokeBomb / SpringTrap / Caltrops).
+- [ ] `pyroclasm` is in `SPELL_DAMAGE_TYPES` but the spell is gone —
+      can be removed.
+- [ ] `lingeringFlame` behavior flag is checked in fireball.cast but
+      never set by any spec — dead branch.
+- [ ] `drawXxx` arg order — most take `(ctx, list, t)`, some take
+      `(ctx, list, player, t)`, one takes `(ctx, list, t, enemies)`.
+      `_currentGame` stash on Renderer was added so subs can access
+      cross-system state — if we keep using that, retire the
+      explicit threading.
 
 ---
 
-**Working order suggestion:** finish the Optician polish (Burning
-Lens + Lens Array beams + Blinding Flash white-out are the three
-that read poorly right now), then the companion polish, then code
-cleanups.
+**Where we are:** Wizard + Optician + companion art is now at design
+parity. Outstanding items above are nice-to-haves. Code cleanups are
+the next "owed work" — easy gains, low risk.
