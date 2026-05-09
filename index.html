@@ -2633,8 +2633,16 @@ const CHARACTERS = {
     stats: { maxHp: 100, moveSpeed: 0 },
     available: true,
   },
-  // Future classes (e.g. ninja) will follow the same skeleton — see
-  // DESIGN.md "Adding a new class" checklist.
+  optician: {
+    id: 'optician',
+    name: 'The Optician',
+    title: 'Architect of light, lenses, and shadow',
+    description: 'A meticulous artificer who burns enemies down with focused beams that ramp the longer you concentrate fire. Lenses, mirrors, and blinding shadows reshape the geometry of the fight.',
+    color: '#e8c850',
+    accent: '#fff5e0',
+    stats: { maxHp: 90, moveSpeed: 0 },
+    available: true,
+  },
 };
 
 
@@ -3000,6 +3008,102 @@ const SPELLS = {
    * ====================================================== */
 
   // ===== UNIVERSAL =====
+
+  /* ===== OPTICIAN — light spells with ramping concentration =====
+   * Focused Beam lives here so it can read player._beamTarget /
+   * _beamStacks — the "concentrate fire on the same enemy = +damage"
+   * ramp is per-cast state on the player rather than per-projectile.
+   * ============================================================== */
+  focused_beam: {
+    id: 'focused_beam', name: 'Focused Beam',
+    tree: 'light', color: '#ffea99', cooldown: 0.4,
+    cast(game, caster, mods) {
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const b = mods.behavior || {};
+      // Ramp state on the player. Stack 0..STAGES-1.
+      const STAGES_BASE = b.beamMagnifier ? 7 : 5;
+      const RAMP        = b.beamMagnifier
+        ? [0.30, 0.55, 0.80, 1.10, 1.40, 1.75, 2.20]
+        : [0.30, 0.65, 1.00, 1.30, 1.60];
+      // Switch target → reset stacks. "Wide Lens" dump grants `beamGrace`
+      // grace casts — if the same target was hit recently, you don't
+      // lose the stack on a brief miss.
+      if (caster._beamTarget === target && caster._beamTarget?.alive) {
+        caster._beamStacks = Math.min(STAGES_BASE - 1, (caster._beamStacks || 0) + 1);
+      } else {
+        // Soft reset: if grace allows, stacks decay by 1 instead of resetting.
+        const grace = Math.floor(mods.beamGrace || 0);
+        if (caster._beamTarget?.alive && grace > 0 && (caster._beamGraceLeft || 0) > 0) {
+          caster._beamGraceLeft = (caster._beamGraceLeft || 0) - 1;
+          caster._beamStacks = Math.max(0, (caster._beamStacks || 0) - 1);
+        } else {
+          caster._beamStacks = 0;
+          caster._beamGraceLeft = grace;
+          caster._beamTarget = target;
+        }
+        caster._beamTarget = target;
+      }
+      const stage = caster._beamStacks;
+      const factor = RAMP[stage];
+      const baseDmg = 14 * mods.dmgMult * factor;
+      const isPeak = stage === STAGES_BASE - 1;
+      // Crit chance unchanged; peak fires a thicker visual.
+      const isCrit = Math.random() < (mods.critChance || 0);
+      const dmg = isCrit ? baseDmg * mods.critMult : baseDmg;
+      const actual = target.takeDamage(dmg, { spell: 'focused_beam' });
+      game.totalDamageDealt += actual;
+      game.spawnDamageNumber(target.x, target.y - target.radius - 6, actual, isCrit, target);
+      game.lightnings.push({
+        from: { x: caster.x, y: caster.y },
+        to:   { x: target.x, y: target.y },
+        t: 0, life: isPeak ? 0.22 : 0.14, crit: isPeak,
+      });
+      game._beamFlashes = game._beamFlashes || [];
+      game._beamFlashes.push({
+        from: { x: caster.x, y: caster.y },
+        to:   { x: target.x, y: target.y },
+        t: 0, life: 0.18, stage, peak: isPeak,
+      });
+      // Burnthrough: at peak, the beam chains to 2 nearby enemies at 0.7×.
+      if (isPeak && b.beamBurnthrough) {
+        const struck = new Set([target]);
+        let prev = target, falloff = 1;
+        for (let c = 0; c < 2; c++) {
+          let next = null, nextD = 180;
+          for (const e of game.enemies) {
+            if (!e.alive || struck.has(e)) continue;
+            const d = Vec.dist(prev, e);
+            if (d < nextD) { next = e; nextD = d; }
+          }
+          if (!next) break;
+          falloff *= 0.7;
+          const a = next.takeDamage(dmg * falloff, { spell: 'focused_beam' });
+          game.totalDamageDealt += a;
+          game.lightnings.push({ from: { x: prev.x, y: prev.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.16 });
+          struck.add(next);
+          prev = next;
+        }
+      }
+      // Prism Lens: at peak, beam splits into 3 narrower beams to other targets.
+      if (isPeak && b.beamPrismLens) {
+        const struck = new Set([target]);
+        for (let c = 0; c < 3; c++) {
+          let next = null, nextD = 220;
+          for (const e of game.enemies) {
+            if (!e.alive || struck.has(e)) continue;
+            const d = Vec.dist(target, e);
+            if (d < nextD) { next = e; nextD = d; }
+          }
+          if (!next) break;
+          const a = next.takeDamage(dmg * 0.55, { spell: 'focused_beam' });
+          game.totalDamageDealt += a;
+          game.lightnings.push({ from: { x: target.x, y: target.y }, to: { x: next.x, y: next.y }, t: 0, life: 0.16 });
+          struck.add(next);
+        }
+      }
+    },
+  },
 
 };
 
@@ -3483,6 +3587,554 @@ const ABILITIES = {
         behavior: { avalancheFinal: 200 } },
     ],
   },
+
+  // ============================================================
+  // OPTICIAN — TIER 1 ATTACK SPELLS
+  // Theme: light, lenses, prisms, ramping concentration.
+  // Two new mechanics introduced by this class:
+  //   - Ramp: damage builds the longer you stay on a target/zone.
+  //   - Blind: enemy debuff (50% contact-dmg reduction + 30% slow).
+  // ============================================================
+  prism_burst: {
+    id: 'prism_burst', name: 'Prism Burst', tier: 1, classId: 'optician',
+    icon: '✦', tag: 'attack', color: '#ffd66a',
+    description: 'Slow projectile. Splits into 3 RGB beams on impact, each beam fans through enemies in its path. 22 direct + 14 per beam.',
+    damageType: 'elemental',
+    cooldown: 1.5, damage: 22, radius: 80,
+    cast(game, caster, mods) {
+      const target = game.findNearestEnemy(caster);
+      if (!target) return;
+      const dir = Vec.norm(Vec.sub(target, caster));
+      const b = mods.behavior || {};
+      const baseDmg   = 22 * mods.dmgMult;
+      const beamDmg   = 14 * mods.dmgMult;
+      const beamReach = 120 * (mods.radiusMult || 1);
+      // Spectrum: full color wheel (7 beams). Searing Red: 1 focused beam.
+      let beamCount = 3;
+      let beamDmgMul = 1;
+      let beamReachMul = 1;
+      if (b.spectrum)    beamCount = 7;
+      if (b.searingRed) { beamCount = 1; beamDmgMul = 2.5; beamReachMul = 1.4; }
+      const speed = 320;
+      game.spawnProjectile({
+        x: caster.x, y: caster.y,
+        vx: dir.x * speed, vy: dir.y * speed,
+        radius: 9 * (mods.sizeMult || 1),
+        damage: baseDmg,
+        color: '#ffd66a',
+        life: 2.6, pierce: 0,
+        crit: { chance: mods.critChance, mult: mods.critMult },
+        applyStatus: mods.applyStatus,
+        spellBaseDmg: baseDmg,
+        spell: 'prism_burst',
+        onHit: (game, hit) => {
+          // Spawn N colored beam rays radiating outward.
+          const beamPalette = ['#ff5544', '#55ff88', '#5588ff', '#ffaa44', '#ff44ff', '#44ffff', '#ffff44'];
+          for (let k = 0; k < beamCount; k++) {
+            const ang = (k / beamCount) * TAU + Math.random() * 0.18;
+            game.spawnPrismBeam(hit, ang, {
+              dmg: beamDmg * beamDmgMul,
+              reach: beamReach * beamReachMul,
+              color: beamPalette[k % beamPalette.length],
+              applyStatus: mods.applyStatus,
+              zenith: !!b.zenith,
+            });
+          }
+          game.spawnExplosion(hit.x, hit.y, 22, '#ffd66a');
+        },
+        trail: 'fire',
+      });
+    },
+    dumps: [
+      { id: 'heat',    name: 'Heat',    desc: '+12% damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'spread',  name: 'Spread',  desc: '+10% beam reach per point.', stat: 'radiusMult', perPoint: 0.10 },
+      { id: 'quick',   name: 'Quick',   desc: '−5% cooldown per point.', stat: 'cdMult',    perPoint: -0.05 },
+    ],
+    specs: [
+      { id: 'spectrum',    name: 'Spectrum',
+        desc: 'Fires 7 beams in a full color wheel instead of 3.',
+        behavior: { spectrum: true } },
+      { id: 'searingRed',  name: 'Searing Red',
+        desc: 'Only the red beam fires, but for ×2.5 damage and +40% reach.',
+        behavior: { searingRed: true } },
+      { id: 'zenith',      name: 'Zenith',
+        desc: 'Beams travel further and bounce off the engagement ring back inward once.',
+        behavior: { zenith: true } },
+    ],
+  },
+
+  focused_beam: {
+    id: 'focused_beam', name: 'Focused Beam', tier: 1, classId: 'optician',
+    icon: '◎', tag: 'attack', color: '#ffea99',
+    description: 'Instant beam to nearest enemy. Damage RAMPS 30% → 160% as you keep hitting the same target. Switching targets resets.',
+    damageType: 'elemental',
+    cooldown: 0.4, damage: 14,
+    cast: (game, caster, mods) => SPELLS.focused_beam.cast(game, caster, mods),
+    dumps: [
+      { id: 'concentrate', name: 'Concentrate', desc: '+12% peak damage per point.', stat: 'dmgMult', perPoint: 0.12 },
+      { id: 'quick',       name: 'Quick',       desc: '−5% cooldown per point.',     stat: 'cdMult',  perPoint: -0.05 },
+      { id: 'wide_lens',   name: 'Wide Lens',   desc: '+1 grace cast before the ramp resets per point (max +5).',
+        stat: 'beamGrace', perPoint: 1.0 },
+    ],
+    specs: [
+      { id: 'magnifier',  name: 'Magnifier',
+        desc: 'Peak goes to 220% but takes 2 extra ramp steps to reach.',
+        behavior: { beamMagnifier: true } },
+      { id: 'burnthrough', name: 'Burnthrough',
+        desc: 'At max ramp, beam pierces — chains to 2 nearby enemies at 0.7× damage.',
+        behavior: { beamBurnthrough: true } },
+      { id: 'prism_lens', name: 'Prism Lens',
+        desc: 'At max ramp, beam splits into 3 narrower beams that each strike a different nearby enemy.',
+        behavior: { beamPrismLens: true } },
+    ],
+  },
+
+  burning_lens: {
+    id: 'burning_lens', name: 'Burning Lens', tier: 1, classId: 'optician',
+    icon: '◯', tag: 'attack', color: '#ffb84a',
+    description: 'A lens forms at the densest cluster, focusing sunlight. 18 dps RAMPING 50% → 150% over 1.8s.',
+    damageType: 'elemental',
+    cooldown: 1.8, damage: 18, damageNote: 'dps', radius: 90, duration: 1.8,
+    cast(game, caster, mods) {
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      if (!target) return;
+      const b = mods.behavior || {};
+      const radius = 90 * (mods.radiusMult || 1);
+      const dps    = 18 * mods.dmgMult;
+      let life = 1.8 * (mods.durationMult || 1);
+      let dpsCurve = { start: 0.5, end: 1.5 };
+      if (b.greenhouse) { life *= 2; dpsCurve = { start: 0.75, end: 1.10 }; }
+      game.spawnBurningLens({
+        x: target.x, y: target.y, radius, dps, life,
+        dpsCurve,
+        solarForge: !!b.solarForge,
+        refractor:  !!b.refractor,
+        spell: 'burning_lens',
+      });
+      game.spawnExplosion(target.x, target.y, 24, '#ffd66a');
+    },
+    dumps: [
+      { id: 'heat',    name: 'Heat',    desc: '+12% damage per point.',  stat: 'dmgMult',     perPoint: 0.12 },
+      { id: 'wider',   name: 'Wider',   desc: '+8% radius per point.',   stat: 'radiusMult',  perPoint: 0.08 },
+      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'greenhouse',  name: 'Greenhouse',
+        desc: 'Lens lasts twice as long but the DPS curve flattens (75% → 110%).',
+        behavior: { greenhouse: true } },
+      { id: 'solar_forge', name: 'Solar Forge',
+        desc: 'At peak DPS, the lens explodes for 200% of total damage in 1.5× radius.',
+        behavior: { solarForge: true } },
+      { id: 'refractor',   name: 'Refractor',
+        desc: 'When the lens dies, leaves 3 small lenses that each burn for 1s at 40% DPS.',
+        behavior: { refractor: true } },
+    ],
+  },
+
+  refraction_bolt: {
+    id: 'refraction_bolt', name: 'Refraction Bolt', tier: 1, classId: 'optician',
+    icon: '↯', tag: 'attack', color: '#9af0e6',
+    description: 'Beam projectile. 14 dmg per hit, blinds, pierces 2 — bends ±15° on each pierce.',
+    damageType: 'elemental',
+    cooldown: 0.9, damage: 14,
+    cast(game, caster, mods) {
+      const target = game.findFarthestEnemy(caster) || game.findNearestEnemy(caster);
+      if (!target) return;
+      const dir = Vec.norm(Vec.sub(target, caster));
+      const b = mods.behavior || {};
+      const baseDmg = 14 * mods.dmgMult;
+      const pierce = 2 + (mods.pierceBonus || 0) + (b.bouncing ? 2 : 0);
+      const bounceAng = b.bouncing ? 0.78 : 0.26;            // 45° vs 15°
+      const blindStatus = { blind: { duration: 1.5 } };
+      const statusToApply = mods.applyStatus
+        ? { ...mods.applyStatus, ...blindStatus }
+        : blindStatus;
+      const projOpts = {
+        x: caster.x, y: caster.y,
+        vx: dir.x * 480, vy: dir.y * 480,
+        radius: 6 * (mods.sizeMult || 1),
+        damage: baseDmg,
+        color: '#bff5c8',
+        life: 2.0,
+        pierce,
+        crit: { chance: mods.critChance, mult: mods.critMult },
+        applyStatus: statusToApply,
+        spellBaseDmg: baseDmg,
+        spell: 'refraction_bolt',
+        behavior: { refractAng: bounceAng, shatter: !!b.shatter, shatterRadius: 80 * (mods.radiusMult || 1) },
+        trail: 'frost',
+      };
+      game.spawnProjectile(projOpts);
+      // Mirror Image: a parallel sibling beam.
+      if (b.mirrorImage) {
+        // Offset by a perpendicular vector
+        const px = -dir.y, py = dir.x;
+        const off = 22;
+        game.spawnProjectile({
+          ...projOpts,
+          x: caster.x + px * off, y: caster.y + py * off,
+        });
+      }
+    },
+    dumps: [
+      { id: 'cold_light', name: 'Cold Light', desc: '+12% damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'pierce',     name: 'Pierce',     desc: '+1 pierce per point (max +5).', stat: 'pierceBonus', perPoint: 1.0 },
+      { id: 'quick',      name: 'Quick',      desc: '−5% cooldown per point.', stat: 'cdMult',    perPoint: -0.05 },
+    ],
+    specs: [
+      { id: 'bouncing',     name: 'Bouncing',
+        desc: 'Bounce angle is now ±45° (sharper deflection). +2 pierce.',
+        behavior: { bouncing: true } },
+      { id: 'mirror_image', name: 'Mirror Image',
+        desc: 'Splits into 2 parallel beams from the start.',
+        behavior: { mirrorImage: true } },
+      { id: 'shatter',      name: 'Shatter',
+        desc: 'Last pierce explodes for AoE damage in 80px.',
+        behavior: { shatter: true } },
+    ],
+  },
+
+  // ============================================================
+  // OPTICIAN — TIER 2 DEFENSIVE SPELLS
+  // ============================================================
+  reflective_aegis: {
+    id: 'reflective_aegis', name: 'Reflective Aegis', tier: 2, classId: 'optician',
+    icon: '◈', tag: 'defensive', color: '#dcecff',
+    description: '4 mirrors orbit you. Each absorbs an incoming hit and reflects 80% damage back. Recharge 5s per mirror.',
+    damageType: 'arcane',
+    cooldown: 8.0, damage: 80, damageNote: '%-reflect', radius: 90,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const mirrorCount = 4 + (beh.hallOfMirrors ? 4 : 0);
+      const reflectFrac = beh.fortified ? 0.80 : (0.80 + (mods.dmgMult - 1));
+      const radius = 90 * (mods.radiusMult || 1);
+      const recharge = beh.fortified ? 999 : 5 / (mods.durationMult || 1);
+      const charges = beh.fortified ? 8 : 1;       // per-mirror charge count
+      game.aegisMirrors = game.aegisMirrors || [];
+      game.aegisMirrors.length = 0;
+      game.aegisMirrors.push(new ReflectiveAegis({
+        caster, mirrorCount, reflectFrac, radius, recharge, charges,
+        rings: beh.hallOfMirrors ? 2 : 1,
+        spec: beh,
+      }));
+      caster._aegis = game.aegisMirrors[0];
+      game.spawnExplosion(caster.x, caster.y, radius * 0.6, '#dcecff');
+    },
+    dumps: [
+      { id: 'polish',    name: 'Polish',    desc: '+12% reflect strength per point.', stat: 'dmgMult',     perPoint: 0.12 },
+      { id: 'orbit',     name: 'Orbit',     desc: '+10% orbit radius per point.',     stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'recharge',  name: 'Recharge',  desc: '+12% faster recharge per point.',   stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'hall_of_mirrors', name: 'Hall of Mirrors',
+        desc: 'A second orbiting ring of 4 mirrors (8 mirrors total).',
+        behavior: { hallOfMirrors: true } },
+      { id: 'spectrum_aegis',  name: 'Spectrum Aegis',
+        desc: 'Each reflection blinds the attacker and any enemy in a 60u radius for 3s.',
+        behavior: { spectrumAegis: true } },
+      { id: 'fortified',       name: 'Fortified',
+        desc: 'Mirrors block 8 hits each and never recharge — soak all of it up front.',
+        behavior: { fortified: true } },
+    ],
+  },
+
+  solar_halo: {
+    id: 'solar_halo', name: 'Solar Halo', tier: 2, classId: 'optician',
+    icon: '✺', tag: 'defensive', color: '#ffd66a',
+    description: 'Sunfire halo above you. 16 dps to enemies in contact, blinds them for 1s on touch. 7s.',
+    damageType: 'elemental',
+    cooldown: 9.0, damage: 16, damageNote: 'dps', radius: 80, duration: 7,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const dps = 16 * mods.dmgMult * (beh.infernoHalo ? 1.5 : 1) * (beh.eclipseHalo ? 0 : 1);
+      const radius = 80 * (mods.radiusMult || 1) * (beh.eclipseHalo ? 2.0 : 1);
+      const life = 7 * (mods.durationMult || 1);
+      const blindDur = beh.eclipseHalo ? 3.0 : 1.0;
+      game.solarHalos = game.solarHalos || [];
+      game.solarHalos.length = 0;
+      game.solarHalos.push(new SolarHalo({
+        caster, dps, radius, life, blindDur,
+        coronalBurst: !!beh.coronalBurst, coronalDmg: 60 * mods.dmgMult,
+        infernoHalo:  !!beh.infernoHalo,
+        eclipseHalo:  !!beh.eclipseHalo,
+        spec: beh,
+      }));
+      game.spawnExplosion(caster.x, caster.y, radius, beh.eclipseHalo ? '#3a2a4a' : '#ffd66a');
+    },
+    dumps: [
+      { id: 'flare',   name: 'Flare',   desc: '+13% damage per point.',  stat: 'dmgMult',      perPoint: 0.13 },
+      { id: 'reach',   name: 'Reach',   desc: '+10% radius per point.',  stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'persist', name: 'Persist', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'coronal_burst', name: 'Coronal Burst',
+        desc: 'Every 2s the halo pulses outward for an AoE blast.',
+        behavior: { coronalBurst: true } },
+      { id: 'inferno_halo',  name: 'Inferno Halo',
+        desc: 'Halo burns harder (×1.5 DPS) and applies Ignite to anything it touches.',
+        behavior: { infernoHalo: true } },
+      { id: 'eclipse_halo',  name: 'Eclipse Halo',
+        desc: 'Flips to dark mode: no damage, but radius ×2 and blind duration ×3.',
+        behavior: { eclipseHalo: true } },
+    ],
+  },
+
+  lens_array: {
+    id: 'lens_array', name: 'Lens Array', tier: 2, classId: 'optician',
+    icon: '⛬', tag: 'defensive', color: '#ffea99',
+    description: '3 lenses orbit you. They converge a high-DPS beam on the nearest enemy within 200u. 20 dps × 3 = 60 dps single-target.',
+    damageType: 'elemental',
+    cooldown: 10.0, damage: 20, damageNote: 'dps × 3', radius: 200, duration: 7,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const dps = 20 * mods.dmgMult * (mods.attackRateMult || 1);
+      const range = 200 * (mods.radiusMult || 1);
+      const life = 7 * (mods.durationMult || 1);
+      game.lensArrays = game.lensArrays || [];
+      game.lensArrays.length = 0;
+      game.lensArrays.push(new LensArray({
+        caster, dps, range, life,
+        convergence: !!beh.convergence,
+        rotation:    !!beh.rotation,
+        dispersal:   !!beh.dispersal,
+        spec: beh,
+      }));
+      game.spawnExplosion(caster.x, caster.y, 30, '#ffea99');
+    },
+    dumps: [
+      { id: 'focus',   name: 'Focus',   desc: '+13% beam damage per point.', stat: 'dmgMult',        perPoint: 0.13 },
+      { id: 'reach',   name: 'Reach',   desc: '+10% targeting range per point.', stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'tempo',   name: 'Tempo',   desc: '+10% beam intensity per point.', stat: 'attackRateMult', perPoint: 0.10 },
+    ],
+    specs: [
+      { id: 'convergence', name: 'Convergence',
+        desc: 'All 3 lenses focus one super-beam on the same target (×3 damage to single target).',
+        behavior: { convergence: true } },
+      { id: 'rotation',    name: 'Rotation',
+        desc: 'Lenses rotate around you — beam sweeps a wider arc, hits multiple enemies in a band.',
+        behavior: { rotation: true } },
+      { id: 'dispersal',   name: 'Dispersal',
+        desc: 'Each lens picks a different target — 3 separate beams, no convergence.',
+        behavior: { dispersal: true } },
+    ],
+  },
+
+  lighthouse: {
+    id: 'lighthouse', name: 'Lighthouse', tier: 2, classId: 'optician',
+    icon: '⛯', tag: 'defensive', color: '#ffe066',
+    description: 'Stationary tower with a 360° rotating beam. 20 dps × 240px range × 8s.',
+    damageType: 'elemental',
+    cooldown: 10.0, damage: 20, damageNote: 'dps', radius: 240, duration: 8,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const dps = 20 * mods.dmgMult;
+      const range = 240 * (mods.radiusMult || 1);
+      const rotSpeed = 2.0 * (mods.attackRateMult || 1);     // radians per second
+      const life = beh.beacon ? 9999 : 8 * (mods.durationMult || 1);
+      game.lighthouses = game.lighthouses || [];
+      if (beh.beacon) game.lighthouses.length = 0;
+      const ang = Math.random() * TAU;
+      const dx = Math.cos(ang) * 28, dy = Math.sin(ang) * 28;
+      game.lighthouses.push(new Lighthouse({
+        x: caster.x + dx, y: caster.y + dy,
+        dps, range, rotSpeed, life,
+        twinLights:  !!beh.twinLights,
+        solarFlare:  !!beh.solarFlare, flareDmg: 80 * mods.dmgMult,
+        beacon:      !!beh.beacon,
+        spec: beh,
+      }));
+    },
+    dumps: [
+      { id: 'voltage',  name: 'Voltage',  desc: '+13% beam damage per point.',  stat: 'dmgMult',        perPoint: 0.13 },
+      { id: 'reach',    name: 'Reach',    desc: '+10% range per point.',        stat: 'radiusMult',     perPoint: 0.10 },
+      { id: 'rotation', name: 'Rotation', desc: '+12% rotation speed per point.', stat: 'attackRateMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'twin_lights', name: 'Twin Lights',
+        desc: 'A second opposing beam covers 360° in half the time.',
+        behavior: { twinLights: true } },
+      { id: 'solar_flare', name: 'Solar Flare',
+        desc: 'Every full rotation, a wide AoE pulse erupts around the tower.',
+        behavior: { solarFlare: true } },
+      { id: 'beacon',      name: 'Beacon',
+        desc: 'Tower lasts forever, but you can only have one at a time.',
+        behavior: { beacon: true } },
+    ],
+  },
+
+  // ============================================================
+  // OPTICIAN — TIER 3 ULTIMATE SPELLS
+  // ============================================================
+  solar_eclipse: {
+    id: 'solar_eclipse', name: 'Solar Eclipse', tier: 3, classId: 'optician',
+    icon: '☼', tag: 'ultimate', color: '#ffb84a',
+    description: 'Massive light disk. 22 dps RAMPING 50% → 200% over 8s. Blinds everything inside.',
+    damageType: 'elemental',
+    cooldown: 18.0, damage: 22, damageNote: 'dps', radius: 240, duration: 8,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      let radius = 240 * (mods.radiusMult || 1);
+      let dps    = 22 * mods.dmgMult;
+      let life   = 8 * (mods.durationMult || 1);
+      let blind  = true;
+      let dpsCurve = { start: 0.5, end: 2.0 };
+      if (beh.totalEclipse) { radius *= 1.5; blind = false; dpsCurve = { start: 0.7, end: 2.0 }; }
+      else if (beh.penumbra) { radius *= 0.6; dps *= 2; }
+      else if (beh.darkness) { dps = 0; blind = true; life = life; }
+      game.solarEclipses = game.solarEclipses || [];
+      game.solarEclipses.push(new SolarEclipse({
+        x: caster.x, y: caster.y, radius, dps, life,
+        blind, dpsCurve,
+        penumbra: !!beh.penumbra,
+        darkness: !!beh.darkness,
+        spec: beh,
+      }));
+      game.addShake(0.30);
+    },
+    dumps: [
+      { id: 'heat',    name: 'Heat',    desc: '+14% damage per point.',  stat: 'dmgMult',      perPoint: 0.14 },
+      { id: 'wider',   name: 'Wider',   desc: '+10% radius per point.',  stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'total_eclipse', name: 'Total Eclipse',
+        desc: 'Radius ×1.5, but no blind — pure heavy DoT.',
+        behavior: { totalEclipse: true } },
+      { id: 'penumbra',      name: 'Penumbra',
+        desc: 'Radius ×0.6, ×2 DPS. Outer ring slows enemies that approach.',
+        behavior: { penumbra: true } },
+      { id: 'darkness',      name: 'Darkness',
+        desc: 'Flips to shadow mode: no damage, but blinds enemies for the full duration.',
+        behavior: { darkness: true } },
+    ],
+  },
+
+  mirror_maze: {
+    id: 'mirror_maze', name: 'Mirror Maze', tier: 3, classId: 'optician',
+    icon: '⬡', tag: 'ultimate', color: '#dcecff',
+    description: '6 mirrors form a hexagon around you. Beams between them form a kill mesh. 8 dps per beam edge × 6s.',
+    damageType: 'arcane',
+    cooldown: 16.0, damage: 8, damageNote: 'dps/edge', radius: 180, duration: 6,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const count = beh.hexagonalCage ? 12 : 6;
+      const radius = 180 * (mods.radiusMult || 1);
+      const dps = 8 * mods.dmgMult;
+      const life = 6 * (mods.durationMult || 1);
+      game.mirrorMazes = game.mirrorMazes || [];
+      game.mirrorMazes.push(new MirrorMaze({
+        cx: caster.x, cy: caster.y,
+        count, radius, dps, life,
+        reflectiveBurst: !!beh.reflectiveBurst, burstDmg: 120 * mods.dmgMult,
+        crystalCage:     !!beh.crystalCage,
+        spec: beh,
+      }));
+      game.spawnExplosion(caster.x, caster.y, 60, '#dcecff');
+    },
+    dumps: [
+      { id: 'polish',  name: 'Polish',  desc: '+14% beam damage per point.', stat: 'dmgMult',      perPoint: 0.14 },
+      { id: 'lattice', name: 'Lattice', desc: '+10% mirror spacing per point.', stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'hexagonal_cage', name: 'Hexagonal Cage',
+        desc: '12 mirrors instead of 6 — denser lattice, more beam edges.',
+        behavior: { hexagonalCage: true } },
+      { id: 'reflective_burst', name: 'Reflective Burst',
+        desc: 'When an enemy dies inside the maze, the lattice pulses for AoE damage.',
+        behavior: { reflectiveBurst: true } },
+      { id: 'crystal_cage',   name: 'Crystal Cage',
+        desc: 'Mirrors function as walls — enemies inside are blocked at the boundary.',
+        behavior: { crystalCage: true } },
+    ],
+  },
+
+  prism_strike: {
+    id: 'prism_strike', name: 'Prism Strike', tier: 3, classId: 'optician',
+    icon: '✷', tag: 'ultimate', color: '#fff7d6',
+    description: 'Concentrated beam from above. 220 impact damage in 80px crater + 4s blind in a 200px radius.',
+    damageType: 'elemental',
+    cooldown: 14.0, damage: 220, radius: 80,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster) || caster;
+      const tx = target.x, ty = target.y;
+      const radius   = 80 * (mods.radiusMult || 1);
+      const damage   = 220 * mods.dmgMult;
+      const blindR   = (beh.searingGlare ? 350 : 200) * (mods.radiusMult || 1);
+      const blindDur = beh.searingGlare ? 8 : 4;
+      game.prismStrikes = game.prismStrikes || [];
+      game.prismStrikes.push({
+        x: tx, y: ty, t: 0, life: 0.55,
+        radius, damage, blindR, blindDur, mods,
+        collateral:    !!beh.collateral,
+        chainedSolar:  !!beh.chainedSolar,
+        seed: Math.random() * 1000, caster,
+      });
+    },
+    dumps: [
+      { id: 'mass',   name: 'Mass',   desc: '+16% damage per point.', stat: 'dmgMult',     perPoint: 0.16 },
+      { id: 'crater', name: 'Crater', desc: '+10% impact radius per point.', stat: 'radiusMult', perPoint: 0.10 },
+      { id: 'cycle',  name: 'Cycle',  desc: '−6% cooldown per point.', stat: 'cdMult',     perPoint: -0.06 },
+    ],
+    specs: [
+      { id: 'collateral',    name: 'Collateral',
+        desc: 'Three secondary beams strike outward in a Y pattern after impact, each at 50% damage.',
+        behavior: { collateral: true } },
+      { id: 'searing_glare', name: 'Searing Glare',
+        desc: 'Blind radius extended to 350u; blind duration doubled to 8s.',
+        behavior: { searingGlare: true } },
+      { id: 'chained_solar', name: 'Chained Solar',
+        desc: 'Instakills any enemy below 25% HP in the blind radius.',
+        behavior: { chainedSolar: true } },
+    ],
+  },
+
+  blinding_flash: {
+    id: 'blinding_flash', name: 'Blinding Flash', tier: 3, classId: 'optician',
+    icon: '✸', tag: 'ultimate', color: '#fffbe0',
+    description: 'Massive flashbang. 100 initial damage + 6s blind to all enemies in 320px.',
+    damageType: 'elemental',
+    cooldown: 16.0, damage: 100, radius: 320, duration: 6,
+    cast(game, caster, mods) {
+      const beh = mods.behavior || {};
+      const radius   = 320 * (mods.radiusMult || 1);
+      const baseDmg  = 100 * mods.dmgMult * (beh.eternalGlare ? 0.5 : 1) * (beh.searingFlash ? 1.8 : 1);
+      const blindDur = (beh.eternalGlare ? 12 : 6) * (mods.durationMult || 1);
+      const cascadeDps = beh.cascadingLight ? 18 * mods.dmgMult : 0;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (Vec.dist(caster, e) > radius + e.radius) continue;
+        if (baseDmg > 0) {
+          const a = e.takeDamage(baseDmg, { spell: 'blinding_flash' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+        }
+        const opts = { duration: blindDur };
+        if (cascadeDps > 0) opts.tickDps = cascadeDps;
+        e.applyStatus('blind', opts, game.runElapsed);
+      }
+      game.spawnExplosion(caster.x, caster.y, radius, '#fffbe0');
+      game.spawnHitParticles(caster.x, caster.y, '#fffbe0', 40);
+      Camera.shake('catastrophic');
+    },
+    dumps: [
+      { id: 'brightness', name: 'Brightness', desc: '+14% damage per point.', stat: 'dmgMult',      perPoint: 0.14 },
+      { id: 'wider',      name: 'Wider',      desc: '+10% radius per point.', stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'glare',      name: 'Glare',      desc: '+12% blind duration per point.', stat: 'durationMult', perPoint: 0.12 },
+    ],
+    specs: [
+      { id: 'searing_flash',   name: 'Searing Flash',
+        desc: 'Adds 80% extra burn damage on top of the disable.',
+        behavior: { searingFlash: true } },
+      { id: 'cascading_light', name: 'Cascading Light',
+        desc: 'Every 0.5s of blind, deals an additional small damage tick to each blinded enemy.',
+        behavior: { cascadingLight: true } },
+      { id: 'eternal_glare',   name: 'Eternal Glare',
+        desc: 'Blind duration doubled to 12s; halve the initial damage.',
+        behavior: { eternalGlare: true } },
+    ],
+  },
 };
 
 
@@ -3539,6 +4191,19 @@ const SPELL_DAMAGE_TYPES = {
   time_dilation:     'arcane',
   doom_sigil:        'arcane',
   berserkers_howl:   'physical',
+  // Optician — light is elemental (heat / burn), mirrors are arcane (geometry warp)
+  prism_burst:       'elemental',
+  focused_beam:      'elemental',
+  burning_lens:      'elemental',
+  refraction_bolt:   'elemental',
+  reflective_aegis:  'arcane',
+  solar_halo:        'elemental',
+  lens_array:        'elemental',
+  lighthouse:        'elemental',
+  solar_eclipse:     'elemental',
+  mirror_maze:       'arcane',
+  prism_strike:      'elemental',
+  blinding_flash:    'elemental',
   // Auxiliary spell ids that surface in Enemy.takeDamage source tags.
   // Resists apply to status DoTs the same as direct hits.
   ignite:            'elemental',
@@ -3998,6 +4663,40 @@ class Player {
    */
   takeDamage(dmg, attacker = null, game = null) {
     if (this.iframes > 0 || !this.alive) return;
+    // Blind: an attacker with the blind status hits us for half damage —
+    // they're swinging where we *were*. Optician's class-defining debuff.
+    if (attacker?.statuses?.blind) {
+      dmg = dmg * 0.5;
+    }
+    // Reflective Aegis — consume one charge from any mirror and reflect
+    // a fraction of the incoming damage back at the attacker.
+    if (this._aegis && game) {
+      const aegis = this._aegis;
+      const m = aegis.mirrors.find(mm => mm.charge > 0);
+      if (m) {
+        m.charge -= 1;
+        m.rechargeAcc = 0;
+        const reflected = dmg * aegis.reflectFrac;
+        if (attacker?.alive) {
+          const a = attacker.takeDamage(reflected, { spell: 'reflective_aegis' });
+          game.totalDamageDealt += a;
+          game.spawnDamageNumber(attacker.x, attacker.y - attacker.radius - 6, a, true, attacker);
+        }
+        // Spectrum Aegis — blind the attacker + nearby for 3s.
+        if (aegis.spec?.spectrumAegis && attacker) {
+          for (const e of game.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(attacker, e) < 60 + e.radius) {
+              e.applyStatus('blind', { duration: 3 }, game.runElapsed);
+            }
+          }
+        }
+        game.spawnDamageNumber(this.x, this.y - this.radius - 8, 'AEGIS', false, { verdict: 'resist' });
+        game.spawnHitParticles(this.x, this.y, '#dcecff', 10);
+        this.iframes = CONFIG.player.iframes * 0.5;
+        return;
+      }
+    }
     // Snow Fort shield — absorbs incoming damage before HP loss.
     if (this._snowFort && !this._snowFort.recharging && this._snowFort.shieldHp > 0) {
       const fort = this._snowFort;
@@ -4453,6 +5152,102 @@ class SnowStorm {
   }
 }
 
+/* ------------------------------------------------------------------
+ * OPTICIAN ENTITIES
+ * Each is a plain data class. Tick + render in Game.tickXxx /
+ * Renderer.drawXxx. Specs flagged on `opts.spec` are read at tick time.
+ * ------------------------------------------------------------------ */
+class BurningLens {
+  // Magnifying lens at a target spot. DPS ramps over its lifetime
+  // (50% → 150% by default). Solar Forge spec detonates on peak.
+  // Refractor spec drops 3 mini-lenses on expire.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    this.detonated = false;
+  }
+}
+class ReflectiveAegis {
+  // Mirrors orbiting the player. Each absorbs an incoming hit and
+  // reflects a fraction back. Charges recharge individually.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.angle = Math.random() * TAU;
+    // Per-mirror state. Each mirror = { charge, rechargeAcc, ringIdx, slot }
+    this.mirrors = [];
+    for (let r = 0; r < (opts.rings || 1); r++) {
+      const ringMirrors = opts.mirrorCount;
+      for (let i = 0; i < ringMirrors; i++) {
+        this.mirrors.push({
+          ringIdx: r,
+          slot: i,
+          ring: ringMirrors,
+          charge: opts.charges,
+          rechargeAcc: 0,
+        });
+      }
+    }
+  }
+}
+class SolarHalo {
+  // Sunfire halo above the player. DoT to enemies in contact +
+  // blinds them on touch. Coronal Burst pulses periodically.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    this.coronalAcc = 0;
+  }
+}
+class LensArray {
+  // 3 lenses orbiting the player, converging beams on a target.
+  // Convergence: one super-beam. Rotation: sweeps wider arc.
+  // Dispersal: 3 separate targets.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.angle = Math.random() * TAU;
+    this.beamAcc = 0;
+    this.dispersalTargets = [null, null, null];
+  }
+}
+class Lighthouse {
+  // Stationary tower with a rotating beam that ticks damage on
+  // anything inside the beam arc. Solar Flare pulses on full rotation.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.beamAng = 0;
+    this.dmgAcc = 0;
+    this.lastFlareAt = 0;
+  }
+}
+class SolarEclipse {
+  // Massive light disk. Ramps DPS over lifetime, blinds inside.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+  }
+}
+class MirrorMaze {
+  // Hexagonal lattice of mirrors with damaging beam edges between
+  // adjacent mirrors. Crystal Cage blocks enemy egress.
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    // Pre-compute mirror positions on a circle around (cx, cy).
+    this.mirrors = [];
+    for (let i = 0; i < this.count; i++) {
+      const a = (i / this.count) * TAU;
+      this.mirrors.push({ x: this.cx + Math.cos(a) * this.radius, y: this.cy + Math.sin(a) * this.radius });
+    }
+  }
+}
+
 class DamageNumber {
   // Floating damage text that pops up on hits. Crits get bigger/colored.
   constructor(x, y, value, isCrit) {
@@ -4693,6 +5488,17 @@ class Game {
     this.stormClouds = [];       // Storm Cloud spell — hovering shock dispenser
     this.damageNumbers = [];     // floating damage text
     this.explosions = [];        // visual-only expanding ring on impact
+    // Optician entities
+    this.burningLenses = [];
+    this.aegisMirrors = [];
+    this.solarHalos = [];
+    this.lensArrays = [];
+    this.lighthouses = [];
+    this.solarEclipses = [];
+    this.mirrorMazes = [];
+    this.prismStrikes = [];
+    this.prismBeams = [];
+    this._beamFlashes = [];
 
     this.activeSpells = [];      // [{ spellId, cd, cdAcc }]
     this.runStart = 0;
@@ -4787,6 +5593,17 @@ class Game {
     this.meteors     = [];
     this.wormholes   = [];
     this.snowStorms  = [];
+    // Optician entities
+    this.burningLenses = [];
+    this.aegisMirrors  = [];
+    this.solarHalos    = [];
+    this.lensArrays    = [];
+    this.lighthouses   = [];
+    this.solarEclipses = [];
+    this.mirrorMazes   = [];
+    this.prismStrikes  = [];
+    this.prismBeams    = [];
+    this._beamFlashes  = [];
     this.damageNumbers = [];
     this.explosions = [];
     this.shake = 0;
@@ -4953,6 +5770,16 @@ class Game {
     this.tickMinion(dt);
     this.tickHydraHeads(dt);
     this.tickMeteors(dt);
+    this.tickBurningLenses(dt);
+    this.tickAegisMirrors(dt);
+    this.tickSolarHalos(dt);
+    this.tickLensArrays(dt);
+    this.tickLighthouses(dt);
+    this.tickSolarEclipses(dt);
+    this.tickMirrorMazes(dt);
+    this.tickPrismStrikes(dt);
+    this.tickPrismBeams(dt);
+    this.tickBeamFlashes(dt);
     this.tickLightnings(dt);
     this.tickExplosions(dt);
     this.tickDamageNumbers(dt);
@@ -4991,6 +5818,24 @@ class Game {
       range: 200,
     }));
     this.spawnHitParticles(x, y, '#ff6622', 10);
+  }
+  spawnBurningLens(opts) {
+    this.burningLenses = this.burningLenses || [];
+    this.burningLenses.push(new BurningLens(opts));
+  }
+  /*
+   * Prism Beam — instant ray spawned by Prism Burst's onHit. Damages
+   * enemies in a swept line outward, blinds briefly. Zenith: bounces
+   * off the engagement ring back inward once.
+   */
+  spawnPrismBeam(origin, ang, opts) {
+    this.prismBeams = this.prismBeams || [];
+    this.prismBeams.push({
+      x: origin.x, y: origin.y, ang, t: 0, life: 0.4,
+      reach: opts.reach, dmg: opts.dmg, color: opts.color,
+      applyStatus: opts.applyStatus, zenith: !!opts.zenith,
+      hits: new Set(), hasBounced: false,
+    });
   }
   spawnExplosion(x, y, radius, color, kind = 'burst') {
     this.explosions.push({ x, y, radius, color, kind, t: 0, life: 0.45, dead: false });
@@ -5591,6 +6436,465 @@ class Game {
     }
   }
 
+  /* --------------------------------------------------------------
+   * OPTICIAN TICK HANDLERS
+   * Each handles one entity class spawned by an Optician ability.
+   * Specs are read off `entity.spec` (or top-level flags) to branch.
+   * -------------------------------------------------------------- */
+  tickBurningLenses(dt) {
+    if (!this.burningLenses?.length) return;
+    for (let i = this.burningLenses.length - 1; i >= 0; i--) {
+      const L = this.burningLenses[i];
+      L.t += dt;
+      if (L.t >= L.life) {
+        // Refractor spec — drop 3 mini-lenses on expire.
+        if (L.refractor) {
+          for (let k = 0; k < 3; k++) {
+            const a = (k / 3) * TAU;
+            const off = L.radius * 0.45;
+            this.spawnBurningLens({
+              x: L.x + Math.cos(a) * off,
+              y: L.y + Math.sin(a) * off,
+              radius: L.radius * 0.45,
+              dps: L.dps * 0.4,
+              life: 1.0,
+              dpsCurve: { start: 1.0, end: 1.0 },
+              spell: 'burning_lens:refractor',
+            });
+          }
+        }
+        this.burningLenses.splice(i, 1);
+        continue;
+      }
+      // Damage tick: lerp DPS along curve based on lifetime progress.
+      const prog = Math.min(1, L.t / L.life);
+      const curve = L.dpsCurve || { start: 1, end: 1 };
+      const dpsNow = L.dps * (curve.start + (curve.end - curve.start) * prog);
+      L.dmgAcc += dt;
+      const tickIv = 0.2;
+      if (L.dmgAcc >= tickIv) {
+        L.dmgAcc = 0;
+        const tickDmg = dpsNow * tickIv;
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          if (Vec.dist(L, e) < L.radius + e.radius) {
+            const a = e.takeDamage(tickDmg, { spell: L.spell || 'burning_lens' });
+            this.totalDamageDealt += a;
+          }
+        }
+      }
+      // Solar Forge — at peak DPS, detonate.
+      if (L.solarForge && !L.detonated && prog >= 0.95) {
+        L.detonated = true;
+        const det = L.dps * L.life * 2.0;        // 200% of total damage
+        const r = L.radius * 1.5;
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          if (Vec.dist(L, e) < r + e.radius) {
+            const a = e.takeDamage(det, { spell: 'burning_lens' });
+            this.totalDamageDealt += a;
+            this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+          }
+        }
+        this.spawnExplosion(L.x, L.y, r, '#ffd66a', 'fire');
+        this.addShake(0.30);
+      }
+    }
+  }
+
+  tickAegisMirrors(dt) {
+    if (!this.aegisMirrors?.length) return;
+    for (let i = this.aegisMirrors.length - 1; i >= 0; i--) {
+      const A = this.aegisMirrors[i];
+      A.t += dt;
+      A.angle += dt * 1.2;
+      // Recharge each mirror that's depleted.
+      for (const m of A.mirrors) {
+        if (m.charge >= A.charges) continue;
+        m.rechargeAcc += dt;
+        if (m.rechargeAcc >= A.recharge) {
+          m.rechargeAcc = 0;
+          m.charge = Math.min(A.charges, m.charge + 1);
+        }
+      }
+      // The aegis lives forever (single instance, recast replaces).
+    }
+  }
+
+  tickSolarHalos(dt) {
+    if (!this.solarHalos?.length) return;
+    for (let i = this.solarHalos.length - 1; i >= 0; i--) {
+      const H = this.solarHalos[i];
+      H.t += dt;
+      if (H.t >= H.life) { this.solarHalos.splice(i, 1); if (this.player) this.player._solarHalo = null; continue; }
+      if (this.player) this.player._solarHalo = H;
+      H.dmgAcc += dt;
+      const tickIv = 0.25;
+      const wantTick = H.dmgAcc >= tickIv;
+      const tickDmg = H.dps * tickIv;
+      const cx = this.player?.x ?? 0;
+      const cy = this.player?.y ?? 0;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist({ x: cx, y: cy }, e);
+        if (d > H.radius + e.radius) continue;
+        // Halo always blinds on contact (eclipse mode = no damage but longer blind).
+        e.applyStatus('blind', { duration: H.blindDur }, this.runElapsed);
+        if (wantTick && H.dps > 0) {
+          const a = e.takeDamage(tickDmg, { spell: 'solar_halo' });
+          this.totalDamageDealt += a;
+          if (H.infernoHalo) {
+            e.applyStatus('ignite', { duration: 2.5, dps: H.dps * 0.6 }, this.runElapsed);
+          }
+        }
+      }
+      if (wantTick) H.dmgAcc = 0;
+      // Coronal Burst — periodic AoE pulse from the player.
+      if (H.coronalBurst) {
+        H.coronalAcc += dt;
+        if (H.coronalAcc >= 2.0) {
+          H.coronalAcc -= 2.0;
+          const burstR = H.radius * 1.6;
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist({ x: cx, y: cy }, e) < burstR + e.radius) {
+              const a = e.takeDamage(H.coronalDmg, { spell: 'solar_halo' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+            }
+          }
+          this.spawnExplosion(cx, cy, burstR, '#ffd66a', 'fire');
+          this.addShake(0.18);
+        }
+      }
+    }
+  }
+
+  tickLensArrays(dt) {
+    if (!this.lensArrays?.length) return;
+    for (let i = this.lensArrays.length - 1; i >= 0; i--) {
+      const A = this.lensArrays[i];
+      A.t += dt;
+      if (A.t >= A.life) { this.lensArrays.splice(i, 1); continue; }
+      A.angle += dt * 1.8;
+      A.beamAcc += dt;
+      const tickIv = 0.22;
+      if (A.beamAcc < tickIv) continue;
+      A.beamAcc = 0;
+      const cx = this.player?.x ?? 0;
+      const cy = this.player?.y ?? 0;
+      const lensCount = 3;
+      // Determine target(s).
+      if (A.dispersal) {
+        // Each lens picks its own target.
+        for (let k = 0; k < lensCount; k++) {
+          if (!A.dispersalTargets[k]?.alive) {
+            A.dispersalTargets[k] = this.findNearestEnemyTo({ x: cx, y: cy }, A.range);
+          }
+          const tgt = A.dispersalTargets[k];
+          if (!tgt) continue;
+          const dmg = A.dps * tickIv;
+          const a = tgt.takeDamage(dmg, { spell: 'lens_array' });
+          this.totalDamageDealt += a;
+          const lensAng = A.angle + (k / lensCount) * TAU;
+          const lx = cx + Math.cos(lensAng) * 60;
+          const ly = cy + Math.sin(lensAng) * 60;
+          this.lightnings.push({ from: { x: lx, y: ly }, to: { x: tgt.x, y: tgt.y }, t: 0, life: 0.16 });
+        }
+      } else if (A.rotation) {
+        // Sweep mode: hits all enemies in a 90° band.
+        const sweepAng = A.angle * 0.5;
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          const ang = Math.atan2(e.y - cy, e.x - cx);
+          const delta = Math.atan2(Math.sin(ang - sweepAng), Math.cos(ang - sweepAng));
+          if (Math.abs(delta) < 0.78 && Vec.dist({ x: cx, y: cy }, e) < A.range) {
+            const dmg = A.dps * tickIv * 0.8;
+            const a = e.takeDamage(dmg, { spell: 'lens_array' });
+            this.totalDamageDealt += a;
+            this.lightnings.push({ from: { x: cx, y: cy }, to: { x: e.x, y: e.y }, t: 0, life: 0.14 });
+          }
+        }
+      } else {
+        // Default + Convergence: pick nearest enemy in range and beam it.
+        const tgt = this.findNearestEnemyTo({ x: cx, y: cy }, A.range);
+        if (tgt) {
+          const dpsBundle = A.convergence ? A.dps * 3 : A.dps * lensCount;
+          const dmg = dpsBundle * tickIv;
+          const a = tgt.takeDamage(dmg, { spell: 'lens_array' });
+          this.totalDamageDealt += a;
+          for (let k = 0; k < (A.convergence ? 1 : lensCount); k++) {
+            const lensAng = A.angle + (k / lensCount) * TAU;
+            const lx = cx + Math.cos(lensAng) * 60;
+            const ly = cy + Math.sin(lensAng) * 60;
+            this.lightnings.push({ from: { x: lx, y: ly }, to: { x: tgt.x, y: tgt.y }, t: 0, life: 0.16, crit: !!A.convergence });
+          }
+        }
+      }
+    }
+  }
+
+  tickLighthouses(dt) {
+    if (!this.lighthouses?.length) return;
+    for (let i = this.lighthouses.length - 1; i >= 0; i--) {
+      const L = this.lighthouses[i];
+      L.t += dt;
+      if (!L.beacon && L.t >= L.life) { this.lighthouses.splice(i, 1); continue; }
+      const prevAng = L.beamAng;
+      L.beamAng += L.rotSpeed * dt;
+      L.dmgAcc += dt;
+      const tickIv = 0.15;
+      if (L.dmgAcc >= tickIv) {
+        L.dmgAcc = 0;
+        const tickDmg = L.dps * tickIv;
+        const beamHalfWidth = 0.18;        // arc tolerance (radians)
+        const beams = L.twinLights ? [L.beamAng, L.beamAng + Math.PI] : [L.beamAng];
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          const d = Vec.dist(L, e);
+          if (d > L.range) continue;
+          const ang = Math.atan2(e.y - L.y, e.x - L.x);
+          for (const b of beams) {
+            const delta = Math.atan2(Math.sin(ang - b), Math.cos(ang - b));
+            if (Math.abs(delta) < beamHalfWidth) {
+              const a = e.takeDamage(tickDmg, { spell: 'lighthouse' });
+              this.totalDamageDealt += a;
+              break;
+            }
+          }
+        }
+      }
+      // Solar Flare: every full rotation, AoE pulse.
+      if (L.solarFlare) {
+        const fullRot = TAU;
+        // Detect crossing the same starting angle.
+        if (Math.floor(prevAng / fullRot) !== Math.floor(L.beamAng / fullRot)) {
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(L, e) < L.range && Vec.dist(L, e) > 8) {
+              const a = e.takeDamage(L.flareDmg, { spell: 'lighthouse' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+            }
+          }
+          this.spawnExplosion(L.x, L.y, L.range * 0.6, '#ffe066', 'fire');
+          this.addShake(0.18);
+        }
+      }
+    }
+  }
+
+  tickSolarEclipses(dt) {
+    if (!this.solarEclipses?.length) return;
+    for (let i = this.solarEclipses.length - 1; i >= 0; i--) {
+      const E = this.solarEclipses[i];
+      E.t += dt;
+      if (E.t >= E.life) { this.solarEclipses.splice(i, 1); continue; }
+      const prog = Math.min(1, E.t / E.life);
+      const curve = E.dpsCurve || { start: 0.5, end: 2.0 };
+      const dpsNow = E.dps * (curve.start + (curve.end - curve.start) * prog);
+      E.dmgAcc += dt;
+      const tickIv = 0.3;
+      const wantTick = E.dmgAcc >= tickIv && dpsNow > 0;
+      if (wantTick) E.dmgAcc = 0;
+      const tickDmg = dpsNow * tickIv;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist(E, e);
+        if (d > E.radius + e.radius) {
+          // Penumbra: outer ring (1.4× radius) slows enemies that approach.
+          if (E.penumbra && d < E.radius * 1.4 + e.radius) {
+            e.applyStatus('slow', { duration: 0.6, factor: 0.65 }, this.runElapsed);
+          }
+          continue;
+        }
+        if (E.blind) {
+          // Darkness: full eclipse-duration blind.
+          const dur = E.darkness ? Math.max(2, E.life - E.t) : 1.5;
+          e.applyStatus('blind', { duration: dur }, this.runElapsed);
+        }
+        if (wantTick) {
+          const a = e.takeDamage(tickDmg, { spell: 'solar_eclipse' });
+          this.totalDamageDealt += a;
+        }
+      }
+    }
+  }
+
+  tickMirrorMazes(dt) {
+    if (!this.mirrorMazes?.length) return;
+    for (let i = this.mirrorMazes.length - 1; i >= 0; i--) {
+      const M = this.mirrorMazes[i];
+      M.t += dt;
+      if (M.t >= M.life) { this.mirrorMazes.splice(i, 1); continue; }
+      M.dmgAcc += dt;
+      const tickIv = 0.18;
+      const wantTick = M.dmgAcc >= tickIv;
+      if (wantTick) M.dmgAcc = 0;
+      const tickDmg = M.dps * tickIv;
+      // Each beam is the segment between adjacent mirrors. Damage enemies
+      // within ~14u of any beam segment.
+      const beamW = 14;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        let inBeam = false;
+        for (let k = 0; k < M.mirrors.length; k++) {
+          const a = M.mirrors[k];
+          const b = M.mirrors[(k + 1) % M.mirrors.length];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const segLen2 = (dx * dx + dy * dy) || 1;
+          const t = Math.max(0, Math.min(1, ((e.x - a.x) * dx + (e.y - a.y) * dy) / segLen2));
+          const cx = a.x + dx * t, cy = a.y + dy * t;
+          const d = Math.hypot(e.x - cx, e.y - cy);
+          if (d < beamW + e.radius) { inBeam = true; break; }
+        }
+        if (inBeam && wantTick) {
+          const before = e.alive;
+          const a = e.takeDamage(tickDmg, { spell: 'mirror_maze' });
+          this.totalDamageDealt += a;
+          // Reflective Burst: when an enemy dies inside, the lattice pulses.
+          if (M.reflectiveBurst && before && !e.alive) {
+            for (const o of this.enemies) {
+              if (!o.alive) continue;
+              if (Vec.dist({ x: M.cx, y: M.cy }, o) < M.radius * 1.1 + o.radius) {
+                const a2 = o.takeDamage(M.burstDmg, { spell: 'mirror_maze' });
+                this.totalDamageDealt += a2;
+              }
+            }
+            this.spawnExplosion(M.cx, M.cy, M.radius, '#dcecff');
+            this.addShake(0.18);
+          }
+        }
+        // Crystal Cage: enemies inside the maze are blocked at the boundary.
+        if (M.crystalCage) {
+          const dFromCentre = Vec.dist({ x: M.cx, y: M.cy }, e);
+          if (dFromCentre < M.radius - 4) {
+            // Block egress: push them back toward centre if they try to leave.
+            // Cheap repulsion only at the boundary — tickEnemies has already
+            // run, so we counter their step on the next frame.
+            if (dFromCentre > M.radius * 0.85) {
+              const dir = Vec.norm(Vec.sub({ x: M.cx, y: M.cy }, e));
+              e.pvx += dir.x * 60;
+              e.pvy += dir.y * 60;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  tickPrismStrikes(dt) {
+    if (!this.prismStrikes?.length) return;
+    for (let i = this.prismStrikes.length - 1; i >= 0; i--) {
+      const P = this.prismStrikes[i];
+      P.t += dt;
+      // Charge-up phase: brief warning, then impact at t=life.
+      if (P.t < P.life) continue;
+      // Impact!
+      const { radius, damage, blindR, blindDur, mods } = P;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist({ x: P.x, y: P.y }, e);
+        if (d < radius + e.radius) {
+          const isCrit = Math.random() < (mods?.critChance || 0);
+          const dmg = isCrit ? damage * (mods?.critMult || 2) : damage;
+          const a = e.takeDamage(dmg, { spell: 'prism_strike' });
+          this.totalDamageDealt += a;
+          this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, isCrit, e);
+        }
+        if (d < blindR + e.radius) {
+          e.applyStatus('blind', { duration: blindDur }, this.runElapsed);
+          // Chained Solar: instakill enemies under 25% HP in the blind radius.
+          if (P.chainedSolar && e.alive && e.hp / (e.def?.hp || e.hp) < 0.25) {
+            const k = e.takeDamage(e.hp + 1, { spell: 'prism_strike:chained' });
+            this.totalDamageDealt += k;
+          }
+        }
+      }
+      this.spawnExplosion(P.x, P.y, radius, '#fff7d6', 'fire');
+      this.spawnExplosion(P.x, P.y, blindR, '#fff7d6');
+      Camera.shake('catastrophic');
+      // Collateral: 3 smaller secondary beams in a Y pattern.
+      if (P.collateral) {
+        for (let k = 0; k < 3; k++) {
+          const ang = (k / 3) * TAU + Math.random() * 0.4;
+          const off = radius * 1.4;
+          const sx = P.x + Math.cos(ang) * off;
+          const sy = P.y + Math.sin(ang) * off;
+          this.prismStrikes.push({
+            x: sx, y: sy, t: 0, life: 0.35,
+            radius: radius * 0.7,
+            damage: damage * 0.5,
+            blindR: blindR * 0.6,
+            blindDur,
+            mods, caster: P.caster,
+            collateral: false,    // don't recurse
+            chainedSolar: false,
+          });
+        }
+      }
+      this.prismStrikes.splice(i, 1);
+    }
+  }
+
+  tickPrismBeams(dt) {
+    if (!this.prismBeams?.length) return;
+    for (let i = this.prismBeams.length - 1; i >= 0; i--) {
+      const B = this.prismBeams[i];
+      B.t += dt;
+      if (B.t >= B.life) { this.prismBeams.splice(i, 1); continue; }
+      // Sweep distance grows over the beam's life. Enemies in the swept
+      // line take damage once.
+      const prog = Math.min(1, B.t / B.life);
+      const curReach = B.reach * prog;
+      const cap = this.combatRadius();
+      const tipX = B.x + Math.cos(B.ang) * curReach;
+      const tipY = B.y + Math.sin(B.ang) * curReach;
+      // Zenith spec — bounce off the engagement ring once.
+      if (B.zenith && !B.hasBounced && this.player) {
+        const fromPlayer = Math.hypot(tipX - this.player.x, tipY - this.player.y);
+        if (fromPlayer >= cap) {
+          B.hasBounced = true;
+          // Reflect angle back inward (180° flip toward player).
+          const inward = Math.atan2(this.player.y - B.y, this.player.x - B.x);
+          B.ang = inward;
+          B.x = tipX;
+          B.y = tipY;
+          B.t = 0;
+          B.life = 0.35;
+          B.reach = cap;
+        }
+      }
+      for (const e of this.enemies) {
+        if (!e.alive || B.hits.has(e)) continue;
+        const dx = e.x - B.x, dy = e.y - B.y;
+        const along = dx * Math.cos(B.ang) + dy * Math.sin(B.ang);
+        if (along < 0 || along > curReach) continue;
+        const perp = Math.abs(-dx * Math.sin(B.ang) + dy * Math.cos(B.ang));
+        if (perp > 12 + e.radius) continue;
+        const a = e.takeDamage(B.dmg, { spell: 'prism_burst' });
+        this.totalDamageDealt += a;
+        if (B.applyStatus) this.applyStatusesToEnemy(e, B.applyStatus, B.dmg);
+        // Light hits also briefly blind.
+        e.applyStatus('blind', { duration: 0.8 }, this.runElapsed);
+        B.hits.add(e);
+      }
+    }
+  }
+
+  tickBeamFlashes(dt) {
+    if (!this._beamFlashes?.length) return;
+    for (let i = this._beamFlashes.length - 1; i >= 0; i--) {
+      const f = this._beamFlashes[i];
+      f.t += dt;
+      if (f.t >= f.life) this._beamFlashes.splice(i, 1);
+    }
+  }
+
+  /* --------------------------------------------------------------
+   * MINION dispatch (existing — kept here as the anchor for the
+   * file structure).
+   * -------------------------------------------------------------- */
   tickMinion(dt) {
     const m = this.minion;
     if (!m) return;
@@ -5883,6 +7187,7 @@ class Game {
       critChance: CONFIG.spell.baseCritChance,
       critMult:   CONFIG.spell.baseCritMult,
       attackRateMult: 1, shieldMult: 1, slowMult: 1,
+      beamGrace: 0,                                      // Optician Focused Beam dump
       behavior: {}, applyStatus: null,
     };
     const ab = ABILITIES[abilityId];
@@ -5905,6 +7210,7 @@ class Game {
         case 'attackRateMult': base.attackRateMult += total; break;
         case 'shieldMult':     base.shieldMult    += total; break;
         case 'slowMult':       base.slowMult      += total; break;
+        case 'beamGrace':      base.beamGrace     += Math.floor(total); break;
         // cdMult is read in computeAbilityCooldown
       }
     }
@@ -5953,11 +7259,15 @@ class Game {
       }
       let speedFactor = 1;
       let igniteDmg = 0;
+      let blindTickDmg = 0;
       for (const name in e.statuses) {
         const s = e.statuses[name];
         if (elapsed > s.expires) { delete e.statuses[name]; continue; }
         if (name === 'slow')   speedFactor *= (s.factor ?? 1);
         if (name === 'freeze') speedFactor = 0;
+        // Blind: 30% slow + 50% contact damage reduction (consumed in
+        // Player.takeDamage when this enemy collides with the player).
+        if (name === 'blind')  speedFactor *= 0.70;
         if (name === 'ignite') {
           s.tickAcc = (s.tickAcc || 0) + dt;
           while (s.tickAcc >= 0.25) {
@@ -5965,6 +7275,19 @@ class Game {
             igniteDmg += (s.dps || 0) * 0.25;
           }
         }
+        // Cascading Light spec (Optician Blinding Flash) — small per-tick
+        // damage to blinded enemies. Stored on the status as `tickDps`.
+        if (name === 'blind' && s.tickDps) {
+          s.tickAcc = (s.tickAcc || 0) + dt;
+          while (s.tickAcc >= 0.5) {
+            s.tickAcc -= 0.5;
+            blindTickDmg += (s.tickDps || 0) * 0.5;
+          }
+        }
+      }
+      if (blindTickDmg > 0 && e.alive) {
+        const actual = e.takeDamage(blindTickDmg, { spell: 'blinding_flash' });
+        this.totalDamageDealt += actual;
       }
       if (igniteDmg > 0 && e.alive) {
         const actual = e.takeDamage(igniteDmg, { spell: 'ignite' });
@@ -6120,10 +7443,34 @@ class Game {
             p._hasSplit = true;
             this._spawnFrostFragments(p, beh);
           }
+          // Refraction Bolt — bend the beam ±refractAng on each pierce.
+          if (beh.refractAng) {
+            const ang = Math.atan2(p.vy, p.vx);
+            const sign = Math.random() < 0.5 ? -1 : 1;
+            const newAng = ang + sign * beh.refractAng * (0.6 + Math.random() * 0.4);
+            const sp = Math.hypot(p.vx, p.vy);
+            p.vx = Math.cos(newAng) * sp;
+            p.vy = Math.sin(newAng) * sp;
+          }
           p.hits.add(e);
           if (p.onHit) p.onHit(this, { x: p.x, y: p.y });
           if (p.pierce > 0) { p.pierce -= 1; }
-          else { hit = true; break; }
+          else {
+            // Refraction Bolt Shatter spec — last pierce explodes for AoE.
+            if (beh.shatter) {
+              const r = beh.shatterRadius || 80;
+              const dmg = (p.spellBaseDmg ?? p.damage) * 0.85;
+              for (const o of this.enemies) {
+                if (!o.alive) continue;
+                if (Vec.dist(p, o) < r + o.radius) {
+                  const a2 = o.takeDamage(dmg, { spell: 'refraction_bolt' });
+                  this.totalDamageDealt += a2;
+                }
+              }
+              this.spawnExplosion(p.x, p.y, r, '#bff5c8');
+            }
+            hit = true; break;
+          }
         }
       }
       if (hit) this.projectiles.splice(i, 1);
@@ -6870,6 +8217,16 @@ const Renderer = {
     this.drawHydraHeads(ctx, game.hydraHeads, game.runElapsed);
     this.drawMeteors(ctx, game.meteors, game.runElapsed);
     this.drawWormholes(ctx, game.wormholes, game.runElapsed);
+    this.drawBurningLenses(ctx, game.burningLenses, game.runElapsed);
+    this.drawSolarHalos(ctx, game.solarHalos, game.player, game.runElapsed);
+    this.drawLensArrays(ctx, game.lensArrays, game.player, game.runElapsed);
+    this.drawLighthouses(ctx, game.lighthouses, game.runElapsed);
+    this.drawSolarEclipses(ctx, game.solarEclipses, game.runElapsed);
+    this.drawMirrorMazes(ctx, game.mirrorMazes, game.runElapsed);
+    this.drawPrismStrikes(ctx, game.prismStrikes, game.runElapsed);
+    this.drawPrismBeams(ctx, game.prismBeams);
+    this.drawBeamFlashes(ctx, game._beamFlashes);
+    this.drawAegisMirrors(ctx, game.aegisMirrors, game.player, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells, game.player);
     this.drawAura(ctx, game.player, game.auraPulse, game);
@@ -7531,6 +8888,25 @@ const Renderer = {
         ctx.save();
         ctx.fillStyle = `rgba(200, 40, 20, ${vA})`;
         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 1.05, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      // Blind overlay — pulsing white veil with two cross-tick eyes.
+      if (e.statuses?.blind) {
+        const t = (performance.now() / 1000);
+        const pulse = 0.45 + 0.25 * Math.sin(t * 8);
+        ctx.save();
+        ctx.fillStyle = `rgba(255, 248, 224, ${0.32 * pulse})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 1.15, 0, TAU); ctx.fill();
+        // Two small ✕ eyes above the silhouette
+        ctx.strokeStyle = `rgba(232, 200, 80, ${0.85 * pulse})`;
+        ctx.lineWidth = 1.4;
+        const eyeY = e.y - e.radius * 0.4;
+        for (const ex of [e.x - e.radius * 0.3, e.x + e.radius * 0.3]) {
+          ctx.beginPath();
+          ctx.moveTo(ex - 2, eyeY - 2); ctx.lineTo(ex + 2, eyeY + 2);
+          ctx.moveTo(ex + 2, eyeY - 2); ctx.lineTo(ex - 2, eyeY + 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
@@ -9504,6 +10880,350 @@ const Renderer = {
     }
   },
 
+  /* ------------------------------------------------------------------
+   * OPTICIAN RENDERERS
+   * Each draws one persistent ability entity. Light-themed palette:
+   * #ffd66a (sun), #ffea99 (lens core), #fff7d6 (peak white),
+   * #dcecff (mirror), #3a2a4a (dark eclipse).
+   * ------------------------------------------------------------------ */
+  drawBurningLenses(ctx, lenses, t) {
+    if (!lenses?.length) return;
+    for (const L of lenses) {
+      const prog = Math.min(1, L.t / L.life);
+      const curve = L.dpsCurve || { start: 1, end: 1 };
+      const intensity = curve.start + (curve.end - curve.start) * prog;
+      const fade = Math.min(1, L.t / 0.2) * Math.min(1, (L.life - L.t) / 0.25);
+      // Heat haze ring
+      const g = ctx.createRadialGradient(L.x, L.y, L.radius * 0.1, L.x, L.y, L.radius);
+      g.addColorStop(0,   `rgba(255, 245, 200, ${0.55 * fade * intensity * 0.6})`);
+      g.addColorStop(0.5, `rgba(255, 200, 110, ${0.30 * fade * intensity * 0.6})`);
+      g.addColorStop(1,   `rgba(255, 160,  60, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(L.x, L.y, L.radius, 0, TAU); ctx.fill();
+      // Lens disc
+      ctx.save();
+      ctx.translate(L.x, L.y);
+      ctx.rotate(t * 0.5);
+      const lensR = Math.min(28, L.radius * 0.32);
+      ctx.fillStyle = `rgba(255, 240, 200, ${0.85 * fade})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, lensR, lensR * 0.35, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = `rgba(220, 160, 60, ${0.95 * fade})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.ellipse(0, 0, lensR, lensR * 0.35, 0, 0, TAU); ctx.stroke();
+      // Inner gold highlight
+      ctx.fillStyle = `rgba(255, 255, 220, ${0.6 * fade})`;
+      ctx.beginPath(); ctx.ellipse(-lensR * 0.4, -lensR * 0.08, lensR * 0.4, lensR * 0.12, 0, 0, TAU); ctx.fill();
+      // Beam line down (showing focused sunlight)
+      ctx.strokeStyle = `rgba(255, 235, 150, ${0.55 * fade * intensity})`;
+      ctx.lineWidth = 3 * intensity;
+      ctx.beginPath(); ctx.moveTo(0, lensR * 0.2); ctx.lineTo(0, L.radius * 0.95); ctx.stroke();
+      ctx.restore();
+      // Burn dots scattered on the ground when intensity is high
+      if (intensity > 1.0) {
+        const dots = Math.floor(8 * (intensity - 0.8));
+        for (let k = 0; k < dots; k++) {
+          const a = (k / dots) * TAU + t * 0.7;
+          const r = L.radius * (0.4 + 0.4 * Math.sin(t * 4 + k));
+          ctx.fillStyle = `rgba(255, 210, 120, ${0.55 * fade})`;
+          ctx.beginPath(); ctx.arc(L.x + Math.cos(a) * r, L.y + Math.sin(a) * r, 1.5, 0, TAU); ctx.fill();
+        }
+      }
+    }
+  },
+
+  drawSolarHalos(ctx, halos, player, t) {
+    if (!halos?.length || !player) return;
+    for (const H of halos) {
+      const fade = Math.min(1, H.t / 0.2) * Math.min(1, (H.life - H.t) / 0.4);
+      const isDark = !!H.eclipseHalo;
+      const r = H.radius;
+      // Floating orb above the player's head
+      const ox = player.x;
+      const oy = player.y - player.radius - 22;
+      // Aura wash on the ground
+      const g = ctx.createRadialGradient(player.x, player.y, r * 0.1, player.x, player.y, r);
+      if (isDark) {
+        g.addColorStop(0,   `rgba(60, 40, 80, ${0.55 * fade})`);
+        g.addColorStop(0.7, `rgba(30, 20, 50, ${0.30 * fade})`);
+        g.addColorStop(1,   `rgba(0, 0, 0, 0)`);
+      } else {
+        g.addColorStop(0,   `rgba(255, 245, 180, ${0.45 * fade})`);
+        g.addColorStop(0.6, `rgba(255, 200,  90, ${0.25 * fade})`);
+        g.addColorStop(1,   `rgba(255, 160,  60, 0)`);
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(player.x, player.y, r, 0, TAU); ctx.fill();
+      // Orb body
+      const orbR = 14;
+      const orbColor = isDark ? '#3a2a4a' : '#ffd66a';
+      ctx.fillStyle = orbColor;
+      ctx.beginPath(); ctx.arc(ox, oy, orbR, 0, TAU); ctx.fill();
+      // Halo ring above the orb
+      ctx.strokeStyle = isDark ? `rgba(180, 150, 220, ${0.85 * fade})` : `rgba(255, 240, 180, ${0.95 * fade})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(ox, oy - orbR * 0.7, orbR * 1.1, orbR * 0.35, 0, 0, TAU); ctx.stroke();
+      // Sun rays
+      const rayCount = isDark ? 6 : 8;
+      ctx.strokeStyle = isDark ? `rgba(180, 150, 220, ${0.6 * fade})` : `rgba(255, 220, 130, ${0.85 * fade})`;
+      ctx.lineWidth = 1.4;
+      for (let k = 0; k < rayCount; k++) {
+        const ang = (k / rayCount) * TAU + t * 0.8;
+        const r1 = orbR + 2, r2 = orbR + 6 + 2 * Math.sin(t * 4 + k);
+        ctx.beginPath();
+        ctx.moveTo(ox + Math.cos(ang) * r1, oy + Math.sin(ang) * r1);
+        ctx.lineTo(ox + Math.cos(ang) * r2, oy + Math.sin(ang) * r2);
+        ctx.stroke();
+      }
+    }
+  },
+
+  drawLensArrays(ctx, arrays, player, t) {
+    if (!arrays?.length || !player) return;
+    for (const A of arrays) {
+      const fade = Math.min(1, A.t / 0.25) * Math.min(1, (A.life - A.t) / 0.4);
+      const cx = player.x, cy = player.y;
+      const lensCount = 3;
+      for (let k = 0; k < lensCount; k++) {
+        const ang = A.angle + (k / lensCount) * TAU;
+        const lx = cx + Math.cos(ang) * 60;
+        const ly = cy + Math.sin(ang) * 60;
+        // Lens tilt = perpendicular to its angle off the player
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(ang + Math.PI / 2);
+        ctx.fillStyle = `rgba(255, 245, 180, ${0.85 * fade})`;
+        ctx.beginPath(); ctx.ellipse(0, 0, 11, 4, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(220, 170, 70, ${0.95 * fade})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 11, 4, 0, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  },
+
+  drawLighthouses(ctx, lights, t) {
+    if (!lights?.length) return;
+    for (const L of lights) {
+      const fade = L.beacon ? 1 : Math.min(1, L.t / 0.2) * Math.min(1, (L.life - L.t) / 0.4);
+      // Tower base
+      ctx.save();
+      ctx.translate(L.x, L.y);
+      ctx.fillStyle = `rgba(60, 50, 40, ${0.85 * fade})`;
+      ctx.beginPath();
+      ctx.moveTo(-7, 12); ctx.lineTo(7, 12); ctx.lineTo(5, -8); ctx.lineTo(-5, -8); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = `rgba(20, 14, 8, ${0.85 * fade})`;
+      ctx.lineWidth = 1; ctx.stroke();
+      // Lamp top
+      ctx.fillStyle = `rgba(255, 224, 120, ${0.95 * fade})`;
+      ctx.beginPath(); ctx.arc(0, -10, 5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = `rgba(180, 130, 40, ${0.95 * fade})`;
+      ctx.lineWidth = 1; ctx.stroke();
+      ctx.restore();
+      // Beam(s)
+      const beams = L.twinLights ? [L.beamAng, L.beamAng + Math.PI] : [L.beamAng];
+      for (const a of beams) {
+        const halfW = 0.18;
+        const tip1x = L.x + Math.cos(a - halfW) * L.range;
+        const tip1y = L.y + Math.sin(a - halfW) * L.range;
+        const tip2x = L.x + Math.cos(a + halfW) * L.range;
+        const tip2y = L.y + Math.sin(a + halfW) * L.range;
+        const grad = ctx.createLinearGradient(L.x, L.y, L.x + Math.cos(a) * L.range, L.y + Math.sin(a) * L.range);
+        grad.addColorStop(0,   `rgba(255, 240, 170, ${0.55 * fade})`);
+        grad.addColorStop(1,   `rgba(255, 200,  90, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(L.x, L.y);
+        ctx.lineTo(tip1x, tip1y);
+        ctx.lineTo(tip2x, tip2y);
+        ctx.closePath();
+        ctx.fill();
+        // Bright centerline
+        ctx.strokeStyle = `rgba(255, 248, 200, ${0.9 * fade})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(L.x, L.y);
+        ctx.lineTo(L.x + Math.cos(a) * L.range, L.y + Math.sin(a) * L.range);
+        ctx.stroke();
+      }
+    }
+  },
+
+  drawSolarEclipses(ctx, eclipses, t) {
+    if (!eclipses?.length) return;
+    for (const E of eclipses) {
+      const fade = Math.min(1, E.t / 0.3) * Math.min(1, (E.life - E.t) / 0.5);
+      const prog = Math.min(1, E.t / E.life);
+      const isDark = !!E.darkness;
+      // Outer wash
+      const g = ctx.createRadialGradient(E.x, E.y, E.radius * 0.05, E.x, E.y, E.radius);
+      if (isDark) {
+        g.addColorStop(0,   `rgba(20, 10, 30, ${0.65 * fade})`);
+        g.addColorStop(0.7, `rgba(40, 20, 60, ${0.40 * fade})`);
+        g.addColorStop(1,   `rgba(0, 0, 0, 0)`);
+      } else {
+        const intensity = 0.4 + 0.5 * prog;
+        g.addColorStop(0,   `rgba(255, 245, 200, ${0.55 * fade * intensity})`);
+        g.addColorStop(0.5, `rgba(255, 200, 100, ${0.35 * fade * intensity})`);
+        g.addColorStop(0.85,`rgba(255, 140,  60, ${0.20 * fade * intensity})`);
+        g.addColorStop(1,   `rgba(255, 100,  40, 0)`);
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(E.x, E.y, E.radius, 0, TAU); ctx.fill();
+      // Eclipse ring (corona) — bright thin ring
+      ctx.strokeStyle = isDark
+        ? `rgba(180, 150, 220, ${0.7 * fade})`
+        : `rgba(255, 230, 130, ${0.85 * fade})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(E.x, E.y, E.radius * 0.85, 0, TAU); ctx.stroke();
+      // Penumbra: outer slow ring
+      if (E.penumbra) {
+        ctx.strokeStyle = `rgba(255, 220, 150, ${0.4 * fade})`;
+        ctx.lineWidth = 1.0;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath(); ctx.arc(E.x, E.y, E.radius * 1.4, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  },
+
+  drawMirrorMazes(ctx, mazes, t) {
+    if (!mazes?.length) return;
+    for (const M of mazes) {
+      const fade = Math.min(1, M.t / 0.2) * Math.min(1, (M.life - M.t) / 0.5);
+      // Beams between adjacent mirrors
+      ctx.strokeStyle = `rgba(220, 236, 255, ${0.85 * fade})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let k = 0; k < M.mirrors.length; k++) {
+        const a = M.mirrors[k];
+        const b = M.mirrors[(k + 1) % M.mirrors.length];
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+      // Subtle inner glow
+      ctx.strokeStyle = `rgba(220, 236, 255, ${0.25 * fade})`;
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      for (let k = 0; k < M.mirrors.length; k++) {
+        const a = M.mirrors[k];
+        const b = M.mirrors[(k + 1) % M.mirrors.length];
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+      // Mirror nodes
+      for (const m of M.mirrors) {
+        ctx.fillStyle = `rgba(220, 236, 255, ${0.95 * fade})`;
+        ctx.beginPath(); ctx.arc(m.x, m.y, 5, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(120, 150, 200, ${fade})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(m.x, m.y, 5, 0, TAU); ctx.stroke();
+      }
+    }
+  },
+
+  drawPrismStrikes(ctx, strikes, t) {
+    if (!strikes?.length) return;
+    for (const P of strikes) {
+      const prog = Math.min(1, P.t / P.life);
+      const charge = 1 - prog;
+      // Targeting telegraph: shrinking gold ring at impact site
+      ctx.strokeStyle = `rgba(255, 240, 180, ${0.75 + 0.2 * Math.sin(P.t * 30)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(P.x, P.y, P.radius * (0.5 + charge * 0.5), 0, TAU); ctx.stroke();
+      // Faint outer blind ring
+      ctx.strokeStyle = `rgba(255, 240, 180, ${0.30 * (1 - prog * 0.5)})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 6]);
+      ctx.beginPath(); ctx.arc(P.x, P.y, P.blindR, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      // Pillar of light from above
+      const pillarTop = P.y - 600 + (600 * prog);
+      const grad = ctx.createLinearGradient(P.x, pillarTop, P.x, P.y);
+      grad.addColorStop(0,   `rgba(255, 250, 220, 0)`);
+      grad.addColorStop(0.5, `rgba(255, 248, 200, ${0.85 * prog})`);
+      grad.addColorStop(1,   `rgba(255, 240, 180, ${0.95 * prog})`);
+      ctx.fillStyle = grad;
+      const w = 10 + 18 * prog;
+      ctx.fillRect(P.x - w / 2, pillarTop, w, P.y - pillarTop);
+      // Bright center line
+      ctx.strokeStyle = `rgba(255, 255, 240, ${0.95 * prog})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(P.x, pillarTop);
+      ctx.lineTo(P.x, P.y);
+      ctx.stroke();
+    }
+  },
+
+  drawPrismBeams(ctx, beams) {
+    if (!beams?.length) return;
+    for (const B of beams) {
+      const prog = Math.min(1, B.t / B.life);
+      const fade = 1 - prog;
+      const reach = B.reach * prog;
+      const tipX = B.x + Math.cos(B.ang) * reach;
+      const tipY = B.y + Math.sin(B.ang) * reach;
+      // Beam halo (color is hex; alpha controlled via globalAlpha)
+      ctx.strokeStyle = B.color;
+      ctx.globalAlpha = 0.45 * fade;
+      ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(tipX, tipY); ctx.stroke();
+      // Bright core
+      ctx.globalAlpha = 0.95 * fade;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(tipX, tipY); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  },
+
+  drawBeamFlashes(ctx, flashes) {
+    if (!flashes?.length) return;
+    for (const f of flashes) {
+      const prog = Math.min(1, f.t / f.life);
+      const fade = 1 - prog;
+      const intensity = 0.5 + (f.stage || 0) * 0.15;
+      // Beam halo grows with stage; peak adds an extra crackle.
+      ctx.strokeStyle = f.peak ? `rgba(255, 250, 200, ${0.9 * fade})` : `rgba(255, 230, 140, ${0.7 * fade})`;
+      ctx.lineWidth = 1.5 + intensity * 3;
+      ctx.beginPath(); ctx.moveTo(f.from.x, f.from.y); ctx.lineTo(f.to.x, f.to.y); ctx.stroke();
+      // Inner core
+      ctx.strokeStyle = `rgba(255, 255, 240, ${0.95 * fade})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(f.from.x, f.from.y); ctx.lineTo(f.to.x, f.to.y); ctx.stroke();
+    }
+  },
+
+  drawAegisMirrors(ctx, aegises, player, t) {
+    if (!aegises?.length || !player) return;
+    for (const A of aegises) {
+      for (const m of A.mirrors) {
+        const ringR = A.radius + (m.ringIdx * 22);
+        const ringSlots = m.ring;
+        const ang = A.angle * (m.ringIdx % 2 === 0 ? 1 : -0.7) + (m.slot / ringSlots) * TAU;
+        const mx = player.x + Math.cos(ang) * ringR;
+        const my = player.y + Math.sin(ang) * ringR;
+        const charged = m.charge > 0;
+        ctx.save();
+        ctx.translate(mx, my);
+        ctx.rotate(ang + Math.PI / 2);
+        ctx.fillStyle = charged ? `rgba(220, 236, 255, 0.95)` : `rgba(80, 90, 110, 0.50)`;
+        ctx.fillRect(-9, -2.5, 18, 5);
+        ctx.strokeStyle = charged ? `rgba(120, 150, 200, 0.9)` : `rgba(40, 50, 70, 0.7)`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-9, -2.5, 18, 5);
+        // Highlight gleam on the front face (pointing outward)
+        if (charged) {
+          ctx.fillStyle = `rgba(255, 255, 255, 0.85)`;
+          ctx.fillRect(-7, -2, 4, 1);
+        }
+        ctx.restore();
+      }
+    }
+  },
+
   drawFireShield(ctx, shields, player, t) {
     if (!shields || !shields.length || !player) return;
     for (const sh of shields) {
@@ -9799,6 +11519,7 @@ function formatStat(stat, total) {
     case 'critMult':          return `${pct(total)} crit damage`;
     case 'pierceBonus':       return `+${Math.floor(total)} pierce`;
     case 'chainBonus':        return `+${Math.floor(total)} chain`;
+    case 'beamGrace':         return `+${Math.floor(total)} grace casts`;
     // Minion stats
     case 'shareBonus':        return `${pct(total)} link share`;
     case 'rangeMult':         return `${pct(total)} range`;
@@ -9896,11 +11617,14 @@ const UI = {
     this.game = game;
     // Character cards (currently just Wizard).
     const cont = this.$('character-choices');
+    let selectedCharId = null;
     if (cont) {
       cont.innerHTML = '';
-      let selected = null;
-      for (const c of Object.values(CHARACTERS)) {
-        if (!c.available) continue;
+      const available = Object.values(CHARACTERS).filter(c => c.available);
+      // Auto-select if there's only one option, so the start button works
+      // immediately without forcing a click.
+      if (available.length === 1) selectedCharId = available[0].id;
+      for (const c of available) {
         const card = document.createElement('div');
         card.className = 'card';
         card.style.setProperty('--accent', c.color);
@@ -9912,7 +11636,7 @@ const UI = {
         card.addEventListener('click', () => {
           cont.querySelectorAll('.card').forEach(el => el.style.outline = 'none');
           card.style.outline = `2px solid ${c.color}`;
-          selected = c.id;
+          selectedCharId = c.id;
           const btn = this.$('btn-start');
           if (btn) {
             btn.disabled = false;
@@ -9926,9 +11650,7 @@ const UI = {
     const btnStart = this.$('btn-start');
     if (btnStart) {
       btnStart.addEventListener('click', () => {
-        const id = (cont && cont.querySelector('.card[style*="outline"]')) ? null : 'wizard';
-        // Default to wizard if only one is available.
-        const charId = id || 'wizard';
+        const charId = selectedCharId || 'wizard';
         this.hideAllOverlays();
         this.game.startRun(charId);
       });
