@@ -2900,11 +2900,9 @@ const SPELLS = {
       // spawn edge — previously it despawned ~100 units short of edge
       // spawns, while Lightning Bolt's instant-target had unlimited range.
       const speed = 340 * (b.projectileBoost || 1);
-      const burnDmg = 7 * mods.dmgMult * (1 + (mods.burnDmgMult || 0));
-
       // Meteor Path: spawn from above the target, falling straight down,
       // crater stuns on impact. Kept inside the spawnProjectile path so
-      // applyStatus / hydra / lingeringFlame routing all stays unified.
+      // applyStatus / hydra routing all stays unified.
       const sx = meteorMode ? target.x : caster.x;
       const sy = meteorMode ? target.y - 600 : caster.y;
       const vx = meteorMode ? 0 : dir.x * speed;
@@ -2947,10 +2945,6 @@ const SPELLS = {
             }
             game.spawnExplosion(hit.x, hit.y, radius, meteorMode ? '#ff3311' : '#ff7733', meteorMode ? 'pyroclasm' : null);
             if (meteorMode) game.addShake(0.22);
-          }
-          // Conflagration keystone: leaves burning ground
-          if (b.lingeringFlame) {
-            game.spawnFlamePatch(hit.x, hit.y, radius * 0.85, 2.5, burnDmg);
           }
           // Hydra spec: 20% chance to spawn a fireball-spitting Hydra Head for 6s
           if (b.hydraOnHit && Math.random() < b.hydraOnHit) {
@@ -3138,8 +3132,7 @@ const ABILITIES = {
     specs: [
       { id: 'ignite',  name: 'Ignite',
         desc: 'Targets burn for 60% of impact damage over 3s.',
-        applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.60, critOnHit: false } },
-        behavior: { igniteOnHit: true } },
+        applyStatus: { ignite: { duration: 3.0, dpsRatio: 0.60, critOnHit: false } } },
       { id: 'hydra',   name: 'Hydra',
         desc: '20% chance on hit to spawn a fireball-spitting Hydra Head for 6s.',
         behavior: { hydraOnHit: 0.20 } },
@@ -3263,10 +3256,10 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
-        desc: 'When the fort expires, an icy patch lingers for 3s applying slow.',
+        desc: 'When the fort\'s shield breaks, an icy patch lingers for 3s applying slow.',
         behavior: { permafrost: true } },
       { id: 'avalanche',  name: 'Avalanche',
-        desc: 'When the fort expires, it collapses for 180 damage to all enemies inside.',
+        desc: 'When the fort\'s shield breaks, it collapses for 180 damage to all enemies inside.',
         behavior: { avalancheExpire: 180 } },
       { id: 'crystal',    name: 'Crystalline',
         desc: 'While the fort\'s shield is up, your spells get +25% crit chance.',
@@ -3659,7 +3652,7 @@ const ABILITIES = {
         desc: 'Fires 7 beams in a full color wheel instead of 3.',
         behavior: { spectrum: true } },
       { id: 'searingRed',  name: 'Searing Red',
-        desc: 'Only the red beam fires, but for ×2.5 damage and +40% reach.',
+        desc: 'Only the red beam fires, but for ×3.5 damage and +60% reach.',
         behavior: { searingRed: true } },
       { id: 'zenith',      name: 'Zenith',
         desc: 'Beams travel further and bounce off the engagement ring back inward once.',
@@ -4779,10 +4772,6 @@ class Player {
       }
       if (dmg <= 0) { this.iframes = CONFIG.player.iframes * 0.4; return; }
     }
-    // Legacy safe-zone path (kept for permafrost patches, not used by main fort any more)
-    if (this._safeZoneUntil && (game?.runElapsed ?? 0) < this._safeZoneUntil) {
-      dmg = dmg * (1 - (this._safeZoneReduction || 0.5));
-    }
     // Drummer Ward aura — flat % damage reduction while active.
     if (this._drummerAura?.ward) {
       dmg = dmg * (1 - this._drummerAura.ward);
@@ -5075,17 +5064,7 @@ class FlamePatch {
   }
 }
 
-class FlameWall {
-  // Horizontal fire wall — damages anything in its y-band
-  constructor(y, height, life, dps) {
-    this.y = y;
-    this.height = height;
-    this.life = life; this.t = 0;
-    this.dps = dps;
-    this.dead = false;
-    this.dmgAcc = 0;
-  }
-}
+/* FlameWall — Wall of Flame subsystem removed; spell never wired into ABILITIES. */
 
 class StormCloud {
   /*
@@ -5540,9 +5519,15 @@ class Game {
     this.wells = [];
     this.pullFields = [];
     this.lightnings = [];        // visual chain segments
-    this.flamePatches = [];      // Conflagration's lingering ground fire
-    this.flameWalls = [];        // Wall of Flame
+    this.flamePatches = [];      // Lingering Crater (Meteor spec) ground fire
     this.stormClouds = [];       // Storm Cloud spell — hovering shock dispenser
+    this.snowForts = [];
+    this.fireShields = [];
+    this.shockTowers = [];
+    this.hydraHeads = [];
+    this.meteors = [];
+    this.wormholes = [];
+    this.snowStorms = [];
     this.damageNumbers = [];     // floating damage text
     this.explosions = [];        // visual-only expanding ring on impact
     // Optician entities
@@ -5642,7 +5627,6 @@ class Game {
     this.pullFields = [];
     this.lightnings = [];
     this.flamePatches = [];
-    this.flameWalls = [];
     this.stormClouds = [];
     this.snowForts = [];
     this.fireShields = [];
@@ -5819,7 +5803,6 @@ class Game {
     this.tickWells(dt);
     this.tickPullFields(dt);
     this.tickFlamePatches(dt);
-    this.tickFlameWalls(dt);
     this.tickStormClouds(dt);
     this.tickSnowForts(dt);
     this.tickFireShields(dt);
@@ -5865,9 +5848,6 @@ class Game {
   }
   spawnFlamePatch(x, y, radius, life, dps) {
     this.flamePatches.push(new FlamePatch(x, y, radius, life, dps));
-  }
-  spawnFlameWall({ y, height, life, dps }) {
-    this.flameWalls.push(new FlameWall(y, height, life, dps));
   }
   spawnStormCloud(opts) {
     this.stormClouds.push(new StormCloud(opts));
@@ -7831,27 +7811,6 @@ class Game {
           w.y += (dy / d) * speed * dt;
         }
       }
-      // Optional: periodic lightning emission (storm_singularity)
-      if (w.lightning) {
-        w.lightning.timer += dt;
-        if (w.lightning.timer >= w.lightning.interval) {
-          w.lightning.timer = 0;
-          // Find an enemy within or near the well to strike
-          const target = this.findNearestEnemyTo(w, w.radius + 30);
-          if (target) {
-            this.spawnChainLightning({
-              from: { x: w.x, y: w.y },
-              firstTarget: target,
-              damage: w.lightning.damage,
-              chains: w.lightning.chains,
-              chainRange: w.lightning.chainRange,
-              falloff: w.lightning.falloff,
-              crit: w.lightning.crit,
-              spell: w.spell,
-            });
-          }
-        }
-      }
     }
   }
 
@@ -7895,28 +7854,6 @@ class Game {
           const d = Vec.dist(fp, e);
           if (d < fp.radius + e.radius) {
             e.takeDamage(tickDmg, { spell: 'flame_patch' });
-            this.totalDamageDealt += tickDmg;
-          }
-        }
-      }
-    }
-  }
-
-  tickFlameWalls(dt) {
-    for (let i = this.flameWalls.length - 1; i >= 0; i--) {
-      const fw = this.flameWalls[i];
-      fw.t += dt;
-      if (fw.t >= fw.life) { this.flameWalls.splice(i, 1); continue; }
-      fw.dmgAcc += dt;
-      if (fw.dmgAcc >= 0.2) {
-        const tickDmg = fw.dps * fw.dmgAcc;
-        fw.dmgAcc = 0;
-        const yMin = fw.y - fw.height / 2;
-        const yMax = fw.y + fw.height / 2;
-        for (const e of this.enemies) {
-          if (!e.alive) continue;
-          if (e.y >= yMin && e.y <= yMax) {
-            e.takeDamage(tickDmg, { spell: 'wall_of_flame' });
             this.totalDamageDealt += tickDmg;
           }
         }
@@ -8461,7 +8398,6 @@ const Renderer = {
     // World layers (inside shake transform — HUD lives in the DOM and is immune)
     this.drawEngagementRing(ctx, game);
     this.drawFlamePatches(ctx, game.flamePatches, game.runElapsed);
-    this.drawFlameWalls(ctx, game.flameWalls, w, game.runElapsed);
     this.drawSnowForts(ctx, game.snowForts, game.runElapsed);
     this.drawSnowStorms(ctx, game.snowStorms, game.runElapsed);
     this.drawShockTowers(ctx, game.shockTowers, game.runElapsed);
@@ -8481,7 +8417,6 @@ const Renderer = {
     this.drawAegisMirrors(ctx, game.aegisMirrors, game.player, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells, game.player);
-    this.drawAura(ctx, game.player, game.auraPulse, game);
     this.drawEnemies(ctx, game.enemies);
     this.drawProjectiles(ctx, game.projectiles);
     this.drawStormClouds(ctx, game.stormClouds, game.runElapsed);
@@ -8811,11 +8746,10 @@ const Renderer = {
 
   _drawDefenseStatus(ctx, p, t) {
     const charges = (p._shieldCharges || 0);
-    const sheltered = (p._safeZoneUntil || 0) > t - 0.05;
-    if (!charges && !sheltered) return;
+    if (!charges) return;
     ctx.save();
     const baseY = p.y - p.radius - 22;
-    let xOff = -((charges * 8) + (sheltered ? 14 : 0)) / 2;
+    let xOff = -(charges * 8) / 2;
     // Fire shield charges as orange pips
     for (let i = 0; i < charges; i++) {
       const cx = p.x + xOff + 4 + i * 8;
@@ -8827,25 +8761,9 @@ const Renderer = {
       ctx.fillStyle = `rgba(255, 240, 200, ${0.7 + 0.3 * Math.sin(t * 6 + i)})`;
       ctx.beginPath(); ctx.arc(cx - 0.8, cy - 0.8, 1.2, 0, TAU); ctx.fill();
     }
-    // Sheltered glyph — snow blue
-    if (sheltered) {
-      const cx = p.x + xOff + (charges ? charges * 8 + 8 : 4);
-      const cy = baseY;
-      ctx.fillStyle = 'rgba(190, 230, 250, 0.9)';
-      ctx.strokeStyle = '#3a7aa0';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#1d150c';
-      ctx.font = 'bold 7px JetBrains Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('S', cx, cy);
-    }
     ctx.restore();
   },
 
-  /* ---- drawNinja: removed; Ninja class is deferred indefinitely. ---- */
-  drawNinja() { /* no-op */ },
 
   drawStar(ctx, cx, cy, outer, inner, points) {
     ctx.beginPath();
@@ -9938,8 +9856,6 @@ const Renderer = {
     }
   },
 
-  drawAura() { /* removed: was tied to deleted static_field spell */ },
-
   /*
    * Engagement ring — a faint dotted circle drawn live on top of the
    * baked parchment ring. Marks the auto-target boundary used by
@@ -10103,82 +10019,7 @@ const Renderer = {
     }
   },
 
-  drawFlameWalls(ctx, walls, worldW, t) {
-    for (const fw of walls) {
-      const lifeT = fw.t / fw.life;
-      const fade = lifeT < 0.85 ? 1 : (1 - lifeT) / 0.15;
-      const yMid = fw.y;
-      const halfH = fw.height / 2;
-      const yMin = yMid - halfH;
-      const yMax = yMid + halfH;
-
-      // Scorched lane — dark hatched band
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, yMin - 6, worldW, fw.height + 12);
-      ctx.clip();
-      ctx.fillStyle = `rgba(26,22,18,${0.18 * fade})`;
-      ctx.fillRect(0, yMin - 6, worldW, fw.height + 12);
-      hatch(ctx, worldW / 2, yMid, worldW * 1.2, fw.height + 12, 3.5, Math.PI / 3.4, `rgba(26,22,18,${0.22 * fade})`, 0.5);
-      ctx.restore();
-
-      // Ink lane edges
-      ctx.strokeStyle = `rgba(26,22,18,${fade})`;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(0, yMin); ctx.lineTo(worldW, yMin);
-      ctx.moveTo(0, yMax); ctx.lineTo(worldW, yMax);
-      ctx.stroke();
-
-      // Vermilion lane fill — vertical gradient
-      const grd = ctx.createLinearGradient(0, yMin, 0, yMax);
-      grd.addColorStop(0,   `rgba(168,58,44,${0.05 * fade})`);
-      grd.addColorStop(0.5, `rgba(168,58,44,${0.55 * fade})`);
-      grd.addColorStop(1,   `rgba(168,58,44,${0.05 * fade})`);
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, yMin, worldW, fw.height);
-
-      // Heat haze — subtle horizontal warp lines above the lane
-      ctx.strokeStyle = `rgba(168,58,44,${0.10 * fade})`;
-      ctx.lineWidth = 0.8;
-      for (let i = 0; i < 4; i++) {
-        const y = yMin - 4 - i * 4;
-        ctx.beginPath();
-        for (let xx = 0; xx <= worldW; xx += 6) {
-          const wy = y + Math.sin(xx * 0.1 + t * 4 + i) * 0.8;
-          if (xx === 0) ctx.moveTo(xx, wy); else ctx.lineTo(xx, wy);
-        }
-        ctx.stroke();
-      }
-
-      // Flame tongues licking up off the lane
-      const tongues = Math.floor(worldW / 26);
-      for (let i = 0; i < tongues; i++) {
-        const x = (worldW / tongues) * i + Math.sin(t * 4 + i) * 5;
-        const flick = 0.7 + Math.sin(t * 8 + i * 0.8) * 0.3;
-        const size = 5 + flick * 4;
-        ctx.fillStyle = `rgba(168,58,44,${flick * fade})`;
-        ctx.strokeStyle = `rgba(26,22,18,${0.55 * fade})`;
-        ctx.lineWidth = 0.6;
-        ctx.beginPath();
-        ctx.moveTo(x, yMid);
-        ctx.bezierCurveTo(x + size * 0.6, yMid - size, x - size * 0.4, yMid - size * 1.4, x, yMid - size * 1.8);
-        ctx.bezierCurveTo(x - size * 0.4, yMid - size * 1.4, x - size * 0.6, yMid - size, x, yMid);
-        ctx.fill(); ctx.stroke();
-        if (flick > 0.85) {
-          ctx.fillStyle = `rgba(232,184,64,${(flick - 0.85) * 4 * fade})`;
-          ctx.beginPath();
-          ctx.ellipse(x, yMid - size * 0.6, size * 0.2, size * 0.5, 0, 0, TAU);
-          ctx.fill();
-        }
-      }
-
-      // Inkmark stars on each end as "live" markers
-      ctx.fillStyle = `rgba(26,22,18,${fade})`;
-      drawStarPath(ctx, 14, yMid, 4, 1.8, 5); ctx.fill();
-      drawStarPath(ctx, worldW - 14, yMid, 4, 1.8, 5); ctx.fill();
-    }
-  },
+  /* drawFlameWalls — Wall of Flame subsystem removed. */
 
   drawExplosions(ctx, explosions) {
     for (const ex of explosions) {
@@ -10188,134 +10029,8 @@ const Renderer = {
       const cx = ex.x, cy = ex.y;
       const kind = ex.kind || 'burst';
 
-      // ----- SLASH (Ninja Crescent) — crossed vermilion arcs sweeping
-      // outward. Distinctive enough that the player sees the cleave
-      // even when it doesn't kill anything. -----
-      if (kind === 'slash') {
-        // Two crescent arcs at ~45° rotation, wider than the damage disc
-        // for visual punch. They expand as they fade.
-        const arcR = r * (0.6 + lifeT * 0.55);
-        const sweep = Math.PI * 0.85;            // arc length
-        const baseAng = (ex._slashAng ??= Math.random() * TAU);
-        ctx.lineCap = 'round';
-        for (let k = 0; k < 2; k++) {
-          const rot = baseAng + k * Math.PI;
-          // Outer ink stroke
-          ctx.strokeStyle = `rgba(26,22,18,${a * 0.95})`;
-          ctx.lineWidth = 4 * (1 - lifeT * 0.4);
-          ctx.beginPath();
-          ctx.arc(cx, cy, arcR, rot - sweep / 2, rot + sweep / 2);
-          ctx.stroke();
-          // Vermilion blade core
-          ctx.strokeStyle = `rgba(182,51,42,${a})`;
-          ctx.lineWidth = 2 * (1 - lifeT * 0.4);
-          ctx.beginPath();
-          ctx.arc(cx, cy, arcR, rot - sweep / 2, rot + sweep / 2);
-          ctx.stroke();
-        }
-        ctx.lineCap = 'butt';
-        // Centre flash — a small vermilion star at the impact point
-        if (a > 0.4) {
-          ctx.fillStyle = `rgba(182,51,42,${(a - 0.4) * 1.2})`;
-          drawStarPath(ctx, cx, cy, r * 0.18, r * 0.08, 4, -Math.PI / 4);
-          ctx.fill();
-        }
-        continue;
-      }
 
-      // ----- SMOKE PUFF (Ninja Flicker Step departure) — bloom of ink
-      // smoke at the caster's old position. No shockwave, no slash. -----
-      if (kind === 'smoke') {
-        const puffs = 7;
-        for (let i = 0; i < puffs; i++) {
-          const seed = (ex._smokeSeed ??= Math.random() * 1000);
-          const ang = (i / puffs) * TAU + seed;
-          const dist = lifeT * r * 0.6 + Math.sin(seed + i) * 3;
-          const px = cx + Math.cos(ang) * dist;
-          const py = cy + Math.sin(ang) * dist - lifeT * 8; // rises slightly
-          const pr = r * (0.18 + 0.12 * Math.sin(seed + i * 1.7)) * (0.6 + lifeT * 0.5);
-          ctx.fillStyle = `rgba(60,52,42,${a * 0.55})`;
-          ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
-          ctx.fillStyle = `rgba(26,22,18,${a * 0.35})`;
-          ctx.beginPath(); ctx.arc(px - pr * 0.3, py - pr * 0.2, pr * 0.5, 0, TAU); ctx.fill();
-        }
-        // Tiny ink dots scattering outward
-        const sparks = 5;
-        for (let i = 0; i < sparks; i++) {
-          const seed = (ex._smokeSeed ??= Math.random() * 1000);
-          const ang = (i / sparks) * TAU + seed * 1.7;
-          const sd = r * 0.2 + lifeT * r * 0.8;
-          ctx.fillStyle = `rgba(26,22,18,${a})`;
-          ctx.beginPath();
-          ctx.arc(cx + Math.cos(ang) * sd, cy + Math.sin(ang) * sd, 1, 0, TAU);
-          ctx.fill();
-        }
-        continue;
-      }
 
-      // ----- FLICKER STEP arrival — ink-streak afterimage of a ninja
-      // silhouette + a tight crescent slash. Reads as "blink + cut." -----
-      if (kind === 'flicker') {
-        // Afterimage silhouette behind a fast-expanding slash
-        const ghostA = a * 0.9;
-        ctx.save();
-        ctx.translate(cx, cy);
-        const baseAng = (ex._flickAng ??= Math.random() * TAU);
-        ctx.rotate(baseAng);
-        // Fading "ghost" silhouette — small crouched figure
-        ctx.fillStyle = `rgba(26,22,18,${ghostA * 0.7})`;
-        ctx.beginPath();
-        ctx.moveTo(-6, -10);
-        ctx.lineTo(6, -10);
-        ctx.lineTo(8, 10);
-        ctx.lineTo(-8, 10);
-        ctx.closePath();
-        ctx.fill();
-        // Hood
-        ctx.beginPath();
-        ctx.arc(0, -12, 6, 0, Math.PI, true);
-        ctx.fill();
-        ctx.restore();
-
-        // Sharp single slash cutting across the target
-        const slashLen = r * (0.7 + lifeT * 0.6);
-        const slashAng = (ex._flickAng ?? 0) + Math.PI * 0.25;
-        const sx = cx + Math.cos(slashAng) * slashLen * 0.6;
-        const sy = cy + Math.sin(slashAng) * slashLen * 0.6;
-        const ex2 = cx - Math.cos(slashAng) * slashLen * 0.6;
-        const ey2 = cy - Math.sin(slashAng) * slashLen * 0.6;
-        ctx.lineCap = 'round';
-        // Ink underlay
-        ctx.strokeStyle = `rgba(26,22,18,${a})`;
-        ctx.lineWidth = 4 * (1 - lifeT * 0.5);
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
-        // Vermilion edge highlight
-        ctx.strokeStyle = `rgba(168,58,44,${a * 0.9})`;
-        ctx.lineWidth = 1.6 * (1 - lifeT * 0.5);
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
-        ctx.lineCap = 'butt';
-
-        // Spinning shuriken at the impact point — telegraphs the strike
-        if (a > 0.3) {
-          const sa = (a - 0.3) / 0.7;
-          const sr = 6 + (1 - sa) * 4;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.rotate(lifeT * 12);
-          ctx.fillStyle = `rgba(26,22,18,${sa})`;
-          ctx.beginPath();
-          for (let k = 0; k < 4; k++) {
-            const ka = k * Math.PI / 2;
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(ka) * sr, Math.sin(ka) * sr);
-            ctx.lineTo(Math.cos(ka + 0.4) * sr * 0.32, Math.sin(ka + 0.4) * sr * 0.32);
-          }
-          ctx.closePath();
-          ctx.fill();
-          ctx.restore();
-        }
-        continue;
-      }
 
       // ----- PYROCLASM — full-frame fire eruption with magma core,
       // soot ring, and arcing ember sprays. The boss-level fire spell. -----
