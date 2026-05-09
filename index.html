@@ -2963,36 +2963,9 @@ const SPELLS = {
     },
   },
 
-  pyroclasm: {
-    id: 'pyroclasm',
-    name: 'Pyroclasm',
-    tree: 'fire',
-    color: '#ff3311',
-    cooldown: 6.5,
-    cast(game, caster, mods) {
-      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
-      if (!target) return;
-      const radius = 160 * (mods.radiusMult || 1);
-      const damage = 80 * mods.dmgMult;
-      // Big instant explosion at target
-      for (const e of game.enemies) {
-        if (!e.alive) continue;
-        const d = Vec.dist(target, e);
-        if (d < radius + e.radius) {
-          // Falloff with distance
-          const falloff = 1 - (d / (radius + e.radius)) * 0.5;
-          const ignited = e.statuses?.ignite?.critOnHit;
-          const isCrit = ignited || Math.random() < (mods.critChance || 0);
-          const dmg = (isCrit ? damage * mods.critMult : damage) * falloff;
-          e.takeDamage(dmg, { spell: 'pyroclasm' });
-          game.totalDamageDealt += dmg;
-        }
-      }
-      game.spawnExplosion(target.x, target.y, radius, '#ff3311', 'pyroclasm');
-      game.spawnHitParticles(target.x, target.y, '#ff5511', 30);
-      game.addShake(0.6);
-    },
-  },
+  // pyroclasm — removed; the explosion-kind 'pyroclasm' tag survives
+  // as a Renderer.drawExplosions branch (used by Meteor + Solar Forge
+  // for the bigger ash-and-spark variant).
 
   frost_spike: {
     id: 'frost_spike',
@@ -4229,43 +4202,21 @@ const NEEDS_TARGET_ABILITIES = new Set([
  * inherits the parent spell's damage type.
  * ----------------------------------------------------------------------- */
 const SPELL_DAMAGE_TYPES = {
-  // Magician — arcane / elemental
-  arcane_missile:    'arcane',
+  // Wizard — attacks routed through SPELLS body
   gravity_bolt:      'arcane',
-  gravity_well:      'arcane',
-  magnetar_pulse:    'arcane',
-  storm_singularity: 'arcane',
-  tidal_sphere:      'arcane',
-  black_bolt:        'arcane',
   lightning_bolt:    'elemental',
   chain_lightning:   'elemental',
   storm_cloud:       'elemental',
-  static_field:      'elemental',
-  tempest:           'elemental',
   fireball:          'elemental',
-  wall_of_flame:     'elemental',
-  pyroclasm:         'elemental',
   frost_spike:       'elemental',
-  // Ninja — mostly physical, smoke counts as elemental (chemical choke)
-  crescent_strike:   'physical',
-  reaping_strike:    'physical',
-  shadow_clone:      'physical',
-  flicker_step:      'physical',
-  crossbow_bolt:     'physical',
-  caltrops:          'physical',
-  spring_trap:       'physical',
-  shuriken_toss:     'physical',
-  smoke_bomb:        'elemental',
-  // Defense / Utility / On-use (universal — added in the tiered redesign)
-  aegis_pulse:       'arcane',
-  wardroot:          'arcane',
-  soul_anchor:       'arcane',
-  shadowblade:       'physical',
-  battle_hymn:       'arcane',
-  mark_of_frailty:   'arcane',
-  time_dilation:     'arcane',
-  doom_sigil:        'arcane',
-  berserkers_howl:   'physical',
+  // Wizard — entities tag their damage with the ABILITIES id
+  snow_fort:         'elemental',
+  fire_shield:       'elemental',
+  gravital_anomaly:  'arcane',
+  shock_tower:       'elemental',
+  meteor:            'elemental',
+  wormhole:          'arcane',
+  snow_storm:        'elemental',
   // Optician — light is elemental (heat / burn), mirrors are arcane (geometry warp)
   prism_burst:       'elemental',
   focused_beam:      'elemental',
@@ -6486,7 +6437,7 @@ class Game {
             const falloff = 1 - (d / (radius + e.radius)) * 0.4;
             const isCrit  = Math.random() < (mods?.critChance || 0);
             const dmg     = (isCrit ? damage * (mods?.critMult || 2) : damage) * falloff;
-            const actual  = e.takeDamage(dmg, { spell: 'pyroclasm' });
+            const actual  = e.takeDamage(dmg, { spell: 'meteor' });
             this.totalDamageDealt += actual;
             this.spawnDamageNumber(e.x, e.y - e.radius - 6, actual, isCrit, e);
           }
