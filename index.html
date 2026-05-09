@@ -5010,6 +5010,19 @@ class Enemy {
               if (s) peer.applyStatus(k, { ...s }, s.expires);
             }
           }
+          // Render bead — animates from this enemy → peer over 0.18s.
+          // Capped at 6 active beads to keep cost negligible.
+          const g = this.game;
+          if (g) {
+            g._linkBeads = g._linkBeads || [];
+            if (g._linkBeads.length < 6) {
+              g._linkBeads.push({
+                fromX: this.x, fromY: this.y,
+                toX: peer.x, toY: peer.y,
+                t: 0, life: 0.18,
+              });
+            }
+          }
         }
       }
     }
@@ -5846,6 +5859,7 @@ class Game {
     this.tickMirrorMazes(dt);
     this.tickPrismStrikes(dt);
     this.tickBlindingFlashes(dt);
+    this.tickLinkBeads(dt);
     this.tickPrismBeams(dt);
     this.tickBeamFlashes(dt);
     this.tickFocusedBeam(dt);
@@ -7005,6 +7019,15 @@ class Game {
       const f = this.blindFlashes[i];
       f.age += dt;
       if (f.age >= f.ringLife) this.blindFlashes.splice(i, 1);
+    }
+  }
+
+  tickLinkBeads(dt) {
+    if (!this._linkBeads?.length) return;
+    for (let i = this._linkBeads.length - 1; i >= 0; i--) {
+      const b = this._linkBeads[i];
+      b.t += dt;
+      if (b.t >= b.life) this._linkBeads.splice(i, 1);
     }
   }
 
@@ -8419,6 +8442,10 @@ const Renderer = {
   draw(game) {
     const ctx = game.ctx;
     const w = game.width, h = game.height;
+    // Stash game ref so any sub-renderer that needs cross-system state
+    // (e.g. _linkBeads owned by the game, drawn by the linker minion)
+    // can read it without re-threading the signature.
+    this._currentGame = game;
 
     // Apply screen shake by translating the world before drawing.
     // Background drawn before shake so the bg doesn't shake (only world entities).
@@ -8467,7 +8494,7 @@ const Renderer = {
     this.drawParticles(ctx, game.particles);
     this.drawDamageNumbers(ctx, game.damageNumbers);
     if (game.player) this.drawFireShield(ctx, game.fireShields, game.player, game.runElapsed);
-    if (game.minion)  this.drawMinion(ctx, game.minion, game.runElapsed);
+    if (game.minion)  this.drawMinion(ctx, game.minion, game.runElapsed, game.player);
     if (game.player) this.drawPlayer(ctx, game.player, game.runElapsed);
     // Blinding Flash world-space layer (rings + ground star) — under shake.
     this.drawBlindingFlashWorld(ctx, game.blindFlashes);
@@ -8690,10 +8717,7 @@ const Renderer = {
       ctx.restore();
     }
 
-    if (charId === 'ninja') {
-      this.drawNinja(ctx, p, t, x, y, cast, blink);
-      return;
-    }
+    // Ninja class is deferred indefinitely; legacy dispatch removed.
 
     ctx.save();
     ctx.translate(x, y);
@@ -8824,205 +8848,8 @@ const Renderer = {
     ctx.restore();
   },
 
-  /* ---- Player (Ninja) — hooded silhouette with mempo mask ----
-     Compact, low to the ground, twin sashes flowing behind. Focus stacks
-     orbit as wireframe shuriken. Cast pose = throwing arm extended with
-     vermilion ink-flick. */
-  drawNinja(ctx, p, t, x, y, cast, blink) {
-    // Focus stacks (Ninja signature) — wireframe shuriken orbiting the
-    // figure. Drawn UNDER the body so the silhouette stays readable.
-    const focus = p.focusStacks || 0;
-    const cap = p._focusCap || 5;
-    if (focus > 0) {
-      const baseR = 32;
-      for (let i = 0; i < focus; i++) {
-        const ang = (i / cap) * TAU + t * 1.6;
-        const ox = x + Math.cos(ang) * baseR;
-        const oy = y + Math.sin(ang) * baseR;
-        const spin = t * 6 + i * 1.2;
-        // Tiny shuriken silhouette — ink + vermilion accent
-        ctx.save();
-        ctx.translate(ox, oy);
-        ctx.rotate(spin);
-        ctx.fillStyle = PAL.ink;
-        ctx.beginPath();
-        for (let k = 0; k < 4; k++) {
-          const a = k * Math.PI / 2;
-          ctx.moveTo(0, 0);
-          ctx.lineTo(Math.cos(a) * 4, Math.sin(a) * 4);
-          ctx.lineTo(Math.cos(a + 0.4) * 1.6, Math.sin(a + 0.4) * 1.6);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = PAL.red;
-        ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
-        ctx.restore();
-      }
-      // Faint indigo orbit trail
-      ctx.strokeStyle = `rgba(44,74,140,${0.18 + 0.10 * Math.sin(t * 3)})`;
-      ctx.lineWidth = 0.6;
-      ctx.setLineDash([2, 4]);
-      ctx.beginPath(); ctx.arc(x, y, 32, 0, TAU); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // Hatched shadow pad
-    ctx.save();
-    ctx.translate(0, 22);
-    ctx.scale(1, 0.32);
-    hatch(ctx, 0, 0, 26, 12, 1.4, 0, 'rgba(26,22,18,0.55)', 0.5);
-    ctx.restore();
-
-    // Twin trailing sashes — flowing ribbons behind the figure (animated)
-    const sashSway = Math.sin(t * 3) * 4;
-    const sashFill = blink ? 'rgba(168,58,44,0.30)' : PAL.red;
-    ctx.fillStyle = sashFill;
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 0.8;
-    // Left sash
-    ctx.beginPath();
-    ctx.moveTo(-6, 6);
-    ctx.bezierCurveTo(-12, 10, -16 + sashSway * 0.3, 16, -14 + sashSway, 26);
-    ctx.bezierCurveTo(-10 + sashSway, 22, -8, 18, -4, 14);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // Right sash (mirrored, opposite phase)
-    ctx.beginPath();
-    ctx.moveTo(6, 6);
-    ctx.bezierCurveTo(12, 10, 16 - sashSway * 0.3, 16, 14 - sashSway, 26);
-    ctx.bezierCurveTo(10 - sashSway, 22, 8, 18, 4, 14);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-
-    // Body — compact crouched torso (trapezoid silhouette)
-    const bodyFill = blink ? PAL.paper2 : PAL.ink;
-    ctx.fillStyle = bodyFill;
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(-10, -6);
-    ctx.lineTo(10, -6);
-    ctx.lineTo(14, 18);
-    ctx.lineTo(-14, 18);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Hatched volume on the right side of the body
-    if (!blink) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(10, -6);
-      ctx.lineTo(14, 18);
-      ctx.lineTo(0, 18);
-      ctx.closePath();
-      ctx.clip();
-      hatch(ctx, 6, 6, 24, 24, 2, Math.PI / 3.4, 'rgba(232,220,192,0.18)', 0.5);
-      ctx.restore();
-    }
-
-    // Vermilion belt sash across the waist
-    ctx.fillStyle = PAL.red;
-    ctx.fillRect(-12, 6, 24, 4);
-    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 0.6;
-    ctx.strokeRect(-12, 6, 24, 4);
-    // Belt knot — small ink square dead-center
-    ctx.fillStyle = PAL.ink;
-    ctx.fillRect(-1.5, 5, 3, 6);
-
-    // Two kunai stowed on the belt — small vermilion handles + ink blades
-    ctx.fillStyle = PAL.ink;
-    ctx.beginPath();
-    ctx.moveTo(-9, 10); ctx.lineTo(-7, 16); ctx.lineTo(-5, 16); ctx.lineTo(-7, 10); ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(9, 10); ctx.lineTo(7, 16); ctx.lineTo(5, 16); ctx.lineTo(7, 10); ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = PAL.red;
-    ctx.fillRect(-8.5, 9, 2.5, 1.5);
-    ctx.fillRect(6, 9, 2.5, 1.5);
-
-    // Throwing arm — slightly extended when casting
-    const armExt = cast ? 1 : 0;
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 3.5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(8, -2);
-    ctx.lineTo(14 + armExt * 6, -8 - armExt * 4);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-    // Hand wrap (paper) at the end
-    ctx.fillStyle = PAL.paper;
-    ctx.beginPath();
-    ctx.arc(14 + armExt * 6, -8 - armExt * 4, 1.8, 0, TAU);
-    ctx.fill();
-
-    // Hood — pointed cowl over the head
-    ctx.fillStyle = bodyFill;
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(-12, -6);
-    ctx.bezierCurveTo(-12, -22, -2, -28, 0, -30);
-    ctx.bezierCurveTo(2, -28, 12, -22, 12, -6);
-    ctx.lineTo(8, -4);
-    ctx.bezierCurveTo(8, -18, -8, -18, -8, -4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Hatched shading on hood right side
-    if (!blink) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(0, -28);
-      ctx.bezierCurveTo(2, -28, 12, -22, 12, -6);
-      ctx.lineTo(8, -4);
-      ctx.bezierCurveTo(8, -18, 0, -18, 0, -4);
-      ctx.closePath();
-      ctx.clip();
-      hatch(ctx, 4, -16, 18, 24, 2, Math.PI / 3.4, 'rgba(232,220,192,0.16)', 0.5);
-      ctx.restore();
-    }
-
-    // Mempo mask — pale paper face inside the hood
-    ctx.fillStyle = PAL.paper;
-    ctx.beginPath();
-    ctx.ellipse(0, -14, 5.5, 6.5, 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 1.0;
-    ctx.stroke();
-
-    // Vermilion eye-band across the mask — the ninja's "stare"
-    ctx.fillStyle = cast ? PAL.redLight : PAL.red;
-    ctx.fillRect(-5, -15, 10, 2.5);
-    ctx.strokeStyle = PAL.ink;
-    ctx.lineWidth = 0.6;
-    ctx.strokeRect(-5, -15, 10, 2.5);
-    // Two ink slit eyes inside the band
-    ctx.fillStyle = PAL.ink;
-    ctx.fillRect(-3, -14.4, 1.4, 1.0);
-    ctx.fillRect(1.6, -14.4, 1.4, 1.0);
-
-    // Cast spark — vermilion fleck off the throwing hand
-    if (cast) {
-      ctx.fillStyle = PAL.red;
-      const sx = 14 + armExt * 6;
-      const sy = -8 - armExt * 4;
-      drawStarPath(ctx, sx + 3, sy - 2, 2.4, 1.0, 5);
-      ctx.fill();
-      ctx.fillStyle = PAL.gold;
-      ctx.beginPath(); ctx.arc(sx + 3, sy - 2, 0.8, 0, TAU); ctx.fill();
-    }
-
-    ctx.restore();
-  },
+  /* ---- drawNinja: removed; Ninja class is deferred indefinitely. ---- */
+  drawNinja() { /* no-op */ },
 
   drawStar(ctx, cx, cy, outer, inner, points) {
     ctx.beginPath();
@@ -10758,6 +10585,38 @@ const Renderer = {
       const cx = f.x, cy = f.y;
       const SIDES = 6;
 
+      // Permafrost patch — drop the wall geometry entirely. Reads as
+      // ground frost, not a tiny fort. Per OPTICIAN_HANDOFF.md companion.
+      if (f._permafrostPatch) {
+        const patchR = 22;
+        // Disc fill
+        ctx.fillStyle = `rgba(44,74,140,${0.18 * baseA})`;
+        ctx.beginPath(); ctx.arc(cx, cy, patchR, 0, TAU); ctx.fill();
+        // Diagonal indigo hatch (clipped)
+        ctx.save();
+        ctx.beginPath(); ctx.arc(cx, cy, patchR, 0, TAU); ctx.clip();
+        ctx.strokeStyle = `rgba(44,74,140,${0.30 * baseA})`;
+        ctx.lineWidth = 0.5;
+        const ang = Math.PI / 3.5;
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const px = -uy, py = ux;
+        for (let s = -patchR; s < patchR; s += 5) {
+          ctx.beginPath();
+          ctx.moveTo(cx + px * s - ux * patchR, cy + py * s - uy * patchR);
+          ctx.lineTo(cx + px * s + ux * patchR, cy + py * s + uy * patchR);
+          ctx.stroke();
+        }
+        ctx.restore();
+        // Dashed perimeter
+        ctx.strokeStyle = `rgba(44,74,140,${0.6 * baseA})`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.lineDashOffset = -t * 6;
+        ctx.beginPath(); ctx.arc(cx, cy, patchR, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+
       // Hex point list — bloom-grow over the first 0.3s
       const bloom = Math.min(1, f.t / 0.3);
       const pts = [];
@@ -11031,6 +10890,21 @@ const Renderer = {
       const bx = tw.x + jit, by = tw.y;
 
       ctx.save();
+
+      // ── Permanent / Watchtower spec — ground anchor disc + 4 cardinal
+      // warm-gold dots so the player sees this tower will not expire.
+      // Per OPTICIAN_HANDOFF.md companion polish.
+      if (tw.spec?.permanent) {
+        ctx.fillStyle = `rgba(200,148,26,${0.25 * a})`;
+        ctx.beginPath(); ctx.arc(tw.x, tw.y, 12, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(232,184,64,${a})`;
+        for (let k = 0; k < 4; k++) {
+          const ang = k / 4 * TAU + Math.PI / 4;
+          const dx = Math.cos(ang) * (tw.range + 6);
+          const dy = Math.sin(ang) * (tw.range + 6);
+          ctx.beginPath(); ctx.arc(tw.x + dx, tw.y + dy, 3, 0, TAU); ctx.fill();
+        }
+      }
 
       // ── Range halo ─ dashed gold, pulses per cast ───────────────────
       const haloPhase = Math.min(1, timeSinceFire / 0.5);
@@ -12212,13 +12086,13 @@ const Renderer = {
    * reads from the entity object directly. The minion sits between
    * world layers and the player so it stays readable during chaos.
    */
-  drawMinion(ctx, m, t) {
+  drawMinion(ctx, m, t, player) {
     if (!m) return;
     switch (m.kind) {
       case 'linker':  this._drawLinker(ctx, m, t); break;
       case 'decoy':   this._drawDecoy(ctx, m, t); break;
       case 'mender':  this._drawMender(ctx, m, t); break;
-      case 'drummer': this._drawDrummer(ctx, m, t); break;
+      case 'drummer': this._drawDrummer(ctx, m, t, player); break;
     }
   },
 
@@ -12244,6 +12118,23 @@ const Renderer = {
       }
       ctx.setLineDash([]);
       ctx.restore();
+    }
+    // Damage-cascade beads — vermilion mote travels source → receiver.
+    // Beads live on the game so they survive minion ticks; pulled via
+    // the parent draw chain (see drawMinion's caller).
+    const beads = (this._currentGame || {})._linkBeads;
+    if (beads && beads.length) {
+      for (const b of beads) {
+        const k = b.t / b.life;
+        if (k >= 1 || k < 0) continue;
+        // Quadratic curve toward the linker as the apex (sells "sigil routes the share")
+        const apexX = m.x, apexY = m.y;
+        const oneMinusK = 1 - k;
+        const px = oneMinusK * oneMinusK * b.fromX + 2 * oneMinusK * k * apexX + k * k * b.toX;
+        const py = oneMinusK * oneMinusK * b.fromY + 2 * oneMinusK * k * apexY + k * k * b.toY;
+        ctx.fillStyle = `rgba(168,58,44,${1 - k * 0.4})`;
+        ctx.beginPath(); ctx.arc(px, py, 3, 0, TAU); ctx.fill();
+      }
     }
     // Sigil — rotating triangle inside a circle
     ctx.save();
@@ -12309,26 +12200,78 @@ const Renderer = {
     ctx.restore();
   },
 
+  /*
+   * Mender Wisp — paper-disc body + warm + glyph + breathing paper halo.
+   * Per OPTICIAN_HANDOFF.md companion polish.
+   */
   _drawMender(ctx, m, t) {
     ctx.save();
     ctx.translate(m.x, m.y);
-    // Soft halo
-    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
-    grad.addColorStop(0, 'rgba(200, 240, 220, 0.85)');
-    grad.addColorStop(1, 'rgba(154, 240, 200, 0)');
+    // Breathing paper halo
+    const haloA = 0.35 * (0.7 + 0.3 * Math.sin(t * 2));
+    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, 8);
+    grad.addColorStop(0, `rgba(232,220,192,${haloA})`);
+    grad.addColorStop(1, `rgba(232,220,192,0)`);
     ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill();
-    // Cross
-    ctx.strokeStyle = '#3a4a3c';
-    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+    // Paper body disc
+    ctx.fillStyle = PAL.paper;
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.stroke();
+    // + glyph in warm gold
+    ctx.strokeStyle = PAL.warm;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
-    ctx.moveTo(0, -4); ctx.lineTo(0, 4);
+    ctx.moveTo(-2.5, 0); ctx.lineTo(2.5, 0);
+    ctx.moveTo(0, -2.5); ctx.lineTo(0, 2.5);
     ctx.stroke();
     ctx.restore();
   },
 
-  _drawDrummer(ctx, m, t) {
+  /*
+   * War Drummer — small drum sprite at the drummer's pos + on each beat,
+   * a colored aura ring expands at the PLAYER's feet (not the drum's),
+   * making the active aura legible without reading the drum's glyph.
+   * Per OPTICIAN_HANDOFF.md companion polish.
+   */
+  _drawDrummer(ctx, m, t, player) {
+    // 1) Player-feet aura ring on each beat (vigor / ward / haste color)
+    if (m.flashT > 0 && player) {
+      // Track ring expansions in m._beatRing — spawned on a fresh beat.
+      // m.flashT decreases from 0.25 → 0 in tick; convert to a 0→1 phase.
+      m._auraRings = m._auraRings || [];
+      // If a new beat just landed (flashT just set high), push a ring.
+      if (m.flashT > 0.24 && !m._lastBeatLogged) {
+        const colors = ['#a83a2c', '#2c4a8c', '#c8941a']; // Vigor / Ward / Haste
+        m._auraRings.push({ color: colors[m.beatIdx % 3], t: 0 });
+        m._lastBeatLogged = true;
+      }
+      if (m.flashT < 0.05) m._lastBeatLogged = false;
+    } else {
+      if (m) m._lastBeatLogged = false;
+    }
+    if (m._auraRings) {
+      for (let i = m._auraRings.length - 1; i >= 0; i--) {
+        const r = m._auraRings[i];
+        r.t += 1 / 60;
+        if (r.t >= 0.4 || !player) { m._auraRings.splice(i, 1); continue; }
+        const k = r.t / 0.4;
+        const radius = lerp(0, 28, k);
+        const a = (1 - k) * 0.7;
+        // Convert hex to rgb for alpha control
+        const hex = r.color.slice(1);
+        const rr = parseInt(hex.slice(0, 2), 16);
+        const gg = parseInt(hex.slice(2, 4), 16);
+        const bb = parseInt(hex.slice(4, 6), 16);
+        ctx.strokeStyle = `rgba(${rr},${gg},${bb},${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(player.x, player.y, radius, 0, TAU); ctx.stroke();
+      }
+    }
+
+    // 2) Drum sprite
     ctx.save();
     ctx.translate(m.x, m.y);
     // Body
@@ -12342,8 +12285,7 @@ const Renderer = {
     ctx.strokeStyle = '#1d150c';
     ctx.beginPath(); ctx.arc(0, 4, 6, 0, TAU); ctx.stroke();
     // Beat indicator — three dots, one lit per beat
-    const labels = ['V', 'W', 'H'];          // Vigor / Ward / Haste
-    const colors = ['#ff7733', '#9af0c8', '#7ec0ff'];
+    const colors = ['#a83a2c', '#2c4a8c', '#c8941a']; // Vigor / Ward / Haste
     for (let i = 0; i < 3; i++) {
       const px = (i - 1) * 6;
       ctx.fillStyle = (i === m.beatIdx)
@@ -12351,7 +12293,7 @@ const Renderer = {
         : `rgba(120, 100, 70, 0.4)`;
       ctx.beginPath(); ctx.arc(px, -14, 2, 0, TAU); ctx.fill();
     }
-    // Beat flash
+    // Drum-local beat flash
     if (m.flashT > 0) {
       ctx.strokeStyle = `rgba(255, 230, 160, ${m.flashT / 0.25})`;
       ctx.lineWidth = 2;
