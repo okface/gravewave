@@ -9608,6 +9608,24 @@ const Renderer = {
             ctx.lineTo(p.trailPts[i].x, p.trailPts[i].y);
             ctx.stroke();
           }
+          // Smoke puffs: brown-grey discs that grow + drift with age,
+          // drawn UNDER the embers so they read as the cold tail of the
+          // fire. Per design's spellMeteor dust pattern (rgba(120,90,60))
+          // applied to the fireball's trail.
+          for (let i = 0; i < p.trailPts.length; i += 2) {
+            const tp = p.trailPts[i];
+            const age = tp.t || 0;
+            const hash = (i * 13) % 97;
+            const drift = (hash / 97 - 0.5) * 10;
+            const rise  = age * (8 + (hash % 4) * 4);
+            const sA = Math.max(0, (1 - age / 0.7) * 0.42 * (i / p.trailPts.length));
+            if (sA < 0.04) continue;
+            const sR = 2.4 + age * 4 + (hash % 3) * 0.6;
+            ctx.fillStyle = `rgba(120,90,60,${sA})`;
+            ctx.beginPath();
+            ctx.arc(tp.x + drift, tp.y - rise, sR, 0, TAU);
+            ctx.fill();
+          }
           // Ember particles: deterministic floaters at each trail point
           for (let i = 0; i < p.trailPts.length; i++) {
             const tp = p.trailPts[i];
@@ -11122,39 +11140,62 @@ const Renderer = {
     }
   },
 
+  /*
+   * Hydra Head — full port from .codex_design/project/art-lab-v3.js
+   * spellHydra: triangle body (vermilion fill + ink stroke) + gold inner
+   * ember + ink eye dot inside the ember + hatched neck stalks +
+   * dashed vermilion charge ring that pulses while charging the next
+   * fireball. Bob from h.bobAng. Life bar above.
+   */
   drawHydraHeads(ctx, heads, t) {
     if (!heads?.length) return;
     for (const h of heads) {
       const fadeIn  = Math.min(1, h.t / 0.18);
       const fadeOut = Math.min(1, (h.life - h.t) / 0.35);
       const a = Math.min(fadeIn, fadeOut);
-      const bob = Math.sin(h.bobAng) * 3;
+      const bob = Math.sin(h.bobAng || h.t * 4) * 1.5;
       ctx.save();
       ctx.translate(h.x, h.y + bob);
-      // Neck stalk
-      ctx.strokeStyle = `rgba(26, 22, 18, ${0.80 * a})`;
-      ctx.lineWidth = 3;
+      // Triangle body — vermilion fill + ink stroke
+      ctx.globalAlpha = a;
+      ctx.fillStyle = PAL.red;
+      ctx.strokeStyle = PAL.ink;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, 4);
-      ctx.lineTo(0, 10);
-      ctx.stroke();
-      // Serpent head — elongated oval
-      ctx.fillStyle   = `rgba(168, 58, 30, ${0.90 * a})`;
-      ctx.strokeStyle = `rgba(26, 22, 18, ${a})`;
-      ctx.lineWidth   = 1.2;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 7, 5, 0, 0, TAU);
+      ctx.moveTo(0, -10);
+      ctx.lineTo(-7, 4);
+      ctx.lineTo(7, 4);
+      ctx.closePath();
       ctx.fill(); ctx.stroke();
-      // Eye
-      const flicker = 0.7 + 0.3 * Math.sin(t * 9 + h.seed);
-      ctx.fillStyle = `rgba(255, 200, 60, ${flicker * a})`;
-      ctx.beginPath(); ctx.arc(3, -1, 1.5, 0, TAU); ctx.fill();
-      // Life bar
+      // Inner gold ember
+      ctx.fillStyle = PAL.gold;
+      ctx.beginPath(); ctx.arc(0, -2, 2, 0, TAU); ctx.fill();
+      // Eye dot inside the ember
+      ctx.fillStyle = PAL.ink;
+      ctx.beginPath(); ctx.arc(0, -2, 0.8, 0, TAU); ctx.fill();
+      // Hatched neck (two diagonal ink strokes)
+      ctx.strokeStyle = PAL.ink;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(-3, 4); ctx.lineTo(-2, 10);
+      ctx.moveTo(3, 4);  ctx.lineTo(2, 10);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // Charge ring — dashed vermilion, pulses with the head's age
+      const age = h.t || 0;
+      ctx.strokeStyle = `rgba(168,58,44,${a * 0.6})`;
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.arc(0, -2, 8 + Math.sin(age * 5) * 1, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Life bar above (kept from prior — useful)
       const lifeF = 1 - h.t / h.life;
       ctx.fillStyle = `rgba(26,22,18,${0.50 * a})`;
-      ctx.fillRect(-8, -12, 16, 2);
-      ctx.fillStyle = `rgba(255,80,30,${0.85 * a})`;
-      ctx.fillRect(-8, -12, 16 * lifeF, 2);
+      ctx.fillRect(-8, -16, 16, 2);
+      ctx.fillStyle = `rgba(168,58,44,${0.85 * a})`;
+      ctx.fillRect(-8, -16, 16 * lifeF, 2);
       ctx.restore();
     }
   },
