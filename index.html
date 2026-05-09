@@ -6042,13 +6042,15 @@ class Game {
    * scoped targeting (turrets, wells) where the entity has its own
    * range; that path bypasses the engagement cap.
    *
-   * The engagement radius matches the inner vermilion ring drawn into
-   * the parchment background (Renderer.ensureBackground @ arenaR×0.78).
-   * Renderer.drawEngagementRing renders a faint live overlay so players
-   * see the boundary moving into view from spawn edges.
+   * Cap reaches the long-axis spawn edge — i.e. the dotted line at the
+   * top/bottom of the screen where enemies first walk in from. Earlier
+   * cap (min(w,h)*0.328) was too small and felt like enemies could
+   * close in before Fireball would even target them. Now: half the long
+   * axis, minus a small margin so we're not targeting things off-screen.
    */
   combatRadius() {
-    return Math.min(this.width || 0, this.height || 0) * 0.42 * 0.78;
+    const long = Math.max(this.width || 0, this.height || 0);
+    return long * 0.5 - 24;
   }
   findNearestEnemy(from) {
     const cap = this.combatRadius();
@@ -9933,21 +9935,31 @@ const Renderer = {
    * player can see "anything past this line is a problem you have to
    * wait on or hand off to a sentry / aura".
    */
+  /*
+   * Engagement boundary — drawn as two horizontal dashed lines at the
+   * top + bottom of the player's targeting cone (since spawns are
+   * always vertical, useVertical=true in WaveManager). Reads as the
+   * "front lines" you can hit, not a tiny circle. Matches what the
+   * user asked for: lines at top + bottom that mark where targeting
+   * starts engaging spawned enemies.
+   */
   drawEngagementRing(ctx, game) {
     if (!game.player) return;
     const r = game.combatRadius();
     if (r <= 0) return;
     const px = game.player.x, py = game.player.y;
     const t = game.runElapsed || 0;
-    // Soft pulse: line alpha breathes 0.18 → 0.32 once a second.
+    const w = game.width;
     const pulse = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.2));
     ctx.save();
     ctx.strokeStyle = `rgba(168, 58, 44, ${pulse})`;
     ctx.lineWidth = 1.2;
-    ctx.setLineDash([4, 8]);
+    ctx.setLineDash([6, 10]);
     ctx.lineDashOffset = -t * 12;
+    // Top line + bottom line — span the whole world width.
     ctx.beginPath();
-    ctx.arc(px, py, r, 0, TAU);
+    ctx.moveTo(0, py - r); ctx.lineTo(w, py - r);
+    ctx.moveTo(0, py + r); ctx.lineTo(w, py + r);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
