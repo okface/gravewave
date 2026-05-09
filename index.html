@@ -11672,7 +11672,16 @@ const UI = {
       const available = Object.values(CHARACTERS).filter(c => c.available);
       // Auto-select if there's only one option, so the start button works
       // immediately without forcing a click.
-      if (available.length === 1) selectedCharId = available[0].id;
+      if (available.length === 1) {
+        selectedCharId = available[0].id;
+        // Pre-enable the button so the player can just hit Begin.
+        const btn = this.$('btn-start');
+        if (btn) {
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.style.pointerEvents = 'auto';
+        }
+      }
       for (const c of available) {
         const card = document.createElement('div');
         card.className = 'card';
