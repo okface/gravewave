@@ -2784,6 +2784,7 @@ const SPELLS = {
         spell: 'gravity_bolt',
         applyStatus: mods.applyStatus,       // Glacial Pull etc. propagate via well damage
         fractureExpire: fract,                // Black Hole "Fracture" spec
+        lifesteal: b.lifesteal || 0,         // Black Hole "Void Siphon" dump
       });
 
       // Visual hit when the well lands — gives Gravity Bolt a real "thump"
@@ -2954,6 +2955,40 @@ const SPELLS = {
           // Hydra spec: 20% chance to spawn a fireball-spitting Hydra Head for 6s
           if (b.hydraOnHit && Math.random() < b.hydraOnHit) {
             game.spawnHydraHead(hit.x, hit.y, mods);
+          }
+          // Splitfire dump — chance on impact to spawn 2 child fireballs at
+          // 50% damage. Children are flagged so they don't recursively split.
+          if (!hit._isChild && b.splitChance > 0 && Math.random() < b.splitChance) {
+            const childDmg = baseDmg * 0.5;
+            const childSplash = splashDmg * 0.5;
+            const childRadius = radius * 0.65;
+            for (let k = 0; k < 2; k++) {
+              const ang = (k === 0 ? -1 : 1) * (0.45 + Math.random() * 0.25);
+              const sp = 280;
+              game.spawnProjectile({
+                x: hit.x, y: hit.y,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                radius: 7,
+                damage: childDmg,
+                color: '#ff8844',
+                life: 1.4, pierce: 0,
+                crit: { chance: mods.critChance, mult: mods.critMult },
+                spellBaseDmg: childDmg,
+                spell: 'fireball',
+                onHit: (game, h) => {
+                  h._isChild = true;
+                  for (const e of game.enemies) {
+                    if (!e.alive) continue;
+                    if (Vec.dist(h, e) < childRadius + e.radius) {
+                      const a = e.takeDamage(childSplash, { spell: 'fireball' });
+                      game.totalDamageDealt += a;
+                    }
+                  }
+                  game.spawnExplosion(h.x, h.y, childRadius, '#ff7733');
+                },
+                trail: 'fire',
+              });
+            }
           }
         },
         trail: trailKind,
@@ -3131,7 +3166,8 @@ const ABILITIES = {
     cast: (game, caster, mods) => SPELLS.fireball.cast(game, caster, mods),
     dumps: [
       { id: 'heat',    name: 'Heat',       desc: '+12% Fireball damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'spread',  name: 'Spread',     desc: '+8% blast radius per point.',     stat: 'radiusMult', perPoint: 0.08 },
+      { id: 'split',   name: 'Splitfire',  desc: '+20% chance on impact to spawn 2 child fireballs at 50% dmg.',
+                                                                                    stat: 'splitChance', perPoint: 0.20 },
       { id: 'quick',   name: 'Quick Cast', desc: '−5% cooldown per point.',         stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
@@ -3182,7 +3218,8 @@ const ABILITIES = {
     dumps: [
       { id: 'crush',  name: 'Crushing Force', desc: '+12% damage per point.',  stat: 'dmgMult',    perPoint: 0.12 },
       { id: 'wider',  name: 'Wider Pull',     desc: '+8% radius per point.',   stat: 'radiusMult', perPoint: 0.08 },
-      { id: 'cycle',  name: 'Quick Collapse', desc: '−5% cooldown per point.', stat: 'cdMult',     perPoint: -0.05 },
+      { id: 'siphon', name: 'Void Siphon',    desc: 'Each enemy that dies in the well heals you (+0.4 HP / kill).',
+                                                                                stat: 'lifesteal',  perPoint: 0.4 },
     ],
     specs: [
       { id: 'annihilation', name: 'Annihilation',
@@ -3207,7 +3244,8 @@ const ABILITIES = {
     dumps: [
       { id: 'cold',   name: 'Cold Bite',  desc: '+12% damage per point.',              stat: 'dmgMult',     perPoint: 0.12 },
       { id: 'pierce', name: 'Multi-Spike', desc: '+1 pierce per point (max +5).',      stat: 'pierceBonus', perPoint: 1.0 },
-      { id: 'quick',  name: 'Quick Cast', desc: '−5% cooldown per point.',             stat: 'cdMult',      perPoint: -0.05 },
+      { id: 'cull',   name: 'Cold-Blooded', desc: '+10% damage per point against slowed or frozen enemies.',
+                                                                                       stat: 'chillExecute', perPoint: 0.10 },
     ],
     specs: [
       { id: 'glacial',  name: 'Glacial',
@@ -3300,6 +3338,7 @@ const ABILITIES = {
       game.fireShields.push(new FireShield({
         caster, orbCount, dps, radius, life,
         blockCharges, spec: specCfg,
+        cinderChance: beh.cinderChance || 0,   // Cinder Burst dump
       }));
       caster._shieldCharges = blockCharges;
       caster._shieldChargesMax = blockCharges;
@@ -3310,7 +3349,8 @@ const ABILITIES = {
     },
     dumps: [
       { id: 'flare',    name: 'Flare',     desc: '+15% orb damage and retaliation per point.',  stat: 'dmgMult',    perPoint: 0.15 },
-      { id: 'orbit',    name: 'Wide Orbit', desc: '+12% orbit radius per point.', stat: 'radiusMult', perPoint: 0.12 },
+      { id: 'cinder',   name: 'Cinder Burst', desc: '+6% chance per point that an orb hit spawns an ignite mini-burst.',
+                                                                                  stat: 'cinderChance', perPoint: 0.06 },
       { id: 'persist',  name: 'Persistence', desc: '+15% duration per point.',  stat: 'durationMult', perPoint: 0.15 },
     ],
     specs: [
@@ -3357,13 +3397,15 @@ const ABILITIES = {
           spell: 'gravital_anomaly',
           blackPulse,
           wandering: !!beh.wandering,
+          statusBonus: beh.statusBonus || 0,  // Crushing Synergy dump
         });
       }
       game.addShake(0.08);
     },
     dumps: [
       { id: 'mass',     name: 'Mass',      desc: '+13% well damage per point.', stat: 'dmgMult',     perPoint: 0.13 },
-      { id: 'gravity',  name: 'Gravity',   desc: '+10% well radius per point.', stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'crush',    name: 'Crushing Synergy', desc: '+15% damage per point to enemies with any active status.',
+                                                                                stat: 'statusBonus', perPoint: 0.15 },
       { id: 'lasting',  name: 'Lasting',   desc: '+12% duration per point.',    stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
@@ -3402,7 +3444,8 @@ const ABILITIES = {
     },
     dumps: [
       { id: 'voltage',   name: 'Voltage',   desc: '+13% tower damage per point.', stat: 'dmgMult',        perPoint: 0.13 },
-      { id: 'reach',     name: 'Reach',     desc: '+10% range per point.',        stat: 'radiusMult',     perPoint: 0.10 },
+      { id: 'fork',      name: 'Arc Fork',  desc: '+18% chance per point each shot fires a second bolt at a different target (70% dmg).',
+                                                                                  stat: 'forkChance',     perPoint: 0.18 },
       { id: 'tempo',     name: 'Tempo',     desc: '+12% attack rate per point.',  stat: 'attackRateMult', perPoint: 0.12 },
     ],
     specs: [
@@ -3617,6 +3660,8 @@ const ABILITIES = {
       // reach so the 1-beam pick actually competes with 7-beam Spectrum's
       // total throughput on a clustered target.
       if (b.searingRed) { beamCount = 1; beamDmgMul = 3.5; beamReachMul = 1.6; }
+      // Refraction dump — extra prism beams. Stacks ON TOP of spec count.
+      if (b.refractBeams > 0 && !b.searingRed) beamCount += b.refractBeams;
       const speed = 320;
       game.spawnProjectile({
         x: caster.x, y: caster.y,
@@ -3650,7 +3695,8 @@ const ABILITIES = {
     dumps: [
       { id: 'heat',    name: 'Heat',    desc: '+12% damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
       { id: 'spread',  name: 'Spread',  desc: '+10% beam reach per point.', stat: 'radiusMult', perPoint: 0.10 },
-      { id: 'quick',   name: 'Quick',   desc: '−5% cooldown per point.', stat: 'cdMult',    perPoint: -0.05 },
+      { id: 'refract', name: 'Refraction', desc: '+0.5 extra beams per point (rounds down: 0/1/1/2/2).',
+                                          stat: 'refractBeams', perPoint: 0.5 },
     ],
     specs: [
       { id: 'spectrum',    name: 'Spectrum',
@@ -6184,6 +6230,18 @@ class Game {
             if (sh.spec?.infernoTrail && Math.random() < 0.10) {
               this.spawnFlamePatch(ox, oy, 30, 2, dmg * 4);
             }
+            // Cinder Burst dump — small ignite mini-burst near orb hit
+            if (sh.cinderChance > 0 && Math.random() < sh.cinderChance) {
+              const burstR = 38;
+              this.spawnExplosion(ox, oy, burstR, '#ffaa44', 'fire');
+              for (const o of this.enemies) {
+                if (!o.alive) continue;
+                if (Math.hypot(o.x - ox, o.y - oy) < burstR + o.radius) {
+                  const dotDmg = dmg * 1.5;
+                  o.applyStatus('ignite', { duration: 2.0, dpsRatio: 0.30, dmg: dotDmg }, this.runElapsed);
+                }
+              }
+            }
           }
         }
       }
@@ -6222,6 +6280,27 @@ class Game {
       this.spawnDamageNumber(target.x, target.y - target.radius - 6, actual, isOvercharge, target);
       if (isOvercharge) {
         target.applyStatus('freeze', { duration: 0.5, factor: 0 }, this.runElapsed);
+      }
+      // Arc Fork dump — chance to fire a second bolt at a DIFFERENT
+      // target. Picks the nearest other enemy in range, 70% damage.
+      if (t.spec?.forkChance > 0 && Math.random() < t.spec.forkChance) {
+        let alt = null, altD = t.range;
+        for (const e of this.enemies) {
+          if (!e.alive || e === target) continue;
+          const d = Vec.dist(t, e);
+          if (d < altD) { altD = d; alt = e; }
+        }
+        if (alt) {
+          const forkDmg = dmg * 0.7;
+          const a = alt.takeDamage(forkDmg, { spell: 'shock_tower' });
+          this.totalDamageDealt += a;
+          this.lightnings.push({
+            from: { x: t.x, y: t.y },
+            to:   { x: alt.x, y: alt.y },
+            t: 0, life: 0.18, crit: false,
+          });
+          this.spawnDamageNumber(alt.x, alt.y - alt.radius - 6, a, false, alt);
+        }
       }
       // Spec: Tesla — chain to nearby
       if (t.spec?.teslaChain) {
@@ -7433,6 +7512,15 @@ class Game {
         case 'shieldMult':     base.shieldMult    += total; break;
         case 'slowMult':       base.slowMult      += total; break;
         case 'beamGrace':      base.beamGrace     += Math.floor(total); break;
+        // Mechanical-hook dumps — accumulate into base.behavior so the
+        // cast() body / entity tick can read them like any spec flag.
+        case 'splitChance':    base.behavior.splitChance  = (base.behavior.splitChance  || 0) + total; break;
+        case 'lifesteal':      base.behavior.lifesteal    = (base.behavior.lifesteal    || 0) + total; break;
+        case 'chillExecute':   base.behavior.chillExecute = (base.behavior.chillExecute || 0) + total; break;
+        case 'cinderChance':   base.behavior.cinderChance = (base.behavior.cinderChance || 0) + total; break;
+        case 'statusBonus':    base.behavior.statusBonus  = (base.behavior.statusBonus  || 0) + total; break;
+        case 'forkChance':     base.behavior.forkChance   = (base.behavior.forkChance   || 0) + total; break;
+        case 'refractBeams':   base.behavior.refractBeams = (base.behavior.refractBeams || 0) + Math.floor(total); break;
         // cdMult is read in computeAbilityCooldown
       }
     }
@@ -7648,6 +7736,13 @@ class Game {
           // Frost's Glacial spec swaps slow → freeze when target was already
           // slowed (handled here, before falling through to applyStatus).
           const beh = p.behavior || {};
+          // Cold-Blooded dump (Frost Bolt) — bonus damage to slowed/frozen
+          // targets. Re-rolled each pierce so the multi-hit benefits.
+          if (beh.chillExecute > 0 && (e.statuses?.slow || e.statuses?.freeze)) {
+            const extra = dmg * beh.chillExecute;
+            const a2 = e.takeDamage(extra, { spell: p.spell });
+            this.totalDamageDealt += a2;
+          }
           let statusToApply = p.applyStatus;
           if (beh.freezeOnSlow && e.statuses?.slow && !e.statuses?.freeze) {
             const dur = beh.freezeOnSlow.duration || 1.5;
@@ -7765,9 +7860,28 @@ class Game {
             e.pvx += dir.x * w.pull * dt;
             e.pvy += dir.y * w.pull * dt;
           }
-          // dps
-          e.takeDamage(w.dps * dt, { spell: w.spell });
-          this.totalDamageDealt += w.dps * dt;
+          // dps — Crushing Synergy dump amps damage on statused enemies
+          let tickDmg = w.dps * dt;
+          if (w.statusBonus > 0 && e.statuses) {
+            for (const _ in e.statuses) { tickDmg *= (1 + w.statusBonus); break; }
+          }
+          const wasAlive = e.alive;
+          e.takeDamage(tickDmg, { spell: w.spell });
+          this.totalDamageDealt += tickDmg;
+          // Void Siphon dump (Black Hole) — heal on enemy death inside well
+          if (wasAlive && !e.alive && w.lifesteal > 0 && this.player?.alive) {
+            const heal = Math.round(w.lifesteal);
+            if (heal > 0) {
+              const before = this.player.hp;
+              this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+              const actual = this.player.hp - before;
+              if (actual > 0) {
+                const dn = new DamageNumber(this.player.x + (Math.random() - 0.5) * 14, this.player.y - 28, `+${actual}`, false);
+                dn.isHeal = true;
+                this.damageNumbers.push(dn);
+              }
+            }
+          }
           // Status propagation (Glacial Pull on Gravity Bolt etc.).
           // Wells re-apply on each tick which is expensive — gate behind
           // a probabilistic check so we're not refreshing the status
@@ -8580,10 +8694,10 @@ const Renderer = {
     }
   },
 
-  /* ---- Player (Magician) — ink-and-vellum silhouette ----
-     Robed figure with a pointed hat, hatched volume, vermilion trim, and
-     a vermilion orb that flares while casting. Reads cast/iframe state
-     from the player to add a ring sigil + blink. */
+  /* ---- Player — ink-and-vellum silhouette ----
+     Branches on p.charId. Wizard = pointed hat + bell robe + vermilion
+     orb-staff. Optician = wide brimmed hat + squarer coat + silver
+     lens-staff. Hex shroud / cast flash / defense pips are shared. */
   drawPlayer(ctx, p, t) {
     const x = p.x, y = p.y + Math.sin(t * 1.5) * 1.5; // gentle bob
     const cast = p.castFlash > 0;
@@ -8592,8 +8706,7 @@ const Renderer = {
 
     // Hex shroud — slow rotating orange ring while a Hexer's debuff is on
     // the player. Fades faster as it nears expiry so the player can read
-    // "almost over" without checking the HUD. `t` is game.runElapsed,
-    // already passed in by drawPlayer's caller.
+    // "almost over" without checking the HUD.
     if (p.hex) {
       const remaining = Math.max(0, p.hex.expires - t);
       const a = Math.min(1, remaining / 1.0);
@@ -8605,7 +8718,6 @@ const Renderer = {
       ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.arc(0, 0, 24, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
-      // Three glyphs orbiting
       ctx.fillStyle = `rgba(184,106,58,${0.85 * a})`;
       for (let i = 0; i < 3; i++) {
         const ang = i / 3 * TAU;
@@ -8615,34 +8727,49 @@ const Renderer = {
       ctx.restore();
     }
 
-    // Cast flash: gold ring pulse expanding outward over castFlash duration
+    // Cast flash — branches on charId. Wizard gets a vermilion sigil
+    // ring + 6 orbiting stars (port of art-lab-v2 magician). Optician
+    // gets warm/hot light rays radiating from a bright core.
     if (cast) {
-      const flash = p.castFlash;                      // 0..0.2 remaining
-      const prog  = 1 - flash / 0.2;                  // 0 = just cast, 1 = done
-      const a     = Math.max(0, 1 - prog * prog);     // fast-in / ease-out alpha
+      const flash = p.castFlash;
+      const prog  = 1 - flash / 0.2;
+      const a     = Math.max(0, 1 - prog * prog);
       ctx.save();
       ctx.translate(x, y);
-      // Outer expanding ring
-      const r = 20 + prog * 28;
-      ctx.strokeStyle = `rgba(232, 196, 80, ${a * 0.95})`;
-      ctx.lineWidth   = 2.5 - prog * 1.5;
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
-      // Slim inner ring
-      ctx.strokeStyle = `rgba(255, 235, 140, ${a * 0.60})`;
-      ctx.lineWidth   = 1.0;
-      ctx.beginPath(); ctx.arc(0, 0, r - 5, 0, TAU); ctx.stroke();
-      // 8 gold spark points radiating outward
-      ctx.fillStyle = `rgba(255, 210, 80, ${a * 0.85})`;
-      for (let i = 0; i < 8; i++) {
-        const ang  = i / 8 * TAU;
-        const dist = r + 4 + prog * 8;
-        drawStarPath(ctx, Math.cos(ang) * dist, Math.sin(ang) * dist, 2.2, 0.8, 4, ang);
-        ctx.fill();
+      if (charId === 'optician') {
+        // Light-burst: 12 hot spokes + soft warm halo
+        const r = 18 + prog * 24;
+        ctx.strokeStyle = `rgba(255, 243, 200, ${a * 0.85})`;
+        ctx.lineWidth = 1.0;
+        for (let i = 0; i < 12; i++) {
+          const ang = i / 12 * TAU + t * 0.6;
+          const r0 = r - 4, r1 = r + 8;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ang) * r0, Math.sin(ang) * r0);
+          ctx.lineTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = `rgba(232, 184, 64, ${a * 0.55})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+      } else {
+        // Wizard: dashed vermilion sigil + 6 orbiting stars (art-lab-v2)
+        const r = 20 + prog * 26;
+        ctx.strokeStyle = `rgba(168, 58, 44, ${a * 0.95})`;
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([6, 5]);
+        ctx.lineDashOffset = -t * 22;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = `rgba(168, 58, 44, ${a * 0.85})`;
+        for (let i = 0; i < 6; i++) {
+          const ang = i / 6 * TAU + t * 1.2;
+          drawStarPath(ctx, Math.cos(ang) * (r + 4), Math.sin(ang) * (r + 4), 2.4, 1.0, 5, ang);
+          ctx.fill();
+        }
       }
       ctx.restore();
     }
-
-    // Ninja class is deferred indefinitely; legacy dispatch removed.
 
     ctx.save();
     ctx.translate(x, y);
@@ -8654,6 +8781,20 @@ const Renderer = {
     hatch(ctx, 0, 0, 30, 12, 1.4, 0, 'rgba(26,22,18,0.55)', 0.5);
     ctx.restore();
 
+    if (charId === 'optician') {
+      this._drawOpticianBody(ctx, t, cast, blink);
+    } else {
+      this._drawWizardBody(ctx, t, cast, blink);
+    }
+
+    ctx.restore();
+
+    this._drawDefenseStatus(ctx, p, t);
+  },
+
+  // Wizard body — bell robe, pointed hat, vermilion orb-staff. Centered
+  // at (0,0) inside drawPlayer's transform.
+  _drawWizardBody(ctx, t, cast, blink) {
     // Robe silhouette
     const robeFill = blink ? PAL.paper2 : PAL.ink;
     ctx.fillStyle = robeFill;
@@ -8692,12 +8833,15 @@ const Renderer = {
     ctx.bezierCurveTo(-10, 23, 10, 23, 19, 14);
     ctx.stroke();
 
-    // Head — pale paper disc
+    // Head — pale paper disc with two ink eye-dots
     ctx.fillStyle = PAL.paper;
     ctx.beginPath(); ctx.arc(0, -16, 7.5, 0, TAU); ctx.fill();
     ctx.strokeStyle = PAL.ink;
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(0, -16, 7.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = PAL.ink;
+    ctx.beginPath(); ctx.arc(-2.4, -16.5, 0.7, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc( 2.4, -16.5, 0.7, 0, TAU); ctx.fill();
 
     // Hat — pointed ink + brim
     ctx.fillStyle = PAL.ink;
@@ -8705,6 +8849,13 @@ const Renderer = {
     ctx.moveTo(-11, -22); ctx.lineTo(0, -44); ctx.lineTo(11, -22);
     ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.ellipse(0, -22, 14, 3, 0, 0, TAU); ctx.fill();
+    // Hat hatching for volume
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, -22); ctx.lineTo(0, -44); ctx.lineTo(11, -22);
+    ctx.closePath(); ctx.clip();
+    hatch(ctx, 4, -32, 12, 22, 1.6, Math.PI / 3.2, 'rgba(232,220,192,0.20)', 0.5);
+    ctx.restore();
 
     // Hat star — vermilion when casting, gold otherwise
     ctx.fillStyle = cast ? PAL.red : PAL.gold;
@@ -8719,8 +8870,12 @@ const Renderer = {
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(15, -10); ctx.lineTo(20, 24); ctx.stroke();
 
-    // Orb — vermilion with gold gleam, scales while casting
-    const orbR = cast ? 5 + Math.sin(t * 8) * 0.8 : 4.5;
+    // Orb — vermilion with gold gleam; pulses harder while casting
+    const orbR = cast ? 5.4 + Math.sin(t * 9) * 1.2 : 4.5;
+    if (cast) {
+      ctx.fillStyle = `rgba(168, 58, 44, 0.30)`;
+      ctx.beginPath(); ctx.arc(15, -16, orbR + 4, 0, TAU); ctx.fill();
+    }
     ctx.fillStyle = PAL.red;
     ctx.beginPath(); ctx.arc(15, -16, orbR, 0, TAU); ctx.fill();
     ctx.strokeStyle = PAL.ink;
@@ -8728,14 +8883,146 @@ const Renderer = {
     ctx.stroke();
     ctx.fillStyle = PAL.gold;
     ctx.beginPath(); ctx.arc(13.5, -17, 1.4, 0, TAU); ctx.fill();
+  },
 
-    ctx.restore();
+  // Optician body — squarer coat, wide-brim scholar's hat, silver
+  // lens-staff. Color vocabulary: silver/silverHi/silverLo for body and
+  // lens, warm trim instead of vermilion, no shared particles with the
+  // wizard kit. Centered at (0,0) inside drawPlayer's transform.
+  _drawOpticianBody(ctx, t, cast, blink) {
+    // Coat silhouette — squarer hem (boxier than the wizard's bell)
+    const coatFill = blink ? PAL.paper2 : PAL.ink;
+    ctx.fillStyle = coatFill;
+    ctx.beginPath();
+    ctx.moveTo(-9, -10);
+    ctx.lineTo(-20, 6);
+    ctx.lineTo(-20, 22);
+    ctx.lineTo(20, 22);
+    ctx.lineTo(20, 6);
+    ctx.lineTo(9, -10);
+    ctx.closePath();
+    ctx.fill();
 
-    // ---- Defense status pips above the head ----
-    // Reads as "I have N walls left". Each pip = one fire-shield charge.
-    // A small Snow Fort glyph appears next to them when the safe-zone
-    // is currently active. Sized to be visible without cluttering.
-    this._drawDefenseStatus(ctx, p, t);
+    // Silver placket strip down the front (lens-grinder coat)
+    if (!blink) {
+      ctx.fillStyle = PAL.silverLo;
+      ctx.beginPath();
+      ctx.moveTo(-3, -10);
+      ctx.lineTo(-3, 22);
+      ctx.lineTo( 3, 22);
+      ctx.lineTo( 3, -10);
+      ctx.closePath();
+      ctx.fill();
+      // Two warm buttons
+      ctx.fillStyle = PAL.warm;
+      ctx.beginPath(); ctx.arc(0, -2, 1.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(0,  8, 1.4, 0, TAU); ctx.fill();
+    }
+
+    // Hatched volume on the right side (cooler than wizard's)
+    if (!blink) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(3, -10);
+      ctx.lineTo(20, 6);
+      ctx.lineTo(20, 22);
+      ctx.lineTo(3, 22);
+      ctx.closePath();
+      ctx.clip();
+      hatch(ctx, 10, 6, 24, 32, 2, Math.PI / 3.4, 'rgba(200,196,186,0.18)', 0.5);
+      ctx.restore();
+    }
+
+    // Coat outline
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-9, -10);
+    ctx.lineTo(-20, 6);
+    ctx.lineTo(-20, 22);
+    ctx.lineTo(20, 22);
+    ctx.lineTo(20, 6);
+    ctx.lineTo(9, -10);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Warm trim along the hem (Optician's accent — replaces vermilion)
+    ctx.strokeStyle = PAL.warm;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-19, 18);
+    ctx.lineTo(19, 18);
+    ctx.stroke();
+
+    // Head — paper disc + ink-rimmed lens goggles
+    ctx.fillStyle = PAL.paper;
+    ctx.beginPath(); ctx.arc(0, -16, 7.5, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, -16, 7.5, 0, TAU); ctx.stroke();
+    // Goggle bridge across the eyes — silver bar with two small lens discs
+    ctx.fillStyle = PAL.silverLo;
+    ctx.beginPath(); ctx.arc(-2.6, -16, 1.8, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc( 2.6, -16, 1.8, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.arc(-2.6, -16, 1.8, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc( 2.6, -16, 1.8, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-0.8, -16); ctx.lineTo(0.8, -16); ctx.stroke();
+    // Lens glints — warm pip when casting, hot pip otherwise
+    ctx.fillStyle = cast ? PAL.hot : PAL.warm;
+    ctx.beginPath(); ctx.arc(-3.2, -16.6, 0.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc( 2.0, -16.6, 0.6, 0, TAU); ctx.fill();
+
+    // Wide-brim scholar's hat — flat brim + low rounded crown
+    // Brim
+    ctx.fillStyle = PAL.ink;
+    ctx.beginPath(); ctx.ellipse(0, -23, 18, 3.4, 0, 0, TAU); ctx.fill();
+    // Crown — low cylinder
+    ctx.beginPath();
+    ctx.moveTo(-9, -23);
+    ctx.lineTo(-9, -32);
+    ctx.bezierCurveTo(-9, -36, 9, -36, 9, -32);
+    ctx.lineTo(9, -23);
+    ctx.closePath();
+    ctx.fill();
+    // Warm hatband
+    ctx.strokeStyle = PAL.warm;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-9, -25); ctx.lineTo(9, -25);
+    ctx.stroke();
+    // Brim outline
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(0, -23, 18, 3.4, 0, 0, TAU); ctx.stroke();
+
+    // Lens-staff — same shaft as wizard, but the ornament is a big silver
+    // disc with concentric rings + a warm/hot center pip.
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(15, -10); ctx.lineTo(20, 24); ctx.stroke();
+    // Lens body — silver disc with ink frame
+    const lensR = cast ? 7 + Math.sin(t * 9) * 0.8 : 6.5;
+    if (cast) {
+      ctx.fillStyle = `rgba(255, 243, 200, 0.32)`;
+      ctx.beginPath(); ctx.arc(15, -16, lensR + 5, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = PAL.silver;
+    ctx.beginPath(); ctx.arc(15, -16, lensR, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.arc(15, -16, lensR, 0, TAU); ctx.stroke();
+    // Inner concentric ring
+    ctx.strokeStyle = PAL.silverLo;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.arc(15, -16, lensR - 2, 0, TAU); ctx.stroke();
+    // Warm/hot center pip
+    ctx.fillStyle = cast ? PAL.hot : PAL.warm;
+    ctx.beginPath(); ctx.arc(15, -16, 1.6, 0, TAU); ctx.fill();
+    // Highlight strip
+    ctx.fillStyle = PAL.silverHi;
+    ctx.beginPath(); ctx.arc(13, -18, 1.0, 0, TAU); ctx.fill();
   },
 
   _drawDefenseStatus(ctx, p, t) {
@@ -12496,6 +12783,14 @@ function formatStat(stat, total) {
     case 'auraStrengthBonus': return `${pct(total)} aura strength`;
     case 'auraRangeMult':     return `${pct(total)} aura radius`;
     case 'linkCountBonus':    return `+${Math.floor(total)} linked enemies`;
+    // Mechanical-hook dumps
+    case 'splitChance':       return `${pct(total)} split chance`;
+    case 'lifesteal':         return `+${total.toFixed(1)} HP / kill`;
+    case 'chillExecute':      return `${pct(total)} dmg vs chilled`;
+    case 'cinderChance':      return `${pct(total)} cinder burst`;
+    case 'statusBonus':       return `${pct(total)} dmg vs statused`;
+    case 'forkChance':        return `${pct(total)} arc fork`;
+    case 'refractBeams':      return `+${Math.floor(total)} beams`;
     default:                  return '';
   }
 }
@@ -12580,83 +12875,100 @@ function formatDumpAt(dump, ab, pts) {
     case 'boomMult':
       if (dump.base !== undefined) return `${Math.round(dump.base * (1 + total))} dmg`;
       break;
+    // Mechanical-hook dumps — absolute "Now: X" values
+    case 'splitChance':       return `${Math.round(total * 100)}%`;
+    case 'lifesteal':         return `+${total.toFixed(1)} HP / kill`;
+    case 'chillExecute':      return `+${Math.round(total * 100)}% vs chilled`;
+    case 'cinderChance':      return `${Math.round(total * 100)}%`;
+    case 'statusBonus':       return `+${Math.round(total * 100)}% vs statused`;
+    case 'forkChance':        return `${Math.round(total * 100)}%`;
+    case 'refractBeams':      return `+${Math.floor(total)} beams`;
   }
   return formatStat(dump.stat, total);
 }
 
-// Returns the concrete PER-POINT slope, e.g. "+3 dmg per dump" or
-// "−0.06s cd per dump". Synthesizes from base+perPoint when possible;
-// falls back to dump.desc when no base or formatter is known. Adds a
-// "ramps ×X→×Y" annotation when the dump's stat sits on a curve.
+// Returns the concrete PER-POINT slope, e.g. "+3 dmg" or "−0.06s cd".
+// The "Now: X · +1 pt → Y" line right next to it already conveys "per
+// investment", so we don't repeat "per dump" on every row. Synthesizes
+// from base+perPoint when possible; falls back to dump.desc otherwise.
+// Adds a "ramps ×X→×Y" annotation when the dump's stat sits on a curve.
 function formatDumpPerPoint(dump, ab) {
   const pp = dump.perPoint || 0;
   const sign = (n) => n >= 0 ? `+${n}` : `${n}`;
   let line = '';
   switch (dump.stat) {
     case 'cdMult':
-      if (ab && ab.cooldown) line = `${sign(+(ab.cooldown * pp).toFixed(2))}s cd per dump`;
+      if (ab && ab.cooldown) line = `${sign(+(ab.cooldown * pp).toFixed(2))}s cd`;
       break;
     case 'attackRateMult':
-      line = `${sign(Math.round(pp * 100))}% attack rate per dump`;
+      line = `${sign(Math.round(pp * 100))}% attack rate`;
       break;
     case 'radiusMult':
     case 'sizeMult': {
       const base = (ab && (ab.radius || ab.size)) || (dump.base || 0);
-      if (base) line = `${sign(Math.round(base * pp))}px per dump`;
+      if (base) line = `${sign(Math.round(base * pp))}px radius`;
       break;
     }
     case 'durationMult': {
       const baseDur = (ab && ab.duration && ab.duration < 100) ? ab.duration : dump.base;
       if (baseDur) {
         if (dump.invertedDuration) {
-          line = `${Math.round(pp * 100)}% faster per dump`;
+          line = `${Math.round(pp * 100)}% faster`;
         } else {
-          line = `${sign(+(baseDur * pp).toFixed(1))}s duration per dump`;
+          line = `${sign(+(baseDur * pp).toFixed(1))}s duration`;
         }
       }
       break;
     }
     case 'dmgMult':
-      if (ab && ab.damage) line = `${sign(Math.round(ab.damage * pp))} ${ab.damageNote || 'dmg'} per dump`;
+      if (ab && ab.damage) line = `${sign(Math.round(ab.damage * pp))} ${ab.damageNote || 'dmg'}`;
       break;
     case 'shareBonus':
-      line = `${sign(Math.round(pp * 100))}% link share per dump`;
+      line = `${sign(Math.round(pp * 100))}% link share`;
       break;
     case 'rangeMult':
-      if (dump.base) line = `${sign(Math.round(dump.base * pp))}px per dump`;
-      else           line = `${sign(Math.round(pp * 100))}% range per dump`;
+      if (dump.base) line = `${sign(Math.round(dump.base * pp))}px range`;
+      else           line = `${sign(Math.round(pp * 100))}% range`;
       break;
     case 'pierceBonus':
-      line = `+${Math.floor(pp)} pierce per dump`;
+      line = `+${Math.floor(pp)} pierce`;
       break;
     case 'chainBonus':
-      line = `+${Math.floor(pp)} chain per dump`;
+      line = `+${Math.floor(pp)} chain`;
       break;
     case 'beamGrace':
-      line = `+${Math.floor(pp)} grace re-target per dump`;
+      line = `+${Math.floor(pp)} grace re-target`;
       break;
     case 'linkCountBonus':
-      line = `+${Math.floor(pp)} linked per dump`;
+      line = `+${Math.floor(pp)} linked`;
       break;
     case 'hpBonus':
-      line = `+${Math.round(pp)} HP per dump`;
+      line = `+${Math.round(pp)} HP`;
       break;
     case 'healBonus':
-      line = `+${Math.round(pp)} HP per dump`;
+      line = `+${Math.round(pp)} HP healed`;
       break;
     case 'pulseFaster':
-      line = `−${pp.toFixed(1)}s per dump`;
+      line = `−${pp.toFixed(1)}s pulse`;
       break;
     case 'auraStrengthBonus':
-      line = `+${Math.round(pp * 100)}% aura per dump`;
+      line = `+${Math.round(pp * 100)}% aura`;
       break;
     case 'auraRangeMult':
-      if (dump.base) line = `${sign(Math.round(dump.base * pp))}px per dump`;
-      else           line = `${sign(Math.round(pp * 100))}% aura per dump`;
+      if (dump.base) line = `${sign(Math.round(dump.base * pp))}px aura`;
+      else           line = `${sign(Math.round(pp * 100))}% aura`;
       break;
     case 'boomMult':
-      line = `${sign(Math.round(pp * 100))}% explosion per dump`;
+      line = `${sign(Math.round(pp * 100))}% explosion`;
       break;
+    // Mechanical-hook dumps — slope display
+    case 'splitChance':       line = `${sign(Math.round(pp * 100))}% split chance`; break;
+    case 'lifesteal':         line = `+${pp.toFixed(1)} HP / kill`; break;
+    case 'chillExecute':      line = `${sign(Math.round(pp * 100))}% dmg vs chilled`; break;
+    case 'cinderChance':      line = `${sign(Math.round(pp * 100))}% cinder burst`; break;
+    case 'statusBonus':       line = `${sign(Math.round(pp * 100))}% dmg vs statused`; break;
+    case 'forkChance':        line = `${sign(Math.round(pp * 100))}% arc fork`; break;
+    case 'refractBeams':      line = `+${pp.toFixed(1)} beams (rounds down)`; break;
   }
   if (!line) line = dump.desc || '';
   // Annotate ramp curves so the player knows the slope is the floor.

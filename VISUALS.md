@@ -72,12 +72,14 @@ eclipse  #2a1c2e  umbra    #5a3a6a
 "the side" is a translation mistake — clouds are translucent discs
 you look *through*, not silhouettes above an AoE ring.
 
-**Engagement boundary.** Targeted abilities cap at the long-axis
-spawn line + edge padding (`combatRadius()` in Game). Player-side
+**Engagement boundary.** Targeted abilities cap at the spawn-zone
+dashed threshold line (`combatRadius() = max(w,h)*0.5 - (zoneDepth-2)`,
+where `zoneDepth = CONFIG.spawn.zoneDepth = 70`). The cap and the
+visual share that single constant so they can never drift. Player-side
 auto-target uses this; entity-scoped targeting (turrets, wells with
 their own `range`) bypasses it via `findNearestEnemyTo`. The boundary
-renders as **two horizontal dashed lines** at top + bottom of the
-targeting cone (because spawns are vertical), not a circle.
+renders as the vermilion spawn band's dashed threshold line + chevrons
+— there is no separate engagement ring overlay anymore.
 
 ---
 
@@ -194,9 +196,33 @@ All ported from `.codex_design/project/art-lab-v3.js`.
       enemy death burst, boss spawn telegraph, game-over desat,
       wave banner overshoot, spawn-zone chevrons, Blind status veil.
 
+## Player character art — shipped
+
+- [x] **Wizard body** — bell robe (ink fill + right-side hatching) +
+      pointed hat with brim + hat hatching + paper-disc head with
+      two ink eye-dots + vermilion orb-staff (with cast-time bloom).
+- [x] **Wizard cast sigil** — vermilion dashed ring (rotating dash
+      offset) + 6 orbiting 5-point stars; replaces the old generic
+      gold ring. Ported from `art-lab-v2.js` `drawMagician`.
+- [x] **Optician body** — squarer ink coat + silver placket + warm
+      buttons + warm-trim hem + paper-disc head with silver lens
+      goggles (warm/hot lens glints) + wide-brim scholar hat with
+      warm hatband + silver lens-staff (concentric ring + warm/hot
+      center pip). Distinct silhouette from the Wizard at any zoom.
+      `drawPlayer` now branches on `p.charId`.
+- [x] **Optician cast burst** — 12 hot light spokes radiating from
+      a warm halo (vs the Wizard's vermilion sigil); stays in the
+      Optician's light/lens vocabulary, no shared particles.
+
 ## Outstanding / nice-to-have
 
 These are quality-of-life polish, not blockers:
+
+- [ ] **Snow Fort active glyph above player** — `_drawDefenseStatus`
+      promises one in its docstring but only renders fire-shield pips.
+- [ ] **`drawPlayer` palette discipline** — the hex shroud uses
+      `rgba(184,106,58)` directly instead of a `PAL.*` token. Same for
+      the cast-flash gold colors before the charId branch.
 
 - [ ] **Decoy taunt** — currently spawns at `(player.x + 75, player.y - 75)`.
       Could be smarter: sample direction toward `findEnemyCluster` so
@@ -230,6 +256,11 @@ These are quality-of-life polish, not blockers:
 - ~~`_beamFlashes` dead system~~ — initialized + ticked + drawn, never produced. Deleted.
 - ~~Lighthouse beam width~~ — was 5.7% uptime → 1.1 realized DPS. Widened to 0.55 rad → ~35% uptime → ~7 realized DPS.
 - ~~Linker propagation runaway~~ — Web at full was +325% damage multiplier. Capped link share at 0.50.
+- ~~`drawEngagementRing`~~ — drew a redundant pair of dashed horizontal lines at the same Y as `drawSpawnZones`'s threshold lines. Deleted; spawn band is now the only boundary marker.
+- ~~`combatRadius` overshoot~~ — was `max(w,h)/2 + edgePadding + 8`, ~120px past the dashed threshold. Pinned to the dashed line via `CONFIG.spawn.zoneDepth`.
+- ~~Optician renders as Wizard~~ — `drawPlayer` ignored `charId`. Now branches into `_drawWizardBody` / `_drawOpticianBody`.
+- ~~Generic stat-slider dumps~~ — Fireball/Black Hole/Frost Bolt/Fire Shield/Gravital Anomaly/Shock Tower/Prism Burst each had one slot replaced with a mechanical hook (Splitfire / Void Siphon / Cold-Blooded / Cinder Burst / Crushing Synergy / Arc Fork / Refraction).
+- ~~"per dump" boilerplate~~ — every slope label said "per dump" because the same words appeared next to "Now/+1pt → X". Stripped from `formatDumpPerPoint`.
 
 ## Code-quality cleanups (still open)
 
@@ -258,8 +289,36 @@ These are quality-of-life polish, not blockers:
 - [ ] **Drummer Resonance > Triple Time** by ~50% sustained value.
 - [ ] **Fire Shield realized DPS ~9** vs advertised 24 (orb gating —
       enemy crossing the orbit zone touches ~1 orb at a time, not 3).
-- [ ] **Shock Tower Reach dump** is a trap — tower auto-targets
-      within range, so extending range adds nothing.
+- [ ] ~~Shock Tower Reach dump trap~~ — replaced with Arc Fork (mech hook).
+- [ ] **Solar Halo / Lighthouse / Prism Strike "reach" / "cycle" dumps**
+      still pure stat sliders. Same flavor pass needed (per balance audit).
+- [ ] **Lens Array specs (Convergence / Dispersal / Rotation)** are all
+      "where does the beam point" — none has a distinct mech hook.
+      Consider giving Dispersal a "blinds each separate target" rider.
+
+## Dump / spec mechanical hooks shipped
+
+Each ability's "boring third dump" got a real mech hook. Display
+formatters (`formatStat`, `formatDumpAt`, `formatDumpPerPoint`) all
+know about the new stat keys. Investments accumulate into
+`mods.behavior.<key>` via `computeAbilityMods`.
+
+- [x] **Fireball — Splitfire** (`splitChance`): on impact, % chance
+      to spawn 2 child fireballs at 50% damage. Children are flagged
+      so they don't recursively split.
+- [x] **Black Hole — Void Siphon** (`lifesteal`): each enemy that
+      dies inside the well heals the player.
+- [x] **Frost Bolt — Cold-Blooded** (`chillExecute`): per-pierce bonus
+      damage to slowed or frozen targets.
+- [x] **Fire Shield — Cinder Burst** (`cinderChance`): orb hits roll
+      for a small ignite mini-burst at the orb position.
+- [x] **Gravital Anomaly — Crushing Synergy** (`statusBonus`): wells
+      deal bonus damage to enemies with any active status.
+- [x] **Shock Tower — Arc Fork** (`forkChance`): each shot rolls for
+      a second bolt at a different target (70% damage, draws its own
+      lightning).
+- [x] **Prism Burst — Refraction** (`refractBeams`): adds extra beams
+      to every cast (stacks with Spectrum, hidden by Searing Red).
 
 ---
 
