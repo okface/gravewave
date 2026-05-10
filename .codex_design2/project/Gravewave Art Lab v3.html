@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gravewave — Shock &amp; Pulse · v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:    #e8dcc0;
+    --paper-2:  #ddcfae;
+    --paper-3:  #c8b88c;
+    --ink:      #1a1612;
+    --ink-soft: #3a322a;
+    --ink-mid:  #6a604f;
+    --ink-dim:  #8a7e68;
+    --line:     rgba(26,22,18,0.18);
+    --red:      #a83a2c;
+    --blue:     #2c4a8c;
+    --gold:     #c8941a;
+    --green:    #5a7a3c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Spectral', Georgia, serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(168,58,44,0.06), transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(44,74,140,0.05), transparent 50%);
+  }
+  .lab { max-width: 1240px; margin: 0 auto; padding: 56px 40px 120px; }
+
+  .doc-header {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 32px; align-items: end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 28px; margin-bottom: 44px;
+    position: relative;
+  }
+  .doc-header::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -6px;
+    height: 1px; background: var(--ink); opacity: 0.4;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.32em;
+    color: var(--ink-mid); text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    font-size: 52px; letter-spacing: 0.06em;
+    line-height: 1.0; color: var(--ink);
+  }
+  h1 .sub {
+    color: var(--red); font-weight: 500;
+    letter-spacing: 0.04em; display: block;
+    font-size: 30px; margin-top: 8px; font-style: italic;
+  }
+  .deck {
+    color: var(--ink-soft); font-size: 16px;
+    font-style: italic; margin-top: 18px;
+    max-width: 62ch; line-height: 1.55;
+  }
+  .meta {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-mid);
+    line-height: 1.7; letter-spacing: 0.08em;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .meta .stamp {
+    display: inline-block; margin-top: 12px;
+    padding: 4px 10px; border: 1.5px solid var(--red);
+    color: var(--red); font-size: 10px;
+    letter-spacing: 0.3em; transform: rotate(-3deg);
+    font-weight: 600;
+  }
+
+  section { margin-top: 76px; }
+  .section-head {
+    display: flex; align-items: baseline; gap: 18px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+  }
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-mid);
+    letter-spacing: 0.2em;
+  }
+  h2 {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    font-size: 26px; letter-spacing: 0.08em;
+  }
+  .section-deck {
+    color: var(--ink-soft); font-size: 14px;
+    font-style: italic; max-width: 72ch;
+    margin: 16px 0 28px; line-height: 1.6;
+  }
+
+  /* Hero — full-bleed combat scene */
+  .hero-frame {
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    aspect-ratio: 16 / 9;
+    position: relative; overflow: hidden;
+  }
+  .hero-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero-overlay {
+    position: absolute; bottom: 12px; left: 12px;
+    display: flex; gap: 8px;
+    pointer-events: none;
+  }
+  .hero-tag {
+    background: var(--ink); color: var(--paper);
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .hero-tag.red { background: var(--red); }
+
+  /* Specimen grid */
+  .specimen-grid {
+    display: grid;
+    grid-template-columns: 200px repeat(2, 1fr);
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+  }
+  .specimen-grid.cols-3 { grid-template-columns: 200px repeat(3, 1fr); }
+  .specimen-grid.cols-4 { grid-template-columns: 180px repeat(4, 1fr); }
+  .specimen-grid.cols-5 { grid-template-columns: 180px repeat(5, 1fr); }
+  .specimen-grid > * {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .specimen-grid.cols-3 > *:nth-child(4n)  { border-right: none; }
+  .specimen-grid.cols-4 > *:nth-child(5n)  { border-right: none; }
+  .specimen-grid.cols-5 > *:nth-child(6n)  { border-right: none; }
+  .col-head {
+    padding: 14px 16px;
+    background: var(--ink); color: var(--paper);
+  }
+  .col-head h4 {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    font-size: 13px; letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .col-head .col-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; color: rgba(232,220,192,0.55);
+    letter-spacing: 0.2em; margin-top: 4px;
+  }
+  .row-label {
+    padding: 18px 16px; background: var(--paper-3);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    border-right: 1.5px solid var(--ink);
+  }
+  .row-label .name {
+    font-family: 'Cinzel', serif;
+    font-size: 15px; letter-spacing: 0.08em;
+  }
+  .row-label .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; color: var(--ink-mid);
+    margin-top: 6px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .row-label .desc {
+    color: var(--ink-soft); font-size: 11.5px;
+    font-style: italic; margin-top: 8px; line-height: 1.45;
+  }
+  .specimen {
+    aspect-ratio: 1.35 / 1; position: relative;
+  }
+  .specimen.short { aspect-ratio: 2 / 1; }
+  .specimen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .specimen .ttag {
+    position: absolute; top: 8px; left: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; color: var(--ink);
+    letter-spacing: 0.18em; pointer-events: none;
+    text-transform: uppercase; opacity: 0.6;
+  }
+  .specimen .ttag.r { left: auto; right: 10px; }
+
+  /* Notes block */
+  .notes {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 32px; margin-top: 18px;
+  }
+  .note {
+    font-size: 13.5px; line-height: 1.6;
+    color: var(--ink-soft);
+    border-top: 2px solid var(--ink);
+    padding-top: 14px;
+  }
+  .note b {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    color: var(--ink); letter-spacing: 0.08em;
+    display: block; margin-bottom: 6px;
+    font-size: 12px; text-transform: uppercase;
+  }
+  .note code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; background: rgba(26,22,18,0.08);
+    padding: 1px 5px; color: var(--ink);
+  }
+
+  footer {
+    margin-top: 100px; border-top: 2px solid var(--ink);
+    padding-top: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-mid);
+    letter-spacing: 0.08em; line-height: 1.7;
+    display: flex; justify-content: space-between;
+  }
+  footer b { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 900px) {
+    .lab { padding: 32px 16px 80px; }
+    .doc-header { grid-template-columns: 1fr; }
+    .meta { text-align: left; }
+    .specimen-grid, .specimen-grid.cols-3, .specimen-grid.cols-4, .specimen-grid.cols-5 {
+      grid-template-columns: 110px 1fr;
+    }
+    .specimen-grid > * { border-right: none !important; }
+    .notes { grid-template-columns: 1fr; }
+    h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+<main class="lab">
+
+  <header class="doc-header">
+    <div>
+      <div class="eyebrow">Art Direction Study · v3 · Game-Feel Pass</div>
+      <h1>Gravewave<br><span class="sub">Shock &amp; Pulse</span></h1>
+      <p class="deck">v2's silhouettes and palette are settled. v3 is the <em>impact</em> pass — the missing Tier 2 / Tier 3 ability visuals, plus the screen-feel that turns a spell into a hit: telegraphs, camera shake, ground cracks, death shatters, damage pops, resist shimmers. Every panel is animated, every spell ports back into <code style="background:rgba(26,22,18,0.08);padding:0 4px;font-family:'JetBrains Mono',monospace;font-size:12px;">Renderer.draw*</code> as a drop-in.</p>
+    </div>
+    <div class="meta">
+      <div><b>Direction</b> &nbsp;&nbsp;Ink &amp; Vellum · v3</div>
+      <div><b>Pass</b> &nbsp;&nbsp;Shock &amp; Pulse</div>
+      <div><b>Targets</b> &nbsp;T2 / T3 / impact system</div>
+      <div><b>Format</b> &nbsp;canvas2d, no assets</div>
+      <div class="stamp">FOR REVIEW</div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       01 — HERO: METEOR MOMENT
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>The Meteor Moment</h2>
+    </div>
+    <p class="section-deck">A single combat beat assembled from every system in this pass: meteor telegraph → impact → camera shake → ground crack → enemy stagger → damage pops, while a Storm Cloud zaps in the corner and a Snow Fort holds the line. Watch a few cycles.</p>
+
+    <div class="hero-frame">
+      <canvas data-v3-hero="meteor"></canvas>
+      <div class="hero-overlay">
+        <div class="hero-tag red">METEOR · T3</div>
+        <div class="hero-tag">SNOW FORT · T2</div>
+        <div class="hero-tag">STORM CLOUD · T3</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       02 — TIER 2 DEFENSIVE
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>Tier 2 — Defensive</h2>
+    </div>
+    <p class="section-deck">Each is a placed/persistent zone or aura. v2 stubbed these as dashed rings. v3 commits — hexagonal ice walls, orbiting flame ribbons, sentries that actually arc to a target, gravity threads stitched back to the wizard.</p>
+
+    <div class="specimen-grid">
+      <div></div>
+      <div class="col-head"><h4>Live</h4><div class="col-tag">ON · 8s SAMPLE</div></div>
+      <div class="col-head"><h4>Impact</h4><div class="col-tag">CONTACT · BLOCK · DEATH</div></div>
+
+      <div class="row-label">
+        <div class="name">Snow Fort</div>
+        <div class="sub">zone · 8s · -50% dmg in</div>
+        <div class="desc">Hexagonal frost wall, six crystal posts bloom-grow over 0.3s, then a slow flake drift inside. On expire: 6-piece radial shatter outward.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="snowfort"></canvas><div class="ttag">live</div></div>
+      <div class="specimen"><canvas data-v3-spell="snowfort" data-mode="impact"></canvas><div class="ttag">shatter</div></div>
+
+      <div class="row-label">
+        <div class="name">Fire Shield</div>
+        <div class="sub">aura · 3 orbs · 1 block /cd</div>
+        <div class="desc">Three orbs orbit the wizard with trailing flame ribbons. On enemy contact: micro-spark burst at the orb. On block: gold concentric pulse from caster.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="fireshield"></canvas><div class="ttag">orbiting</div></div>
+      <div class="specimen"><canvas data-v3-spell="fireshield" data-mode="impact"></canvas><div class="ttag">block flash</div></div>
+
+      <div class="row-label">
+        <div class="name">Shock Tower</div>
+        <div class="sub">sentry · auto-shock</div>
+        <div class="desc">Stone pillar, jittering coil head. On each cast: range halo pulses outward, jagged ink arc snaps to nearest target, ground sparks scatter at base.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="shocktower"></canvas><div class="ttag">cadence</div></div>
+      <div class="specimen"><canvas data-v3-spell="shocktower" data-mode="impact"></canvas><div class="ttag">arc</div></div>
+
+      <div class="row-label">
+        <div class="name">Gravital Anomaly</div>
+        <div class="sub">aura · pulse-spawned wells</div>
+        <div class="desc">Periodically drops small pull-wells around the player, each tethered with a faint ink thread back to the caster. Threads fade as wells age, snap with a "pop" on expire.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="gravital"></canvas><div class="ttag">spawn</div></div>
+      <div class="specimen"><canvas data-v3-spell="gravital" data-mode="impact"></canvas><div class="ttag">pop</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       03 — TIER 3 ULTIMATE
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Tier 3 — Ultimate</h2>
+    </div>
+    <p class="section-deck">The big-feel pass. These earn the screen shake, the burnt ground, the flinching enemies. Each is shown in two beats — the cast moment and the sustained effect — so the codebase has a clear mapping for which particles to spawn when.</p>
+
+    <div class="specimen-grid">
+      <div></div>
+      <div class="col-head"><h4>Cast / Telegraph</h4><div class="col-tag">FIRST 0.6s</div></div>
+      <div class="col-head"><h4>Sustained / Impact</h4><div class="col-tag">RUNNING</div></div>
+
+      <div class="row-label">
+        <div class="name">Meteor</div>
+        <div class="sub">single · big AoE</div>
+        <div class="desc">Shadow circle grows on ground for 0.6s telegraph, comet trail descends, dust plume + radial cracks at landing, screen shake (heavy). Anything inside the crater takes splash + a stagger.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="meteor" data-mode="telegraph"></canvas><div class="ttag">telegraph</div></div>
+      <div class="specimen"><canvas data-v3-spell="meteor" data-mode="impact"></canvas><div class="ttag">impact</div></div>
+
+      <div class="row-label">
+        <div class="name">Snow Storm</div>
+        <div class="sub">arena-wide blizzard</div>
+        <div class="desc">~50 falling snowflake particles across the radius, occasional gust lines whipping diagonal across the field, ground frost overlay accumulating then fading. Stacking slow on every enemy inside.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="snowstorm" data-mode="cast"></canvas><div class="ttag">opening</div></div>
+      <div class="specimen"><canvas data-v3-spell="snowstorm"></canvas><div class="ttag">peak</div></div>
+
+      <div class="row-label">
+        <div class="name">Wormhole</div>
+        <div class="sub">2 portals · transit dmg</div>
+        <div class="desc">Twin spinning rings linked by a dashed ink seam. Particles get pulled into A, ejected from B with a brief horizontal stretch on enemies in transit. Background radial pinch at each portal.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="wormhole"></canvas><div class="ttag">linked</div></div>
+      <div class="specimen"><canvas data-v3-spell="wormhole" data-mode="impact"></canvas><div class="ttag">transit</div></div>
+
+      <div class="row-label">
+        <div class="name">Storm Cloud</div>
+        <div class="sub">hovering · forking strikes</div>
+        <div class="desc">Ink cloud silhouette overhead with a slow drift. Strikes fork down to random enemies under it on cadence — full bolt + scorch mark at impact. The ground inside the AoE gets faint scorch marks per tick.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="stormcloud3"></canvas><div class="ttag">drifting</div></div>
+      <div class="specimen"><canvas data-v3-spell="stormcloud3" data-mode="impact"></canvas><div class="ttag">strike</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       04 — TIER 1 REFINED
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>Tier 1 — Refined</h2>
+    </div>
+    <p class="section-deck">Distinct visuals where v2 leaned generic. Black Hole now reads as a black hole — bright event horizon, dark accretion disc spinning inward. Fireball gets its two transformative specs visualised: <em>Hydra</em> (spawns a head) and <em>Meteor</em> (falls from above).</p>
+
+    <div class="specimen-grid cols-3">
+      <div></div>
+      <div class="col-head"><h4>Black Hole</h4><div class="col-tag">T1 · ATTACK</div></div>
+      <div class="col-head"><h4>Fireball · Hydra</h4><div class="col-tag">SPEC</div></div>
+      <div class="col-head"><h4>Fireball · Meteor</h4><div class="col-tag">SPEC</div></div>
+
+      <div class="row-label">
+        <div class="name">Distinct silhouettes</div>
+        <div class="sub">drop-in for cast()</div>
+        <div class="desc">Each uses the same cast contract as v2 — read mods.dmgMult / radiusMult, spawn entities or particles per spec flag.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-spell="blackhole"></canvas><div class="ttag">accretion</div></div>
+      <div class="specimen"><canvas data-v3-spell="hydra"></canvas><div class="ttag">spawn head</div></div>
+      <div class="specimen"><canvas data-v3-spell="meteor-fb"></canvas><div class="ttag">overhead</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       05 — IMPACT LEXICON
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <h2>Impact Lexicon</h2>
+    </div>
+    <p class="section-deck">Every damage event uses one entry from this table. Light shake for chip damage, medium for crits, heavy for ultimates. Hit bursts are colour-coded by interaction. Death is a shatter, not a fade.</p>
+
+    <div class="specimen-grid cols-4">
+      <div></div>
+      <div class="col-head"><h4>Light</h4><div class="col-tag">CHIP HIT</div></div>
+      <div class="col-head"><h4>Medium</h4><div class="col-tag">CRIT</div></div>
+      <div class="col-head"><h4>Heavy</h4><div class="col-tag">ULTIMATE</div></div>
+      <div class="col-head"><h4>Catastrophic</h4><div class="col-tag">METEOR · BOSS DEATH</div></div>
+
+      <div class="row-label">
+        <div class="name">Camera Shake</div>
+        <div class="sub">addShake(amp, dur)</div>
+        <div class="desc">Amplitude in px, duration in seconds, decays with elapsed.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-shake="0"></canvas><div class="ttag">2px · 0.12s</div></div>
+      <div class="specimen"><canvas data-v3-shake="1"></canvas><div class="ttag">5px · 0.22s</div></div>
+      <div class="specimen"><canvas data-v3-shake="2"></canvas><div class="ttag">9px · 0.4s</div></div>
+      <div class="specimen"><canvas data-v3-shake="3"></canvas><div class="ttag">14px · 0.7s</div></div>
+    </div>
+
+    <div class="specimen-grid cols-5" style="margin-top: 20px;">
+      <div></div>
+      <div class="col-head"><h4>Hit</h4><div class="col-tag">NORMAL</div></div>
+      <div class="col-head"><h4>Crit</h4><div class="col-tag">×1.4 SCALE · GOLD</div></div>
+      <div class="col-head"><h4>Resist</h4><div class="col-tag">PEARLESCENT</div></div>
+      <div class="col-head"><h4>Vuln</h4><div class="col-tag">RED OVERLAY</div></div>
+      <div class="col-head"><h4>Death</h4><div class="col-tag">SHATTER</div></div>
+
+      <div class="row-label">
+        <div class="name">Hit Bursts</div>
+        <div class="sub">on enemy.takeDamage</div>
+        <div class="desc">One call per damage event. Reads damageType + isCrit + isResist + isFatal flags.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-burst="hit"></canvas><div class="ttag">ring + rays</div></div>
+      <div class="specimen"><canvas data-v3-burst="crit"></canvas><div class="ttag">×1.4</div></div>
+      <div class="specimen"><canvas data-v3-burst="resist"></canvas><div class="ttag">shimmer</div></div>
+      <div class="specimen"><canvas data-v3-burst="vuln"></canvas><div class="ttag">red wash</div></div>
+      <div class="specimen"><canvas data-v3-burst="death"></canvas><div class="ttag">8-piece</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       06 — TELEGRAPHS
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <h2>Telegraphs</h2>
+    </div>
+    <p class="section-deck">Anything dangerous gets a brief visual lead-in. The player must always be able to back out of a meteor circle, see a boss arrive before it lands, and track which spawn site is hot. Each telegraph ends with the actual event.</p>
+
+    <div class="specimen-grid cols-4">
+      <div></div>
+      <div class="col-head"><h4>Boss Spawn</h4><div class="col-tag">GROUND CRACK</div></div>
+      <div class="col-head"><h4>Wave Spawn</h4><div class="col-tag">DUST KICK</div></div>
+      <div class="col-head"><h4>Meteor Target</h4><div class="col-tag">SHADOW PULSE</div></div>
+      <div class="col-head"><h4>Wave Banner</h4><div class="col-tag">RIBBON · OVERSHOOT</div></div>
+
+      <div class="row-label">
+        <div class="name">Lead-ins</div>
+        <div class="sub">300–600ms windows</div>
+        <div class="desc">Long enough to react, short enough to keep tempo. Each is a single overlay element on top of the existing renderer.</div>
+      </div>
+      <div class="specimen"><canvas data-v3-tele="boss"></canvas><div class="ttag">crack</div></div>
+      <div class="specimen"><canvas data-v3-tele="spawn"></canvas><div class="ttag">dust</div></div>
+      <div class="specimen"><canvas data-v3-tele="target"></canvas><div class="ttag">target</div></div>
+      <div class="specimen"><canvas data-v3-tele="banner"></canvas><div class="ttag">banner</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       07 — NOTES
+       ============================================================ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">07</span>
+      <h2>How this lands in the codebase</h2>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <b>One impact bus</b>
+        Every damage event in <code>Enemy.takeDamage</code> emits a single <code>Game.onImpact({x,y,kind,dmg,crit,resist,fatal})</code>. The impact bus dispatches the right hit-burst + camera shake + damage number — keeps the call site simple.
+      </div>
+      <div class="note">
+        <b>Shake table</b>
+        4 named amplitudes (light/medium/heavy/catastrophic). Ultimates fire heavy or catastrophic. Crits add medium on top. The screen-space transform is applied once per frame in <code>Renderer.draw</code> so every system inherits it.
+      </div>
+      <div class="note">
+        <b>Telegraph windows</b>
+        Boss spawn = 600ms ground-crack pre-roll. Meteor = 600ms target shadow. Wave spawn = 400ms per spawn site. All read from the same <code>Telegraph</code> particle pool so they're cheap.
+      </div>
+      <div class="note">
+        <b>Specs are diegetic</b>
+        Fireball's <em>Hydra</em> spawns an actual Hydra head sprite that lasts 6s. <em>Meteor</em> spec swaps the cast for a top-down meteor — same telegraph as T3, scaled down. Player sees what the build is doing.
+      </div>
+      <div class="note">
+        <b>Frost / Shock layers</b>
+        Snow Storm and Storm Cloud both lay flat on the ground. Snow accumulates a faint frost overlay; cloud leaves persistent scorch marks. Status runes from v2 still apply on top — they read individually because they rotate at distinct rates.
+      </div>
+      <div class="note">
+        <b>Drop-in target list</b>
+        <code>drawSnowForts</code>, <code>drawFireShield</code>, <code>drawShockTowers</code>, <code>drawWormholes</code>, <code>drawSnowStorms</code>, <code>drawWells</code>, <code>drawMeteor</code>, <code>drawGravitalAnomaly</code>, <code>drawStormClouds</code>. Each function in this pass is named so it can be lifted as-is.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span><b>GRAVEWAVE / ART LAB</b> &nbsp;·&nbsp; v3 · Shock &amp; Pulse</span>
+    <span>canvas2d &nbsp;·&nbsp; no asset deps &nbsp;·&nbsp; built atop v2 primitives</span>
+  </footer>
+
+</main>
+
+<script src="art-lab-v2.js"></script>
+<script src="art-lab-v3.js"></script>
+</body>
+</html>

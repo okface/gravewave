@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gravewave — Spell Codex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --paper:    #e8dcc0;
+    --paper-2:  #ddcfae;
+    --paper-3:  #c8b88c;
+    --paper-edge: #b39d72;
+    --ink:      #1a1612;
+    --ink-soft: #3a322a;
+    --ink-mid:  #6a604f;
+    --ink-dim:  #8a7e68;
+    --line:     rgba(26,22,18,0.18);
+    --hairline: rgba(26,22,18,0.10);
+    --red:      #a83a2c;
+    --red-deep: #7a2820;
+    --blue:     #2c4a8c;
+    --gold:     #c8941a;
+    --gold-bright: #e8b840;
+    --green:    #5a7a3c;
+    --grav:     #6a3a8a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Spectral', Georgia, serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(ellipse at 18% 8%, rgba(168,58,44,0.06), transparent 55%),
+      radial-gradient(ellipse at 82% 92%, rgba(44,74,140,0.05), transparent 55%),
+      radial-gradient(ellipse at 50% 50%, rgba(200,148,26,0.04), transparent 60%);
+  }
+  .codex { max-width: 1320px; margin: 0 auto; padding: 56px 44px 160px; }
+
+  /* ─── HEADER ────────────────────────────────────────────────── */
+  .doc-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px; align-items: end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 28px; margin-bottom: 12px;
+    position: relative;
+  }
+  .doc-header::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -6px;
+    height: 1px; background: var(--ink); opacity: 0.4;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.32em;
+    color: var(--ink-mid); text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Cinzel', serif; font-weight: 600;
+    font-size: 60px; letter-spacing: 0.04em;
+    line-height: 0.95; color: var(--ink);
+  }
+  h1 .sub {
+    color: var(--red); font-weight: 500;
+    letter-spacing: 0.05em; display: block;
+    font-size: 28px; margin-top: 10px; font-style: italic;
+  }
+  .deck {
+    color: var(--ink-soft); font-size: 16px;
+    font-style: italic; margin-top: 18px;
+    max-width: 64ch; line-height: 1.55;
+  }
+  .meta {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-mid);
+    line-height: 1.7; letter-spacing: 0.08em;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .meta .stamp {
+    display: inline-block; margin-top: 12px;
+    padding: 4px 10px; border: 1.5px solid var(--red);
+    color: var(--red); font-size: 10px;
+    letter-spacing: 0.3em; transform: rotate(-3deg);
+    font-weight: 600;
+  }
+
+  /* ─── INDEX TILE ────────────────────────────────────────────── */
+  .toc {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+  }
+  .toc h3 {
+    font-family: 'Cinzel', serif;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 14px;
+    grid-column: 1 / -1;
+  }
+  .toc ol { list-style: none; padding: 14px 18px; }
+  .toc li {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em;
+    line-height: 2.0;
+    border-bottom: 1px dotted var(--hairline);
+    display: flex; justify-content: space-between;
+  }
+  .toc li:last-child { border-bottom: none; }
+  .toc li a {
+    color: var(--ink); text-decoration: none;
+    transition: color .15s;
+  }
+  .toc li a:hover { color: var(--red); }
+  .toc li .num { color: var(--ink-dim); }
+  .toc .col {
+    padding: 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  .toc .col:last-child { border-right: none; }
+  .toc .col-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.32em;
+    color: var(--ink-mid);
+    padding: 14px 18px 4px;
+    text-transform: uppercase;
+  }
+
+  /* ─── SECTION ───────────────────────────────────────────────── */
+  section.spell {
+    margin-top: 96px;
+    scroll-margin-top: 24px;
+  }
+  .section-head {
+    display: flex; align-items: baseline; gap: 18px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+  }
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-mid);
+    letter-spacing: 0.22em;
+  }
+  .section-num .tier {
+    display: inline-block;
+    padding: 2px 7px;
+    background: var(--ink); color: var(--paper);
+    margin-right: 8px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+  }
+  .section-num .tier.t2 { background: var(--blue); }
+  .section-num .tier.t3 { background: var(--red); }
+  .section-num .tier.cmp { background: var(--gold); color: var(--ink); }
+  h2 {
+    font-family: 'Cinzel', serif; font-weight: 600;
+    font-size: 30px; letter-spacing: 0.06em;
+  }
+  h2 small {
+    font-family: 'Spectral', serif; font-style: italic;
+    font-weight: 400; font-size: 16px;
+    color: var(--ink-soft); letter-spacing: 0;
+    margin-left: 12px;
+  }
+  .section-deck {
+    color: var(--ink-soft); font-size: 14px;
+    font-style: italic; max-width: 78ch;
+    margin: 18px 0 24px; line-height: 1.6;
+  }
+
+  /* ─── HERO + SPECIMEN GRID ─────────────────────────────────── */
+  .spell-grid {
+    display: grid;
+    grid-template-columns: 1.55fr 1fr;
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+  }
+  .stage {
+    aspect-ratio: 16 / 11;
+    background: var(--paper-2);
+    position: relative;
+    border-right: 1px solid var(--ink);
+    overflow: hidden;
+  }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .stage-tag {
+    position: absolute; top: 10px; left: 10px;
+    background: var(--ink); color: var(--paper);
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .stage-tag.red { background: var(--red); }
+  .stage-tag.blue { background: var(--blue); }
+  .stage-tag.gold { background: var(--gold); color: var(--ink); }
+
+  /* Spec card */
+  .spec {
+    padding: 22px 22px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 16px;
+    background:
+      linear-gradient(transparent 90%, rgba(26,22,18,0.04) 90%) 0 0 / 100% 24px;
+  }
+  .spec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  .spec-head .name {
+    font-family: 'Cinzel', serif; font-weight: 600;
+    font-size: 20px; letter-spacing: 0.04em;
+  }
+  .spec-head .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.22em;
+    padding: 3px 7px; border: 1px solid var(--ink);
+  }
+  .spec-head .badge.fire   { color: var(--red);  border-color: var(--red); }
+  .spec-head .badge.frost  { color: var(--blue); border-color: var(--blue); }
+  .spec-head .badge.elec   { color: var(--blue); border-color: var(--blue); }
+  .spec-head .badge.grav   { color: var(--grav); border-color: var(--grav); }
+  .spec-head .badge.aoe    { color: var(--ink-soft); border-color: var(--ink-soft); }
+
+  .spec dl {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 4px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.6;
+    align-content: start;
+  }
+  .spec dt {
+    color: var(--ink-dim);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 9.5px;
+    padding-top: 2px;
+  }
+  .spec dd {
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+    border-bottom: 1px dotted var(--hairline);
+    padding-bottom: 4px;
+  }
+  .spec dd b { color: var(--ink); font-weight: 600; }
+  .spec dd code {
+    font-size: 10px; background: rgba(26,22,18,0.04);
+    padding: 1px 5px; border-radius: 1px;
+  }
+  .spec .swatches {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .spec .swatch {
+    width: 14px; height: 14px;
+    border: 1px solid var(--ink);
+  }
+  .spec-foot {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .spec-foot b { color: var(--ink); }
+  .spec-foot .key {
+    display: inline-block;
+    color: var(--red);
+    letter-spacing: 0.2em;
+    font-size: 9px; margin-right: 6px;
+  }
+
+  /* Three-up small panels (specs / phases / variants) */
+  .triplet {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+  }
+  .triplet .cell {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    aspect-ratio: 1 / 1;
+    position: relative;
+  }
+  .triplet .cell:last-child { border-right: none; }
+  .triplet .cell canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .triplet .cell .lbl {
+    position: absolute; bottom: 8px; left: 8px;
+    background: rgba(232,220,192,0.92);
+    border: 1px solid var(--ink);
+    padding: 3px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .triplet .cell .lbl.red { background: var(--red); color: var(--paper); border-color: var(--red); }
+
+  /* Notes */
+  .notes {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+  }
+  .notes .note {
+    padding: 14px 16px;
+    border-right: 1px solid var(--line);
+    font-size: 13px; line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .notes .note:last-child { border-right: none; }
+  .notes .note h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.28em;
+    color: var(--ink-mid); text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .notes .note h4 .pip {
+    display: inline-block; width: 6px; height: 6px;
+    background: var(--red);
+    margin-right: 8px; transform: translateY(-1px);
+    border-radius: 50%;
+  }
+  .notes .note .frame {
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    margin-top: 8px;
+    background: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; line-height: 1.6;
+    color: var(--ink);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .notes .note ul { padding-left: 16px; }
+  .notes .note li { margin: 4px 0; }
+  .notes .note li::marker { color: var(--red); }
+
+  /* Hero */
+  .hero-frame {
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    aspect-ratio: 16 / 9;
+    position: relative; overflow: hidden;
+    margin-top: 36px;
+  }
+  .hero-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero-stamps {
+    position: absolute; bottom: 12px; left: 12px;
+    display: flex; gap: 8px;
+    pointer-events: none;
+  }
+  .hero-stamp {
+    background: var(--ink); color: var(--paper);
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .hero-stamp.red { background: var(--red); }
+  .hero-stamp.gold { background: var(--gold); color: var(--ink); }
+
+  /* Section divider — ornamental rule */
+  .rule {
+    margin: 48px 0 0;
+    height: 28px;
+    position: relative;
+    text-align: center;
+    color: var(--ink-mid);
+    font-family: 'Cinzel', serif;
+    font-size: 14px; letter-spacing: 0.6em;
+  }
+  .rule::before, .rule::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    width: calc(50% - 50px);
+    border-top: 1px solid var(--line);
+  }
+  .rule::before { left: 0; }
+  .rule::after  { right: 0; }
+
+  /* Tier banner */
+  .tier-banner {
+    margin-top: 80px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 22px;
+    align-items: center;
+    padding: 20px 28px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1.5px solid var(--ink);
+  }
+  .tier-banner .roman {
+    font-family: 'Cinzel', serif; font-weight: 700;
+    font-size: 36px; letter-spacing: 0.04em;
+  }
+  .tier-banner .name {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    font-size: 22px; letter-spacing: 0.18em;
+  }
+  .tier-banner .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.28em;
+    color: rgba(232,220,192,0.6);
+  }
+  .tier-banner.t1 .roman { color: var(--gold); }
+  .tier-banner.t2 .roman { color: var(--blue); }
+  .tier-banner.t2 { background: var(--blue); }
+  .tier-banner.t3 { background: var(--red); }
+  .tier-banner.cmp { background: #5a4a2a; }
+  .tier-banner.cmp .roman { color: var(--gold); }
+
+  /* Final addendum */
+  .addendum {
+    margin-top: 100px;
+    border: 2px solid var(--ink);
+    padding: 34px 42px;
+    background: var(--paper);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .addendum h2 { font-size: 22px; margin-bottom: 16px; }
+  .addendum .colophon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; line-height: 1.8;
+    color: var(--ink-soft);
+    margin-top: 16px;
+  }
+  .addendum .colophon b { color: var(--ink); }
+
+  /* Bursts row */
+  .burst-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    margin-top: 20px;
+  }
+  .burst-row .b {
+    border-right: 1px solid var(--line);
+    aspect-ratio: 1 / 1;
+    position: relative;
+  }
+  .burst-row .b:last-child { border-right: none; }
+  .burst-row .b canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .burst-row .b .lbl {
+    position: absolute; bottom: 8px; left: 8px;
+    background: var(--ink); color: var(--paper);
+    padding: 2px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.22em;
+  }
+
+  /* Telegraph row */
+  .tele-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    margin-top: 20px;
+  }
+  .tele-row .t {
+    border-right: 1px solid var(--line);
+    aspect-ratio: 4 / 3;
+    position: relative;
+  }
+  .tele-row .t:last-child { border-right: none; }
+  .tele-row .t canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tele-row .t .lbl {
+    position: absolute; bottom: 8px; left: 8px;
+    background: var(--ink); color: var(--paper);
+    padding: 3px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.22em;
+  }
+</style>
+</head>
+<body>
+<div class="codex">
+
+<!-- ─── HEADER ─── -->
+<header class="doc-header">
+  <div>
+    <div class="eyebrow">Gravewave · Visual Spec · Edition iv</div>
+    <h1>Spell Codex<span class="sub">— twelve spells &amp; four companions —</span></h1>
+    <p class="deck">
+      Canonical visual reference for the Wizard&rsquo;s full ability roster and the four companion familiars.
+      Each entry binds <em>idle</em>, <em>active</em>, and <em>climax</em> phases to a distinct geometric vocabulary,
+      its own particle physics, and a unique camera-shake signature. Open beside <code>art-lab-v2.js</code>,
+      <code>art-lab-v3.js</code>, and <code>art-lab-v4.js</code> when integrating into <code>index.html</code>.
+    </p>
+  </div>
+  <div class="meta">
+    <div><b>VOLUME</b> &nbsp; iv · codex</div>
+    <div><b>SCOPE</b>  &nbsp; t1 · t2 · t3 · companions</div>
+    <div><b>SPELLS</b> &nbsp; 12 abilities</div>
+    <div><b>PALS</b>   &nbsp; 4 companions</div>
+    <div><b>PAGES</b>  &nbsp; 16 + addenda</div>
+    <div class="stamp">spec / final</div>
+  </div>
+</header>
+
+<!-- ─── HERO ─── -->
+<div class="hero-frame">
+  <canvas data-codex-hero></canvas>
+  <div class="hero-stamps">
+    <span class="hero-stamp red">SPELLS · LIVE</span>
+    <span class="hero-stamp">FROZEN FRAME · WAVE 7</span>
+    <span class="hero-stamp gold">FOUR ELEMENTS</span>
+  </div>
+</div>
+
+<!-- ─── INDEX ─── -->
+<div class="toc">
+  <h3>Index</h3>
+  <div class="col">
+    <div class="col-title">Tier 1 · Attack</div>
+    <ol>
+      <li><a href="#fireball">Fireball</a><span class="num">01</span></li>
+      <li><a href="#chain">Chain Lightning</a><span class="num">02</span></li>
+      <li><a href="#blackhole">Black Hole</a><span class="num">03</span></li>
+      <li><a href="#frostbolt">Frost Bolt</a><span class="num">04</span></li>
+    </ol>
+  </div>
+  <div class="col">
+    <div class="col-title">Tier 2 · Defensive</div>
+    <ol>
+      <li><a href="#snowfort">Snow Fort</a><span class="num">05</span></li>
+      <li><a href="#fireshield">Fire Shield</a><span class="num">06</span></li>
+      <li><a href="#gravital">Gravital Anomalies</a><span class="num">07</span></li>
+      <li><a href="#shocktower">Shock Tower</a><span class="num">08</span></li>
+    </ol>
+  </div>
+  <div class="col">
+    <div class="col-title">Tier 3 · Ultimate</div>
+    <ol>
+      <li><a href="#stormcloud">Storm Cloud</a><span class="num">09</span></li>
+      <li><a href="#wormhole">Wormhole</a><span class="num">10</span></li>
+      <li><a href="#meteor">Meteor</a><span class="num">11</span></li>
+      <li><a href="#snowstorm">Snow Storm</a><span class="num">12</span></li>
+    </ol>
+  </div>
+  <div class="col">
+    <div class="col-title">Companions</div>
+    <ol>
+      <li><a href="#sigil">Sigil Linker</a><span class="num">13</span></li>
+      <li><a href="#decoy">Decoy Effigy</a><span class="num">14</span></li>
+      <li><a href="#mender">Mender Wisp</a><span class="num">15</span></li>
+      <li><a href="#drummer">War Drummer</a><span class="num">16</span></li>
+    </ol>
+  </div>
+</div>
+
+<!-- ─── TIER I ─── -->
+<div class="tier-banner t1">
+  <div class="roman">I</div>
+  <div>
+    <div class="name">TIER ONE · ATTACK</div>
+    <div class="sub">PICK ONE AT LEVEL ONE · OPENS THE RUN</div>
+  </div>
+  <div class="sub">04 ABILITIES</div>
+</div>
+
+<!-- ── 01 FIREBALL ── -->
+<section class="spell" id="fireball">
+  <div class="section-head">
+    <div class="section-num"><span class="tier">T1</span>01 · ABILITY</div>
+    <h2>Fireball<small>Lobbed projectile, splash on impact, lasting embers</small></h2>
+  </div>
+  <p class="section-deck">
+    Vermilion comet on an arc. The signature is the <b>arc trail</b> — a curved bezier of ember sprites that fades
+    from gold at the head to black at the tail. On impact a vermilion ring shouts the radius, then a brief ash plume
+    settles. Each spec rewrites the climax: <em>Hydra</em> spawns a head, <em>Meteor</em> reroutes the cast through
+    the meteor system, <em>Heat</em> just makes it bigger and brighter.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag">IDLE · ARC LOOP</div><canvas data-codex="fireball" data-mode="idle"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Fireball</div><div class="badge fire">FIRE · T1</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>20</b> · splash <code>r 90</code></dd>
+        <dt>Cooldown</dt><dd><b>1.5s</b></dd>
+        <dt>Phases</dt><dd>cast 0.10s · arc 0.55s · burst 0.18s · ash 0.45s</dd>
+        <dt>Particles</dt><dd>ember <code>×8/cast</code> · ash puff <code>×5</code></dd>
+        <dt>Shake</dt><dd>impact <b>light</b> · meteor-spec <b>medium</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#d8624c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>Spell.fireball.cast()</b> — push <code>Projectile</code> with <code>kind:'fireball'</code>; renderer reads <code>arcT</code>.
+      </div>
+    </div>
+  </div>
+
+  <div class="triplet">
+    <div class="cell"><canvas data-codex="fireball" data-mode="cast"></canvas><div class="lbl">CAST · 0.1s</div></div>
+    <div class="cell"><canvas data-codex="hydra"></canvas><div class="lbl red">SPEC · HYDRA</div></div>
+    <div class="cell"><canvas data-codex="meteor-fb"></canvas><div class="lbl red">SPEC · METEOR</div></div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Arc bezier — quadratic, peak at 0.55 of flight</li>
+        <li>Trail is <b>analytic</b>: 8 sampled past-positions, no array</li>
+        <li>Head is gold-cored vermilion; tail decays to ink</li>
+        <li>Burst ring closes at 22px in 0.18s with <code>k²</code> ease</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>SPEC DELTAS</h4>
+      <ul>
+        <li><b>Heat</b> — <code>radiusMult</code> shows visibly; brighten gold core</li>
+        <li><b>Ignite</b> — leave a gold ash sigil on the ground for 1.0s</li>
+        <li><b>Hydra</b> — head sprite, 6s, fires tinies on a 0.8s cadence</li>
+        <li><b>Meteor</b> — re-route through <code>spawnMeteor()</code>, smaller AoE</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">enemy.takeDamage(
+  dmg, 'fireball',
+  { splash: true, ignite: spec==='ignite' }
+);
+Game.onImpact({ kind:'hit', source:'fireball' });</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 02 CHAIN LIGHTNING ── -->
+<section class="spell" id="chain">
+  <div class="section-head">
+    <div class="section-num"><span class="tier">T1</span>02 · ABILITY</div>
+    <h2>Chain Lightning<small>Instant strike + arcs to nearby foes</small></h2>
+  </div>
+  <p class="section-deck">
+    A jagged peacock-blue fork instead of a smooth beam. Two-tone: an <b>electric inner core</b> and a <b>warm-white halo</b>
+    so it reads even on the parchment background. Per-frame jitter <code>±2px</code> at every segment vertex. Spark
+    bloom at each landing point. The geometry is generated fresh per cast with a <code>Math.random()</code> seed —
+    consecutive bolts are visibly different.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IMPACT · 3-CHAIN</div><canvas data-codex="lightning" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Chain Lightning</div><div class="badge elec">ELEC · T1</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>14</b> · chains <code>3 → 5</code></dd>
+        <dt>Cooldown</dt><dd><b>1.0s</b></dd>
+        <dt>Phases</dt><dd>strike 0.18s · halo 0.25s · gone</dd>
+        <dt>Geometry</dt><dd>5-segment fork · jitter <code>±2px</code></dd>
+        <dt>Particles</dt><dd>spark <code>×6/landing</code></dd>
+        <dt>Shake</dt><dd>per-strike <b>light</b> · final crit <b>medium</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#4c6cac"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>Spell.chain.cast()</b> — find <code>chains</code> nearest, build path, render <code>drawLightnings(segments)</code>.
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>5 segments per hop; midpoint perpendicular jitter</li>
+        <li>Two strokes: <b>blue 1.6w</b> over <b>paper-glow 3w</b> (warm halo)</li>
+        <li>Each landing → 6 sparks at 30° spread</li>
+        <li>Re-seed jitter every 60ms during the 0.18s strike</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>SPEC DELTAS</h4>
+      <ul>
+        <li><b>Conduit</b> — slow tick per chain; persistent thread for 0.6s</li>
+        <li><b>Overload</b> — every 3rd hop crits; gold halo tints harder</li>
+        <li><b>Static</b> — leaves a 1.0s shock stain at each landing</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">for (const seg of bolt.segments) {
+  enemy.takeDamage(d, 'chain');
+  Camera.shake('light');
+}
+// Final hop crit?  shake('medium')</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 03 BLACK HOLE ── -->
+<section class="spell" id="blackhole">
+  <div class="section-head">
+    <div class="section-num"><span class="tier">T1</span>03 · ABILITY</div>
+    <h2>Black Hole<small>Stationary singularity at densest cluster</small></h2>
+  </div>
+  <p class="section-deck">
+    An <b>ink-violet</b> pinch with a bright <em>photon ring</em> at the event horizon and a spinning accretion disc
+    of vermilion + gold sweeps. Eight light-bend streaks lean into the well from <code>r·0.75</code>. Where Fireball is
+    arc-and-blast, Black Hole is patient: the visual hum is <em>gravitational</em>, never punchy.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag">IDLE · WELL</div><canvas data-codex="blackhole"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Black Hole</div><div class="badge grav">GRAV · T1</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>3</b>/tick · <code>0.4s</code> cadence</dd>
+        <dt>Pull</dt><dd><b>r 80</b> · falloff <code>1−d/r</code></dd>
+        <dt>Lifetime</dt><dd><b>4.5s</b></dd>
+        <dt>Phases</dt><dd>open 0.4s · sustain 3.5s · collapse 0.6s</dd>
+        <dt>Particles</dt><dd>mote spiral <code>×16</code> · gold flecks <code>×4</code></dd>
+        <dt>Shake</dt><dd>cast <b>medium</b> · collapse <b>heavy</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#1a1612"></div>
+          <div class="swatch" style="background:#6a3a8a"></div>
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>BlackHole.tick()</b> — apply pull each frame; tick damage on <code>0.4s</code>; collapse on lifetime end.
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Photon ring at <b>r 16</b> — bright gold edge</li>
+        <li>Accretion disc — 64 short arcs, every 8th gold</li>
+        <li>8 light-bend streaks at <b>0.75 · pullR</b>, slight inward lean</li>
+        <li>Tighter inward spiral on existing pull motes</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>SPEC DELTAS</h4>
+      <ul>
+        <li><b>Crush</b> — disc reverses on collapse, big inward pull</li>
+        <li><b>Eclipse</b> — horizon doubles in radius for last 1s</li>
+        <li><b>Echo</b> — splits into 2 micro-wells on collapse</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Drop-in for v2 drawWells.
+// Same x,y,r,life inputs.
+Renderer.drawBlackHole(
+  ctx, well, t, dt
+);</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 04 FROST BOLT ── -->
+<section class="spell" id="frostbolt">
+  <div class="section-head">
+    <div class="section-num"><span class="tier">T1</span>04 · ABILITY</div>
+    <h2>Frost Bolt<small>Piercing crystal, snare line, slow stack</small></h2>
+  </div>
+  <p class="section-deck">
+    A spinning hex crystal on a straight line, <b>mist trail</b> dragging behind, and small frost diamonds blooming
+    at every pierce point. Where Fireball arcs, Frost <em>pierces</em>: same speed end-to-end, no curve. The visual
+    cue for slow is a faint indigo ground-stain that fades over 0.6s.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IDLE · PIERCE</div><canvas data-codex="frost" data-mode="idle"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Frost Bolt</div><div class="badge frost">FROST · T1</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>16</b> · pierce <code>3</code></dd>
+        <dt>Cooldown</dt><dd><b>1.2s</b></dd>
+        <dt>Phases</dt><dd>cast 0.08s · travel 0.7s · trail 0.45s decay</dd>
+        <dt>Particles</dt><dd>mist <code>×3/frame</code> · pierce-bloom <code>×4</code></dd>
+        <dt>Shake</dt><dd>per-pierce <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#4c6cac"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>FrostBolt.update()</b> — straight-line; pierce checks per enemy; <code>applyStatus('slow', 1.0)</code>.
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Spinning hex crystal — 6-point star, ink edge</li>
+        <li>Mist trail — 0.45s decay, 3 cyan circles per frame</li>
+        <li>Pierce blooms a 4-point diamond at every hit</li>
+        <li>Floor stain along travel line dims to 0 in 0.6s</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>SPEC DELTAS</h4>
+      <ul>
+        <li><b>Glacier</b> — bolt leaves an ice line; enemies cross-over slow</li>
+        <li><b>Shatter</b> — kill ⇒ shard nova, mini frost-bolt fan</li>
+        <li><b>Cold Snap</b> — first pierce stuns 0.3s</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">enemy.takeDamage(d, 'frost');
+enemy.applyStatus('slow', 1.0);
+// Visual flag for the renderer's
+// blue ground tint on pierce path.</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ─── TIER II ─── -->
+<div class="tier-banner t2">
+  <div class="roman">II</div>
+  <div>
+    <div class="name">TIER TWO · DEFENSIVE</div>
+    <div class="sub">PICK ONE AT LEVEL FOUR · SHAPES THE ARENA</div>
+  </div>
+  <div class="sub">04 ABILITIES</div>
+</div>
+
+<!-- ── 05 SNOW FORT ── -->
+<section class="spell" id="snowfort">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t2">T2</span>05 · ABILITY</div>
+    <h2>Snow Fort<small>Hex ice wall, frost interior, shatter on expire</small></h2>
+  </div>
+  <p class="section-deck">
+    A <b>hexagonal</b> footprint — six crystal posts at the vertices, dashed indigo wall between, cool interior with drifting
+    flakes. Bloom-grows over 0.3s on cast. Six chunks fly outward on death, leaving a mist puff. The protected zone
+    halves enemy damage to anything inside; outside, enemies are slowed and chipped on entry.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IMPACT · BLOOM + SHATTER</div><canvas data-codex="snowfort" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Snow Fort</div><div class="badge frost">FROST · T2</div></div>
+      <dl>
+        <dt>Lifetime</dt><dd><b>8.0s</b></dd>
+        <dt>Radius</dt><dd><b>r 64</b> hex inscribed</dd>
+        <dt>Damage</dt><dd>−50% inside (player) · enemies chip <code>2/s</code></dd>
+        <dt>Phases</dt><dd>bloom 0.3s · sustain 6.7s · shatter 1.0s</dd>
+        <dt>Particles</dt><dd>flake <code>cap 20</code> · chunk <code>×6</code> · mist puff</dd>
+        <dt>Shake</dt><dd>shatter <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#4c6cac"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>contains(px,py)</b> on the fort, used in <code>takeDamage</code> for the −50% rule.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Hex outline + dashed indigo inner wall, cycling dash offset</li>
+        <li>6 crystal posts at vertices — diamond + indigo core</li>
+        <li>Pale indigo fill at 10% inside; cross-hatch at 25%</li>
+        <li>Shatter = 6 chunks at <b>30px</b> outward, 1.4 rad spin</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>RHYTHM</h4>
+      <ul>
+        <li>Drift flakes spawn at <b>30 / s</b>, hard cap 20</li>
+        <li>Crystal post wobble breathes on <code>sin(t·1.5)</code></li>
+        <li>Shatter chunks live <b>1.0s</b> · linear fade</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Damage gating
+for (const f of Game.snowForts) {
+  if (this.isInside(f) &amp;&amp;
+      this.team !== 'wizard') {
+    dmg *= 0.5;
+  }
+}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 06 FIRE SHIELD ── -->
+<section class="spell" id="fireshield">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t2">T2</span>06 · ABILITY</div>
+    <h2>Fire Shield<small>Three orbs orbit, contact damage, block on cooldown</small></h2>
+  </div>
+  <p class="section-deck">
+    Three orbs orbit the wizard at <code>1.4 rad/s</code>, each with an <b>analytic ribbon trail</b> (8 sampled past
+    positions, no array). Embers fall off at <code>~8/s</code>. When a charge consumes a hit, three concentric
+    <b>gold</b> rings pulse out — sacred, not flashy. Three small diamond pips above the wizard show charges remaining.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag red">IMPACT · BLOCK PULSE</div><canvas data-codex="fireshield" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Fire Shield</div><div class="badge fire">FIRE · T2</div></div>
+      <dl>
+        <dt>Charges</dt><dd><b>3</b> · ICD <code>1.0s</code></dd>
+        <dt>Contact</dt><dd><b>4</b> dmg · radius <code>r 26</code></dd>
+        <dt>Phases</dt><dd>orbit (∞) · block flash 0.4s</dd>
+        <dt>Particles</dt><dd>ember <code>~24/s</code> · spark <code>×5/cycle</code></dd>
+        <dt>Shake</dt><dd>block <b>medium</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#c8941a"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>Wizard.takeDamage()</b> — consume charge, set <code>blockFlashAge=0</code>, <code>shake('medium')</code>, return.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Three orbs at 120° around wizard, vertical squash 0.55</li>
+        <li>Vermilion body, gold highlight, ink core dot</li>
+        <li>Ribbon: 8 sampled past angles, 6% phase steps</li>
+        <li>Block flash → 3 gold concentric rings, 0.4s ease-out</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>VOCABULARY</h4>
+      <ul>
+        <li>Charge pips: <b>diamonds</b> (not circles) above head</li>
+        <li>Contrast Black Hole's <em>halo</em>: this is <em>orbit</em></li>
+        <li>Sacred, not violent: gold &gt; ember &gt; block</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">if (fs.charges > 0 &amp;&amp;
+    fs.cooldown <= 0) {
+  fs.charges--;
+  fs.cooldown = 1.0;
+  fs.blockFlashAge = 0;
+  Camera.shake('medium');
+  return; // absorbed
+}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 07 GRAVITAL ── -->
+<section class="spell" id="gravital">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t2">T2</span>07 · ABILITY</div>
+    <h2>Gravital Anomalies<small>Periodic small pull-wells, threads back to caster</small></h2>
+  </div>
+  <p class="section-deck">
+    Small violet pull-wells spawn around the wizard every <b>1.6s</b>. Each is leashed back to the wizard with a
+    quadratic-curved <b>ink thread</b>; the thread tracks the wizard's <em>current</em> position so it stretches as you
+    run. On expire, the well pops to a vermilion ring + 6 sparks and a small AoE damage tick.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag">IMPACT · THREE WELLS</div><canvas data-codex="gravital" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Gravital Anomalies</div><div class="badge grav">GRAV · T2</div></div>
+      <dl>
+        <dt>Cadence</dt><dd>spawn <b>1.6s</b></dd>
+        <dt>Well</dt><dd>life <b>1.4s</b> · pull <code>r 60</code></dd>
+        <dt>Pop</dt><dd><b>6</b> dmg AoE <code>r 30</code></dd>
+        <dt>Particles</dt><dd>spark <code>×6</code> on pop · ring <code>×1</code></dd>
+        <dt>Shake</dt><dd>pop <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#6a3a8a"></div>
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>well.life ≤ 0.25</b> &amp;&amp; not popped → AoE + spawn ring + <code>shake('light')</code>.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Violet pinch + faint accretion swirl (Black Hole's <em>weaker cousin</em>)</li>
+        <li>Ink thread to wizard via <code>quadraticCurveTo</code>, mid-control = well xy</li>
+        <li>Threads stretch live — read wizard.x each frame</li>
+        <li>Pop = vermilion ring + 6 outward sparks</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>RHYTHM</h4>
+      <ul>
+        <li>Up to ~3 wells alive at once (cadence 1.6 / life 1.4)</li>
+        <li>Pull is gentler than Black Hole — <code>k = (1−d/60)·80·dt</code></li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Spawn:
+gravital.wells.push({
+  x: wiz.x + cos(a)*dist,
+  y: wiz.y + sin(a)*dist,
+  life: 1.4, pull: 80,
+});</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 08 SHOCK TOWER ── -->
+<section class="spell" id="shocktower">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t2">T2</span>08 · ABILITY</div>
+    <h2>Shock Tower<small>Stationary stone sentry, auto-shocks on cadence</small></h2>
+  </div>
+  <p class="section-deck">
+    A <b>stone pillar</b> with a peacock-blue conductor head — the only static structure in the kit. On every fire
+    a jagged 4-segment arc lashes the nearest enemy (re-seeded jitter — not the same arc twice), the pillar jitters
+    <code>±1.4px</code>, base sparks puff, and a gold halo pulse expands at the range edge. Idle state has the head
+    breathing with a slow blue glow.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IMPACT · ARC</div><canvas data-codex="shocktower" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Shock Tower</div><div class="badge elec">ELEC · T2</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>9</b> · cadence <code>0.9s</code></dd>
+        <dt>Range</dt><dd><b>r 64</b> halo dashed gold</dd>
+        <dt>Phases</dt><dd>fire 0.22s · idle 0.68s</dd>
+        <dt>Particles</dt><dd>spark <code>×8/fire</code> at base</dd>
+        <dt>Shake</dt><dd>per fire <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#c8b88c"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>tower.update(dt)</b> — find nearest in range; deal damage; set <code>firePulseAge=0</code>.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Stone pillar — paper rect, hatched on shadow side</li>
+        <li>Conductor head: ink ring, blue dot, jaguar lightning glyph</li>
+        <li>Arc: 4 segments, perpendicular jitter, re-seed per fire</li>
+        <li>Halo pulse: dashed gold at <b>r 64</b>, breathes on cadence</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>VOCABULARY</h4>
+      <ul>
+        <li>Static structure — sets up "Wormhole has motion / Tower has place"</li>
+        <li>Where Chain Lightning is <b>roving</b>, Tower is <b>territorial</b></li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">if (cooldown <= 0) {
+  const tgt = nearestEnemy(x,y,r);
+  if (tgt) {
+    tgt.takeDamage(d, 'shock-tower');
+    firePulseAge = 0;
+    Camera.shake('light');
+    cooldown = cadence;
+  }
+}</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ─── TIER III ─── -->
+<div class="tier-banner t3">
+  <div class="roman">III</div>
+  <div>
+    <div class="name">TIER THREE · ULTIMATE</div>
+    <div class="sub">PICK ONE AT LEVEL NINE · BEND THE BATTLE</div>
+  </div>
+  <div class="sub">04 ABILITIES</div>
+</div>
+
+<!-- ── 09 STORM CLOUD ── -->
+<section class="spell" id="stormcloud">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t3">T3</span>09 · ABILITY</div>
+    <h2>Storm Cloud<small>Hovering cloud, periodic forking strikes</small></h2>
+  </div>
+  <p class="section-deck">
+    A drifting cumulus body — body-x oscillates by <code>sin(t·0.4)·8</code> so it always feels alive — periodically
+    fires a <b>forking</b> bolt at a random target underneath. Persistent vermilion <b>scorch marks</b> stay on the
+    ground for 1.2s after every strike. <code>shake('medium')</code> per strike.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IMPACT · STRIKE</div><canvas data-codex="stormcloud3" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Storm Cloud</div><div class="badge elec">ELEC · T3</div></div>
+      <dl>
+        <dt>Lifetime</dt><dd><b>10s</b></dd>
+        <dt>Strike</dt><dd><b>22</b> dmg · cadence <code>0.8s</code></dd>
+        <dt>Phases</dt><dd>arrive 0.5s · sustain · fade 0.5s</dd>
+        <dt>Particles</dt><dd>spark <code>×6/strike</code> · scorch <code>1.2s</code></dd>
+        <dt>Shake</dt><dd>strike <b>medium</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#3a322a"></div>
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>StormCloud.tick()</b> — pick random target under bbox · build forking bolt · scorch · shake.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>3 stacked ink-soft ellipses, drifting on x</li>
+        <li>Forking bolt: main + 2 branches at 30°, gold halo</li>
+        <li>Scorch: pinched ellipse stain, 1.2s decay to 0</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>VOCABULARY</h4>
+      <ul>
+        <li>Cloud is <b>overhead</b>; Tower is <b>ground</b>; Lightning is <b>directional</b></li>
+        <li>Three lightning-flavored entries, each with a different <em>place of origin</em></li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Per strike:
+const tgt = randomUnderCloud();
+tgt.takeDamage(d, 'storm-cloud');
+particles.push({kind:'scorch',
+  x:tgt.x, y:tgt.y, life:1.2});
+Camera.shake('medium');</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 10 WORMHOLE ── -->
+<section class="spell" id="wormhole">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t3">T3</span>10 · ABILITY</div>
+    <h2>Wormhole<small>Two portals, transit damage + confusion</small></h2>
+  </div>
+  <p class="section-deck">
+    Two paired violet portals with <b>spinning rune rings</b>, a dashed conduit between them, and a particle stream
+    that pulls toward portal A and ejects from portal B. Enemies entering one teleport, take damage, and play a
+    brief <b>stretch</b> on exit (<code>scale(0.5, 1.6)</code> for 0.3s). A <code>recentlyTeleported</code> Set on
+    each wormhole prevents infinite ping-pong.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag">IMPACT · TWIN PORTALS</div><canvas data-codex="wormhole" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Wormhole</div><div class="badge grav">GRAV · T3</div></div>
+      <dl>
+        <dt>Transit</dt><dd><b>14</b> dmg + 0.3s confuse</dd>
+        <dt>Lifetime</dt><dd><b>5.0s</b></dd>
+        <dt>ICD</dt><dd>per-enemy <b>0.5s</b></dd>
+        <dt>Phases</dt><dd>open 0.4s · sustain · close 0.5s</dd>
+        <dt>Particles</dt><dd>stream <code>~20/s</code> · stretch ghost</dd>
+        <dt>Shake</dt><dd>cast <b>medium</b> · transit <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#6a3a8a"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span>Set <code>recentlyTeleported</code> — DO NOT skip the ICD or enemies bounce forever.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>2 spinning rune rings · dashed connection line</li>
+        <li>Stream particles pull toward A, eject from B</li>
+        <li>Stretch ghost on enemy: <code>scale(0.5, 1.6)</code> 0.3s</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>RISKS</h4>
+      <ul>
+        <li>Without ICD, enemies ping-pong and cook</li>
+        <li>If portal A and B overlap a wall, enemies vanish offscreen — clamp portal placement</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">if (wh.has(this)) continue;
+this.x = dest.x; this.y = dest.y;
+this.takeDamage(d, 'wormhole');
+this.applyStatus('stretched',0.3);
+wh.add(this);
+setTimeout(()=>wh.delete(this),500);</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 11 METEOR ── -->
+<section class="spell" id="meteor">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t3">T3</span>11 · ABILITY</div>
+    <h2>Meteor<small>The marquee. Telegraph → fall → catastrophe.</small></h2>
+  </div>
+  <p class="section-deck">
+    The most authored visual in the kit. <b>0.6s telegraph</b> — three concentric pulses on the ground, marker
+    rotating overhead. Then a comet falls from upper-right with a sparking trail. Impact spawns 26 dust + 18 sparks
+    + 8 cracks, applies AoE, leaves a scorched crater. <code>shake('catastrophic')</code>. Don't shorten the telegraph
+    — that 600ms is the player's window to dodge.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag red">IMPACT · CRATER</div><canvas data-codex="meteor"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Meteor</div><div class="badge fire">FIRE · T3</div></div>
+      <dl>
+        <dt>Damage</dt><dd><b>140</b> AoE · <code>r 40</code></dd>
+        <dt>Phases</dt><dd>telegraph 0.6s · fall 0.4s · impact 0 · crater 0.7s</dd>
+        <dt>Particles</dt><dd>dust ×26 · spark ×18 · crack ×8</dd>
+        <dt>Shake</dt><dd>impact <b>catastrophic</b> (amp 14, 0.7s)</dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#3a322a"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>Game.spawnMeteor(x,y)</b> — push <code>Meteor</code>; tick crosses <code>telegraph</code> → impact.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Telegraph: 3 concentric ground pulses + overhead reticle</li>
+        <li>Comet: gold-ember-trail descent from <code>(+80, −120)</code> offset</li>
+        <li>Crater: ink scorch + 8 radial cracks, ember vents for 0.7s</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>VOCABULARY</h4>
+      <ul>
+        <li>Only ability with a <b>telegraphed</b> windup phase</li>
+        <li>Only ability that summons <b>cracks</b> particle kind</li>
+        <li>Fireball-Meteor spec routes through this same system, scaled down</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Impact:
+for (const e of nearby(x,y,40)) {
+  e.takeDamage(d, 'meteor');
+}
+spawnDust(26); spawnSparks(18);
+spawnCracks(8);
+Camera.shake('catastrophic');</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 12 SNOW STORM ── -->
+<section class="spell" id="snowstorm">
+  <div class="section-head">
+    <div class="section-num"><span class="tier t3">T3</span>12 · ABILITY</div>
+    <h2>Snow Storm<small>Massive radius blizzard, stacking slow + tick damage</small></h2>
+  </div>
+  <p class="section-deck">
+    Where Snow Fort is geometry, Snow Storm is <b>weather</b>: a vast soft circle, ~50 falling flakes, occasional
+    diagonal <b>gust</b> streaks across the radius, and a faint ground-frost overlay accumulating then fading.
+    Stacking slow on enemies inside, frost tick every 0.5s. The flake pool is <em>shared globally</em> — overlapping
+    storms don't multiply.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag blue">IMPACT · BLIZZARD</div><canvas data-codex="snowstorm" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Snow Storm</div><div class="badge frost">FROST · T3</div></div>
+      <dl>
+        <dt>Lifetime</dt><dd><b>6.0s</b></dd>
+        <dt>Tick</dt><dd><b>4</b> dmg · <code>0.5s</code></dd>
+        <dt>Slow</dt><dd>stacks to <code>×0.5 speed</code></dd>
+        <dt>Particles</dt><dd>flake <code>~50</code> · gust <code>≤6</code> · frost overlay</dd>
+        <dt>Shake</dt><dd>cast <b>medium</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#4c6cac"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+          <div class="swatch" style="background:#c8b88c"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span>Global flake pool capped at <b>80</b> across all storms. Off-radius cull every tick.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Soft radial gradient field — paper to indigo at edge</li>
+        <li>Falling flakes — gravity 12, drift sin(t·0.7)</li>
+        <li>Gust streaks — diagonal soft strokes, 0.8s decay</li>
+        <li>Frost overlay accumulates &amp; fades with field strength</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>RISKS</h4>
+      <ul>
+        <li>Forever-living flakes if radius cull is missed → unbounded growth</li>
+        <li>Two stacked storms ⇒ keep flakes <b>shared</b>, not per-storm</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">if (now - s.lastTick > 0.5) {
+  for (const e of inside(s)) {
+    e.applyStatus('slow', 0.5);
+    e.takeDamage(d, 'snow-storm');
+  }
+  s.lastTick = now;
+}</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ─── COMPANIONS ─── -->
+<div class="tier-banner cmp">
+  <div class="roman">★</div>
+  <div>
+    <div class="name">COMPANIONS · MINIONS</div>
+    <div class="sub">PICKED ONCE AT RUN START · STAYS THE WHOLE RUN</div>
+  </div>
+  <div class="sub">04 FAMILIARS</div>
+</div>
+
+<!-- ── 13 SIGIL LINKER ── -->
+<section class="spell" id="sigil">
+  <div class="section-head">
+    <div class="section-num"><span class="tier cmp">PAL</span>13 · COMPANION</div>
+    <h2>Sigil Linker<small>Threads three foes — damage cascades along the link</small></h2>
+  </div>
+  <p class="section-deck">
+    A floating <b>hexagram</b> sigil hovers ahead of the wizard. Three ink filaments curve to the three nearest
+    enemies; a <b>vermilion bead</b> travels along each thread on the shared cadence. When one threaded foe is hit,
+    the bead becomes a <em>cascade</em> that pulses outward to the others, bleeding overkill damage. The sigil itself
+    rotates slowly with a vermilion pip and gold halo.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag gold">IMPACT · CASCADE</div><canvas data-codex="comp-sigil" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Sigil Linker</div><div class="badge aoe">SUPPORT · DPS</div></div>
+      <dl>
+        <dt>Threads</dt><dd><b>3</b> nearest, in range</dd>
+        <dt>Bleed</dt><dd>30% of incoming damage cascades</dd>
+        <dt>Phases</dt><dd>idle (rotate) · bead 1.5s loop · cascade 0.5s</dd>
+        <dt>Particles</dt><dd>spark on bead arrival <code>×2</code></dd>
+        <dt>Shake</dt><dd>cascade kill <b>light</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>onImpact(threadedEnemy)</b> → for the other two, <code>takeDamage(dmg·0.3, 'sigil')</code>.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Hexagram (two triangles) inside ring; vermilion pip center</li>
+        <li>Curved threads via <code>quadraticCurveTo</code> with offset mid</li>
+        <li>Travelling bead: vermilion outer + gold inner, 0.18 phase offset per thread</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>DUMPS &amp; SPECS</h4>
+      <ul>
+        <li><b>Tighten</b> +5% bleed/pt (max +15%)</li>
+        <li><b>Reach</b> +12% range/pt (max +36%)</li>
+        <li><i>Spec</i> · <b>Overkill</b> — fatal hits cascade at 100% to all linked</li>
+        <li><i>Spec</i> · <b>Quartet</b> — links 4 instead of 3</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Inside enemy.takeDamage:
+if (this.threadedBy) {
+  for (const o of this.threadedBy.others) {
+    o.takeDamage(d * 0.3, 'sigil');
+  }
+}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 14 DECOY EFFIGY ── -->
+<section class="spell" id="decoy">
+  <div class="section-head">
+    <div class="section-num"><span class="tier cmp">PAL</span>14 · COMPANION</div>
+    <h2>Decoy Effigy<small>Taunts in radius, detonates on death, respawns</small></h2>
+  </div>
+  <p class="section-deck">
+    A burlap <b>scarecrow</b> with X-stitched eyes and a vermilion twine belt, nailed to the ground by a stake.
+    Pulsing red bands mark its taunt radius. As HP drops below 30%, the effigy <em>strains</em> — wobbles, leaks
+    embers, vermilion cracks open. On death: a 14-shard straw shatter, ink puff, vermilion blast. After
+    a cooldown a new effigy appears at the wizard's heel.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag red">IMPACT · DETONATE</div><canvas data-codex="comp-decoy" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Decoy Effigy</div><div class="badge fire">TAUNT · BOMB</div></div>
+      <dl>
+        <dt>HP</dt><dd><b>120</b></dd>
+        <dt>Taunt</dt><dd>radius <code>r 70</code></dd>
+        <dt>Detonate</dt><dd><b>40</b> AoE <code>r 60</code></dd>
+        <dt>Respawn</dt><dd><b>5.0s</b></dd>
+        <dt>Phases</dt><dd>alive · strain (HP &lt; 30%) · detonate 0.15s</dd>
+        <dt>Shake</dt><dd>detonate <b>heavy</b></dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#c8a56e"></div>
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>onDeath()</b> → <code>spawnDetonation(x,y)</code> · <code>shake('heavy')</code> · queue respawn.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Burlap body, stitched mouth, X-eyes, twigs for arms</li>
+        <li>Vermilion twine belt &amp; crown of thorns</li>
+        <li>Taunt radius — 3 concentric red dashed bands, breathing</li>
+        <li>Detonate: 14 straw shards + 60px ring, ink puff core</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>DUMPS &amp; SPECS</h4>
+      <ul>
+        <li><b>Stuff</b> +25 HP/pt (max +75 HP)</li>
+        <li><b>Powder</b> +12% blast dmg/pt (max +36%)</li>
+        <li><i>Spec</i> · <b>Tar</b> — detonation slows survivors 60% for 2s</li>
+        <li><i>Spec</i> · <b>Twin</b> — two effigies stand at once, half HP each</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">// Aggro:
+for (const e of enemies) {
+  if (dist(e, effigy) <= 70) {
+    e.target = effigy;
+  }
+}
+// Strain visual:
+effigy.strain = (hp/maxHp) < 0.30;</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 15 MENDER WISP ── -->
+<section class="spell" id="mender">
+  <div class="section-head">
+    <div class="section-num"><span class="tier cmp">PAL</span>15 · COMPANION</div>
+    <h2>Mender Wisp<small>Steady-cadence heal — gold ribbon + glyphs</small></h2>
+  </div>
+  <p class="section-deck">
+    A small, pale-gold wisp with a paper-white core orbits the wizard on a Lissajous path so it never feels metronomic.
+    A <b>cadence pip</b> ring around the wisp fills clockwise; when full, a <b>gold ribbon</b> arcs to the wizard and
+    <b>+ glyphs</b> rise from impact. Trail dots are sampled analytically — no per-frame array.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag gold">IMPACT · HEAL ARC</div><canvas data-codex="comp-mender" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">Mender Wisp</div><div class="badge aoe">SUPPORT · HEAL</div></div>
+      <dl>
+        <dt>Heal</dt><dd><b>4</b> HP · cadence <code>2.0s</code></dd>
+        <dt>Path</dt><dd>Lissajous, drift on sin/cos</dd>
+        <dt>Phases</dt><dd>idle 65% · ribbon 35% · pip resets</dd>
+        <dt>Particles</dt><dd>plus glyph <code>×3/heal</code> · trail dots <code>×7</code></dd>
+        <dt>Shake</dt><dd>—</dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#e8b840"></div>
+          <div class="swatch" style="background:#c8941a"></div>
+          <div class="swatch" style="background:#e8dcc0"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>tickCompanion()</b> on cadence → <code>wiz.heal(amount)</code> · spawn plus glyphs.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Lissajous orbit (not circular) — feels alive, not on a clock</li>
+        <li>Cadence pip — clockwise dashed ring fills then snaps</li>
+        <li>Heal ribbon: 4-stack bezier with thickness fade</li>
+        <li>+ glyphs rise &amp; fade over 1s</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>DUMPS &amp; SPECS</h4>
+      <ul>
+        <li><b>Linger</b> −5% cadence/pt (max −15%)</li>
+        <li><b>Mercy</b> +1 HP/pt (max +3)</li>
+        <li><i>Spec</i> · <b>Vow</b> — every 3rd heal grants 0.5s shield</li>
+        <li><i>Spec</i> · <b>Choir</b> — wisp doubles, alternating cadence</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">if (wisp.pip >= 1.0) {
+  wisp.pip = 0;
+  wiz.heal(wisp.amount);
+  spawnPlusGlyphs(wiz, 3);
+  Game.particles.push({
+    kind:'goldring', x:wiz.x, y:wiz.y,
+    life:0.4 });
+}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 16 WAR DRUMMER ── -->
+<section class="spell" id="drummer">
+  <div class="section-head">
+    <div class="section-num"><span class="tier cmp">PAL</span>16 · COMPANION</div>
+    <h2>War Drummer<small>Cycling aura — Vigor / Ward / Haste — beat pulses</small></h2>
+  </div>
+  <p class="section-deck">
+    A standing drum on twig-legs follows the wizard. A drumstick strikes on a <b>0.6s beat</b>; each strike pulses
+    a colored ring outward — <b>vermilion · indigo · gold</b> — and the wizard's aura field tints to match.
+    The aura cycles through Vigor → Ward → Haste with a small banner above the wizard sliding in/out at each
+    transition. Glyph on the drum skin (sword / shield / wing) matches the active aura.
+  </p>
+  <div class="spell-grid">
+    <div class="stage"><div class="stage-tag gold">IMPACT · BEAT CYCLE</div><canvas data-codex="comp-drummer" data-mode="impact"></canvas></div>
+    <div class="spec">
+      <div class="spec-head"><div class="name">War Drummer</div><div class="badge aoe">AURA · CYCLE</div></div>
+      <dl>
+        <dt>Cycle</dt><dd><b>6.0s</b> total · 2.0s per aura</dd>
+        <dt>Beat</dt><dd>strike every <b>0.6s</b></dd>
+        <dt>Auras</dt><dd>Vigor +12% dmg · Ward −12% taken · Haste −12% cd</dd>
+        <dt>Phases</dt><dd>idle bob · strike 0.18s · ring expand 0.7s</dd>
+        <dt>Particles</dt><dd>colored ring per beat</dd>
+        <dt>Shake</dt><dd>strike <b>light</b> (every 4th beat only)</dd>
+        <dt>Palette</dt>
+        <dd><div class="swatches">
+          <div class="swatch" style="background:#a83a2c"></div>
+          <div class="swatch" style="background:#2c4a8c"></div>
+          <div class="swatch" style="background:#c8941a"></div>
+          <div class="swatch" style="background:#1a1612"></div>
+        </div></dd>
+      </dl>
+      <div class="spec-foot">
+        <span class="key">HOOK</span><b>aura = AURAS[floor(cyclePhase·3)]</b> — apply mod, swap glyph &amp; banner color in lockstep.
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h4><span class="pip"></span>SIGNATURE</h4>
+      <ul>
+        <li>Drum cylinder, twig legs, X-laced cords (color of active aura)</li>
+        <li>Banner above wizard slides −6 → 0 → +6 between auras</li>
+        <li>Beat pulse — color matches aura at moment of strike</li>
+        <li>Three glyphs: sword (vigor), shield (ward), wing (haste)</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>DUMPS &amp; SPECS</h4>
+      <ul>
+        <li><b>Cadence</b> −10% cycle/pt (max −30%)</li>
+        <li><b>Resonance</b> +3% aura strength/pt (max +9%)</li>
+        <li><i>Spec</i> · <b>Forte</b> — strikes also damage enemies inside aura</li>
+        <li><i>Spec</i> · <b>Triplet</b> — auras stack — all three active at half strength</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4><span class="pip"></span>HOOK</h4>
+      <div class="frame">const idx = Math.floor(
+  ((t % 6.0) / 6.0) * 3
+) % 3;
+wiz.activeAura = AURAS[idx];
+// On every 0.6s beat:
+beatRing(drum, AURAS[idx].color);</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ─── ADDENDA ─── -->
+<div class="rule">✦ ADDENDA ✦</div>
+
+<section class="spell" id="bursts">
+  <div class="section-head">
+    <div class="section-num">A · IMPACT BUS</div>
+    <h2>Hit Bursts<small>Five variants of the impact-bus payload</small></h2>
+  </div>
+  <p class="section-deck">
+    Every <code>onImpact</code> call funnels through one of these bursts.
+    <b>Hit</b>: vermilion ring + 7 gold rays. <b>Crit</b>: gold star + double rings + bouncing &ldquo;48!&rdquo;.
+    <b>Resist</b>: pearlescent concentrics + tag. <b>Vuln</b>: red wash + 12 dark-red rays. <b>Death</b>:
+    8 ink shards + ink puff + vermilion ring. <em>Throttle resist/vuln tags so a 3-damage tap on a 5000 HP boss
+    doesn't paint the screen with <code>RESIST</code>.</em>
+  </p>
+  <div class="burst-row">
+    <div class="b"><canvas data-codex="burst" data-burst="hit"></canvas><div class="lbl">HIT</div></div>
+    <div class="b"><canvas data-codex="burst" data-burst="crit"></canvas><div class="lbl">CRIT</div></div>
+    <div class="b"><canvas data-codex="burst" data-burst="resist"></canvas><div class="lbl">RESIST</div></div>
+    <div class="b"><canvas data-codex="burst" data-burst="vuln"></canvas><div class="lbl">VULN</div></div>
+    <div class="b"><canvas data-codex="burst" data-burst="death"></canvas><div class="lbl">DEATH</div></div>
+  </div>
+</section>
+
+<section class="spell" id="telegraphs">
+  <div class="section-head">
+    <div class="section-num">B · TELEGRAPHS</div>
+    <h2>Telegraphs<small>Boss spawn · wave dust · meteor target · wave banner</small></h2>
+  </div>
+  <p class="section-deck">
+    Telegraphs sit <b>outside</b> the camera-shake transform — they're not part of the world, they're the page
+    talking back to the player. Boss spawn fires <code>shake('heavy')</code> on its <em>last</em> frame; do not double-shake
+    on boss arrival.
+  </p>
+  <div class="tele-row">
+    <div class="t"><canvas data-codex="tele" data-tele="boss"></canvas><div class="lbl">BOSS SPAWN</div></div>
+    <div class="t"><canvas data-codex="tele" data-tele="spawn"></canvas><div class="lbl">WAVE DUST</div></div>
+    <div class="t"><canvas data-codex="tele" data-tele="target"></canvas><div class="lbl">METEOR TARGET</div></div>
+    <div class="t"><canvas data-codex="tele" data-tele="banner"></canvas><div class="lbl">WAVE BANNER</div></div>
+  </div>
+</section>
+
+<div class="addendum">
+  <div class="eyebrow">colophon</div>
+  <h2>Differentiation Matrix</h2>
+  <p style="font-size:14px; color:var(--ink-soft); line-height:1.7; max-width:80ch;">
+    Every spell sits at a unique intersection of <em>geometry</em>, <em>physics</em>, and <em>shake</em>. The matrix below
+    is the hand we gave each ability. If two entries collide on all three axes, the look-alike one is the bug.
+  </p>
+  <div class="colophon">
+    <b>FIRE</b>           &nbsp;  fireball · arc-comet  ·  fireshield · orbit  ·  meteor · drop  ·  decoy · taunt-bomb<br>
+    <b>FROST</b>          &nbsp;  frost · pierce-line   ·  snowfort · hex     ·  snowstorm · weather<br>
+    <b>ELEC</b>           &nbsp;  chain · roving fork   ·  shocktower · place ·  stormcloud · overhead<br>
+    <b>GRAV</b>           &nbsp;  blackhole · pinch     ·  gravital · leashed ·  wormhole · paired<br>
+    <b>SUPPORT</b>        &nbsp;  sigil · threads       ·  mender · lissajous  ·  drummer · cycle<br>
+    <b>SHAKE</b>          &nbsp;  light → catastrophic, see HANDOFF.md §2.3<br>
+    <b>SHARED IDIOMS</b>  &nbsp;  paper bg · ink stroke · vermilion accent · gold for sacred · indigo for cold<br>
+    <b>DEPENDENCIES</b>   &nbsp;  v2 primitives · v3 bursts &amp; T2/T3 · v4 companions
+  </div>
+</div>
+
+</div>
+
+<!-- ─── ENGINE ─── -->
+<script src="art-lab-v2.js"></script>
+<script src="art-lab-v3.js"></script>
+<script src="art-lab-v4.js"></script>
+<script src="codex-init.js"></script>
+</body>
+</html>

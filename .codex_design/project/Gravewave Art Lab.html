@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gravewave — Art Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #ece6d8;
+    --ink-mid: #9a9385;
+    --ink-dim: #5a5448;
+    --line: rgba(236,230,216,0.10);
+    --paper: #0c0a08;
+    --paper-2: #14110d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Spectral', Georgia, serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Document chrome */
+  .lab {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 56px 40px 120px;
+  }
+  .doc-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    align-items: end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 28px;
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Cinzel', serif;
+    font-weight: 500;
+    font-size: 48px;
+    letter-spacing: 0.06em;
+    line-height: 1.05;
+  }
+  .deck {
+    color: var(--ink-mid);
+    font-size: 16px;
+    font-style: italic;
+    margin-top: 14px;
+    max-width: 60ch;
+  }
+  .meta {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-dim);
+    line-height: 1.7;
+    letter-spacing: 0.08em;
+  }
+  .meta b { color: var(--ink-mid); font-weight: 500; }
+
+  section { margin-top: 72px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    margin-bottom: 8px;
+  }
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-dim);
+    letter-spacing: 0.2em;
+  }
+  h2 {
+    font-family: 'Cinzel', serif;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: 0.08em;
+  }
+  .section-deck {
+    color: var(--ink-mid);
+    font-size: 14px;
+    font-style: italic;
+    max-width: 70ch;
+    margin-bottom: 28px;
+  }
+
+  /* Direction cards (top: 3 directions side-by-side, hero shots) */
+  .directions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .direction {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .direction .hero {
+    aspect-ratio: 4 / 5;
+    width: 100%;
+    display: block;
+  }
+  .direction .meta-strip {
+    padding: 16px 18px 18px;
+    border-top: 1px solid var(--line);
+  }
+  .direction h3 {
+    font-family: 'Cinzel', serif;
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: 0.1em;
+  }
+  .direction .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-dim);
+    letter-spacing: 0.2em;
+    margin-top: 6px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .direction p {
+    color: var(--ink-mid);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .direction .palette {
+    display: flex;
+    gap: 4px;
+    margin-top: 14px;
+  }
+  .swatch {
+    flex: 1;
+    height: 18px;
+    border-radius: 1px;
+  }
+
+  /* Specimen rows: one row per artifact type, columns per direction */
+  .specimen-grid {
+    display: grid;
+    grid-template-columns: 160px repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    background: var(--paper-2);
+  }
+  .specimen-grid > * {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+  }
+  .specimen-grid > *:nth-child(4n) { border-right: none; }
+  .specimen-grid > .col-head {
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.015);
+  }
+  .col-head h4 {
+    font-family: 'Cinzel', serif;
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.12em;
+  }
+  .col-head .col-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    letter-spacing: 0.2em;
+    margin-top: 4px;
+  }
+  .row-label {
+    padding: 18px 16px;
+    background: rgba(0,0,0,0.25);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .row-label .name {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+  }
+  .row-label .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    margin-top: 4px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .specimen {
+    aspect-ratio: 1.6 / 1;
+    position: relative;
+  }
+  .specimen canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  .specimen .cap {
+    position: absolute;
+    bottom: 8px; left: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+
+  /* Wide combat stage — full-room demo per direction */
+  .stages {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .stage {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    aspect-ratio: 9 / 16;
+    position: relative;
+    overflow: hidden;
+  }
+  .stage canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  .stage .stage-label {
+    position: absolute; top: 10px; left: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.18em;
+    z-index: 2;
+    text-transform: uppercase;
+  }
+
+  /* HUD comparison */
+  .hud-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .hud-cell {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    aspect-ratio: 9 / 5;
+    position: relative;
+  }
+  .hud-cell canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* Notes / footnote-style annotations */
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 18px;
+  }
+  .note {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-mid);
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .note b {
+    font-family: 'Cinzel', serif;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.08em;
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+  .note code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: rgba(255,255,255,0.04);
+    padding: 1px 5px;
+    border-radius: 1px;
+    color: var(--ink);
+  }
+
+  /* Direction picker bar (sticky) */
+  .picker {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    gap: 0;
+    background: rgba(12,10,8,0.92);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin: 28px -40px 0;
+    padding: 0 40px;
+  }
+  .pick {
+    flex: 1;
+    padding: 14px 18px;
+    border-right: 1px solid var(--line);
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--ink-mid);
+    cursor: pointer;
+    background: transparent;
+    border-top: none; border-bottom: none; border-left: none;
+    text-align: left;
+    transition: color 0.15s, background 0.15s;
+  }
+  .pick:last-child { border-right: none; }
+  .pick:hover { color: var(--ink); background: rgba(255,255,255,0.02); }
+  .pick.active { color: var(--ink); background: rgba(255,255,255,0.04); }
+  .pick .pn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    letter-spacing: 0.2em;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 100px;
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-dim);
+    letter-spacing: 0.08em;
+    line-height: 1.7;
+  }
+  footer b { color: var(--ink-mid); font-weight: 500; }
+
+  @media (max-width: 900px) {
+    .lab { padding: 32px 16px 80px; }
+    .doc-header { grid-template-columns: 1fr; }
+    .meta { text-align: left; }
+    .directions, .stages, .hud-row, .notes { grid-template-columns: 1fr; }
+    .specimen-grid { grid-template-columns: 100px repeat(3, 1fr); }
+    h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<main class="lab">
+
+  <header class="doc-header">
+    <div>
+      <div class="eyebrow">Art Direction Study · v1</div>
+      <h1>Gravewave<br><span style="color:var(--ink-mid); font-weight:500; letter-spacing:0.04em;">Art &amp; Effects Lab</span></h1>
+      <p class="deck">Three directions for the look and feel of the game, each demonstrated with the same set of assets — character, enemies, spells, status FX, HUD — all rendered live on canvas using the same draw signatures the game uses today. Anything you like drops straight into <code style="font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,0.04);padding:1px 6px;font-style:normal">Renderer.draw*</code>.</p>
+    </div>
+    <div class="meta">
+      <div><b>Scope</b> &nbsp;&nbsp;art + fx</div>
+      <div><b>Format</b> &nbsp;canvas2d, no assets</div>
+      <div><b>Targets</b> &nbsp;Renderer.* methods</div>
+      <div><b>Live</b> &nbsp;&nbsp;all panels animated</div>
+    </div>
+  </header>
+
+  <nav class="picker" id="picker">
+    <button class="pick active" data-dir="ash"><span class="pn">DIRECTION 01</span>Ash &amp; Ember</button>
+    <button class="pick" data-dir="ink"><span class="pn">DIRECTION 02</span>Ink &amp; Vellum</button>
+    <button class="pick" data-dir="neon"><span class="pn">DIRECTION 03</span>Neon Reliquary</button>
+  </nav>
+
+  <!-- =========================================================
+       1. THE THREE DIRECTIONS — hero shots
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>Three Directions</h2>
+    </div>
+    <p class="section-deck">Each direction is a coherent system: a palette, a mark-making language (how shapes are drawn), a light model, and a motion grammar. They share the existing layout — phone-shaped frame, vertical lanes, AFK player center — but differ in what the world feels like.</p>
+
+    <div class="directions">
+      <article class="direction">
+        <canvas class="hero" data-hero="ash"></canvas>
+        <div class="meta-strip">
+          <h3>Ash &amp; Ember</h3>
+          <div class="tag">PAINTERLY · WARM · CINEMATIC</div>
+          <p>Soft volumetric light, ember motes drifting up, painterly silhouettes. Reads as a haunted vigil — graves smouldering in a dusk fog. Emphasises atmosphere over readability when not in combat; spells punch through with high-contrast bursts.</p>
+          <div class="palette">
+            <div class="swatch" style="background:#1a0f0a"></div>
+            <div class="swatch" style="background:#3a1f12"></div>
+            <div class="swatch" style="background:#c25a2c"></div>
+            <div class="swatch" style="background:#f0c674"></div>
+            <div class="swatch" style="background:#ece6d8"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction">
+        <canvas class="hero" data-hero="ink"></canvas>
+        <div class="meta-strip">
+          <h3>Ink &amp; Vellum</h3>
+          <div class="tag">WOODCUT · HIGH-CONTRAST · GRAPHIC</div>
+          <p>Black ink on aged paper. Hatching, hard edges, almost no anti-aliasing. Spells are bold flat shapes that overprint like risograph layers. Status effects read instantly because everything else is monochrome — colour is reserved for state.</p>
+          <div class="palette">
+            <div class="swatch" style="background:#e8dcc0"></div>
+            <div class="swatch" style="background:#1a1612"></div>
+            <div class="swatch" style="background:#a83a2c"></div>
+            <div class="swatch" style="background:#2c4a8c"></div>
+            <div class="swatch" style="background:#f0b840"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction">
+        <canvas class="hero" data-hero="neon"></canvas>
+        <div class="meta-strip">
+          <h3>Neon Reliquary</h3>
+          <div class="tag">ARCADE · NEON · RHYTHMIC</div>
+          <p>Pure dark, then ribbons of saturated light. Enemies are wireframes that crack apart. Spells are pulses on a beat. Closer to a vector arcade game than a fantasy roguelite — leans into the "auto-combat is a light show" angle.</p>
+          <div class="palette">
+            <div class="swatch" style="background:#04030a"></div>
+            <div class="swatch" style="background:#13123a"></div>
+            <div class="swatch" style="background:#ff2e88"></div>
+            <div class="swatch" style="background:#5ae5ff"></div>
+            <div class="swatch" style="background:#c8ff5a"></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       2. CHARACTER STUDIES
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>The Magician — across three palettes</h2>
+    </div>
+    <p class="section-deck">Same silhouette, three rendering languages. Idle bob + cast flash + iframe blink are all preserved — these read as <code>drawPlayer(ctx, p, t)</code> drop-ins.</p>
+
+    <div class="stages">
+      <div class="stage">
+        <div class="stage-label">Ash &amp; Ember</div>
+        <canvas data-char="ash"></canvas>
+      </div>
+      <div class="stage">
+        <div class="stage-label">Ink &amp; Vellum</div>
+        <canvas data-char="ink"></canvas>
+      </div>
+      <div class="stage">
+        <div class="stage-label">Neon Reliquary</div>
+        <canvas data-char="neon"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       3. ENEMY ROSTER — by direction
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Enemy Roster</h2>
+    </div>
+    <p class="section-deck">All six enemy archetypes — shade, husk, swarmling, wisp, bulwark, goliath — re-rendered in each direction. Walking animation, status rings, HP bar, kamikaze burst — all live.</p>
+
+    <div class="specimen-grid">
+      <div></div>
+      <div class="col-head"><h4>Ash &amp; Ember</h4><div class="col-tag">PAINTERLY</div></div>
+      <div class="col-head"><h4>Ink &amp; Vellum</h4><div class="col-tag">WOODCUT</div></div>
+      <div class="col-head"><h4>Neon Reliquary</h4><div class="col-tag">VECTOR</div></div>
+
+      <!-- Shade -->
+      <div class="row-label">
+        <div class="name">Shade</div>
+        <div class="sub">basic · 18 HP · slow</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="shade" data-dir="ash"></canvas><div class="cap">drawEnemyShape · shade</div></div>
+      <div class="specimen"><canvas data-enemy="shade" data-dir="ink"></canvas><div class="cap">drawEnemyShape · shade</div></div>
+      <div class="specimen"><canvas data-enemy="shade" data-dir="neon"></canvas><div class="cap">drawEnemyShape · shade</div></div>
+
+      <!-- Husk -->
+      <div class="row-label">
+        <div class="name">Husk</div>
+        <div class="sub">tank · 48 HP · slow</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="husk" data-dir="ash"></canvas><div class="cap">drawEnemyShape · husk</div></div>
+      <div class="specimen"><canvas data-enemy="husk" data-dir="ink"></canvas><div class="cap">drawEnemyShape · husk</div></div>
+      <div class="specimen"><canvas data-enemy="husk" data-dir="neon"></canvas><div class="cap">drawEnemyShape · husk</div></div>
+
+      <!-- Swarmling -->
+      <div class="row-label">
+        <div class="name">Swarmling</div>
+        <div class="sub">pack · 8 HP · fast</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="swarmling" data-dir="ash"></canvas><div class="cap">x4 swarm</div></div>
+      <div class="specimen"><canvas data-enemy="swarmling" data-dir="ink"></canvas><div class="cap">x4 swarm</div></div>
+      <div class="specimen"><canvas data-enemy="swarmling" data-dir="neon"></canvas><div class="cap">x4 swarm</div></div>
+
+      <!-- Wisp -->
+      <div class="row-label">
+        <div class="name">Wisp</div>
+        <div class="sub">fast · 14 HP · darting</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="wisp" data-dir="ash"></canvas><div class="cap">erratic dart</div></div>
+      <div class="specimen"><canvas data-enemy="wisp" data-dir="ink"></canvas><div class="cap">erratic dart</div></div>
+      <div class="specimen"><canvas data-enemy="wisp" data-dir="neon"></canvas><div class="cap">erratic dart</div></div>
+
+      <!-- Bulwark -->
+      <div class="row-label">
+        <div class="name">Bulwark</div>
+        <div class="sub">heavy · 240 HP · armored</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="bulwark" data-dir="ash"></canvas><div class="cap">armor plates</div></div>
+      <div class="specimen"><canvas data-enemy="bulwark" data-dir="ink"></canvas><div class="cap">armor plates</div></div>
+      <div class="specimen"><canvas data-enemy="bulwark" data-dir="neon"></canvas><div class="cap">armor plates</div></div>
+
+      <!-- Goliath -->
+      <div class="row-label">
+        <div class="name">Goliath</div>
+        <div class="sub">boss · 320 HP</div>
+      </div>
+      <div class="specimen"><canvas data-enemy="goliath" data-dir="ash"></canvas><div class="cap">boss arrival</div></div>
+      <div class="specimen"><canvas data-enemy="goliath" data-dir="ink"></canvas><div class="cap">boss arrival</div></div>
+      <div class="specimen"><canvas data-enemy="goliath" data-dir="neon"></canvas><div class="cap">boss arrival</div></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       4. SPELL EFFECTS
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>Spell &amp; FX Vocabulary</h2>
+    </div>
+    <p class="section-deck">The five existing tree archetypes — gravity, electricity, fire, frost, vigil — each get a signature visual language. These are the registry-driven spells; status indicators (slow, ignite, shock) are layered too.</p>
+
+    <div class="specimen-grid">
+      <div></div>
+      <div class="col-head"><h4>Ash &amp; Ember</h4><div class="col-tag">PAINTERLY</div></div>
+      <div class="col-head"><h4>Ink &amp; Vellum</h4><div class="col-tag">WOODCUT</div></div>
+      <div class="col-head"><h4>Neon Reliquary</h4><div class="col-tag">VECTOR</div></div>
+
+      <div class="row-label"><div class="name">Fireball</div><div class="sub">projectile · splash</div></div>
+      <div class="specimen"><canvas data-spell="fireball" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="fireball" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="fireball" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Lightning Bolt</div><div class="sub">instant · chains</div></div>
+      <div class="specimen"><canvas data-spell="lightning" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="lightning" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="lightning" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Gravity Well</div><div class="sub">placed · pulls</div></div>
+      <div class="specimen"><canvas data-spell="gravity" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="gravity" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="gravity" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Frost Spike</div><div class="sub">pierce · slows</div></div>
+      <div class="specimen"><canvas data-spell="frost" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="frost" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="frost" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Wall of Flame</div><div class="sub">band · 8s · DoT</div></div>
+      <div class="specimen"><canvas data-spell="wall" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="wall" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="wall" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Pyroclasm</div><div class="sub">burst · 80 dmg</div></div>
+      <div class="specimen"><canvas data-spell="pyroclasm" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="pyroclasm" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="pyroclasm" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Storm Cloud</div><div class="sub">aoe · ticks · shock</div></div>
+      <div class="specimen"><canvas data-spell="stormcloud" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-spell="stormcloud" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-spell="stormcloud" data-dir="neon"></canvas></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       5. STATUS EFFECTS — slow, ignite, shock
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <h2>Status &amp; State FX</h2>
+    </div>
+    <p class="section-deck">The status pipeline currently uses concentric coloured rings. Each direction takes a different read on it — one keeps it diegetic (frost crystallises, fire smoulders), one keeps it iconographic (rune marks), one keeps it abstract (voxel halos).</p>
+
+    <div class="specimen-grid">
+      <div></div>
+      <div class="col-head"><h4>Ash &amp; Ember</h4><div class="col-tag">DIEGETIC</div></div>
+      <div class="col-head"><h4>Ink &amp; Vellum</h4><div class="col-tag">RUNIC</div></div>
+      <div class="col-head"><h4>Neon Reliquary</h4><div class="col-tag">HALO</div></div>
+
+      <div class="row-label"><div class="name">Slow</div><div class="sub">frost · 35%</div></div>
+      <div class="specimen"><canvas data-status="slow" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-status="slow" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-status="slow" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Ignite</div><div class="sub">fire · auto-crit</div></div>
+      <div class="specimen"><canvas data-status="ignite" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-status="ignite" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-status="ignite" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Shock</div><div class="sub">storm · +50% next</div></div>
+      <div class="specimen"><canvas data-status="shock" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-status="shock" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-status="shock" data-dir="neon"></canvas></div>
+
+      <div class="row-label"><div class="name">Stack</div><div class="sub">all three</div></div>
+      <div class="specimen"><canvas data-status="all" data-dir="ash"></canvas></div>
+      <div class="specimen"><canvas data-status="all" data-dir="ink"></canvas></div>
+      <div class="specimen"><canvas data-status="all" data-dir="neon"></canvas></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       6. FULL COMBAT STAGES
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <h2>The Full Stage</h2>
+    </div>
+    <p class="section-deck">Phone-shape (9:16) dioramas — vertical lane, spawn from top &amp; bottom, AFK player centre, multi-spell loop. Closest thing here to "what does the game look like in 30 seconds of play."</p>
+
+    <div class="stages">
+      <div class="stage"><div class="stage-label">Ash &amp; Ember</div><canvas data-stage="ash"></canvas></div>
+      <div class="stage"><div class="stage-label">Ink &amp; Vellum</div><canvas data-stage="ink"></canvas></div>
+      <div class="stage"><div class="stage-label">Neon Reliquary</div><canvas data-stage="neon"></canvas></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       7. HUD & UI
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">07</span>
+      <h2>HUD &amp; UI Treatment</h2>
+    </div>
+    <p class="section-deck">HP bar, wave indicator, equipment slots, currency pills — three readings of the same UI surface so the world and the chrome agree.</p>
+
+    <div class="hud-row">
+      <div class="hud-cell"><canvas data-hud="ash"></canvas></div>
+      <div class="hud-cell"><canvas data-hud="ink"></canvas></div>
+      <div class="hud-cell"><canvas data-hud="neon"></canvas></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       8. INTEGRATION NOTES
+       ========================================================= -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">08</span>
+      <h2>How this lands in the codebase</h2>
+    </div>
+    <p class="section-deck">Every demo here calls the same shape of function the game already exposes. The Renderer is pure (per ARCHITECTURE.md), so swapping it is non-destructive.</p>
+
+    <div class="notes">
+      <div class="note">
+        <b>Per-method swap</b>
+        Each draw method on <code>Renderer</code> (<code>drawPlayer</code>, <code>drawEnemyShape</code>, <code>drawProjectiles</code>, etc.) is independent. You can adopt one direction's enemies, another's spells. Mix freely.
+      </div>
+      <div class="note">
+        <b>No data changes</b>
+        Enemy shapes are dispatched on <code>e.def.shape</code>; spell colours come from <code>p.color</code>. None of the registries need editing — the look lives entirely in the renderer.
+      </div>
+      <div class="note">
+        <b>Animations are time-driven</b>
+        All FX here use <code>game.runElapsed</code> (or <code>performance.now()</code>) plus per-entity state (<code>flash</code>, <code>iframes</code>, <code>statuses</code>). No new entity fields required — same data, new appearance.
+      </div>
+      <div class="note">
+        <b>Status rings stay readable</b>
+        The current ring stack is preserved in every direction. Slow / ignite / shock have distinct hues and dash patterns so a triple-stacked enemy is still parseable at a glance.
+      </div>
+      <div class="note">
+        <b>Particles &amp; trails</b>
+        Each direction proposes a different particle vocabulary (ember, hatch-mark, voxel) — implementable in <code>drawParticles</code> without touching the spawn logic.
+      </div>
+      <div class="note">
+        <b>Pick &amp; mix path forward</b>
+        I'd suggest: choose one direction as the floor, then pull standout pieces from the others (e.g. Ink's status runes, Neon's chain lightning). The lab will let you A/B them.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <b>GRAVEWAVE / ART LAB</b> &nbsp;·&nbsp; canvas2d, no asset deps &nbsp;·&nbsp; all panels animated in real time &nbsp;·&nbsp; v1
+  </footer>
+
+</main>
+
+<script src="art-lab.js"></script>
+</body>
+</html>
