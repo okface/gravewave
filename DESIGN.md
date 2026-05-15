@@ -63,14 +63,17 @@ pick Fireball, you can't pick Chain Lightning this run.
 | **Black Hole** | Stationary singularity at densest cluster. DPS + pulls. |
 | **Frost Bolt** | Piercing slow projectile. Snares enemies in a line. |
 
-### Tier 2 — Defensive (pick 1, level 4)
+### Tier 2 — Defensive (pick 1 of 2, level 4)
+
+The 2026-05 rebuild cut T2 from 4 picks to **2** per class. Each remaining
+pick is a literal STRUCTURE with HP that absorbs damage and chips back.
+The build identity question is "how do I want my wall to look?", not
+"which sporadic AOE pulses around me?"
 
 | ability | core idea |
 |---|---|
-| **Snow Fort** | Drop a circular zone. You inside = -50% damage taken; enemies inside = slowed + chipped. |
-| **Fire Shield** | 3 flame orbs orbit you, damage on contact, blocks one hit on cooldown. |
-| **Gravital Anomalies** | Periodically spawns small pull wells around you for area control. |
-| **Shock Tower** | Stationary sentry that auto-shocks the nearest enemy on cadence. |
+| **Snow Fort** | Hex ice wall around you. 200 wall HP. Outer chill rim slows enemies 70 % at the wall surface, fading linearly to 0 % at 30 u out — you can hear them slow down as they close. Recharges in 8 s on shield break. |
+| **Firewall** | A line of flame between you and the densest cluster. 300 fuel; each point of damage dealt depletes fuel. Enemies *standing on* the wall halve its DPS and drain extra fuel ("smother"). Extinguishes at 0 fuel; rekindles in 6 s. |
 
 ### Tier 3 — Ultimate (pick 1, level 9)
 
@@ -148,9 +151,9 @@ the *i*th dump. Sum determines spec eligibility (≥ 6 → spec slot opens).
 
 1. Add `CHARACTERS.<class>` definition (id, name, title, description,
    color, accent, stats: { maxHp, moveSpeed }, available: true).
-2. Define **12 abilities** under `ABILITIES`:
+2. Define **10 abilities** under `ABILITIES`:
    - 4 with `tier: 1, classId: '<class>'`
-   - 4 with `tier: 2, classId: '<class>'`
+   - **2** with `tier: 2, classId: '<class>'`  (post-2026-05 reduction)
    - 4 with `tier: 3, classId: '<class>'`
 3. Each ability needs:
    - `cast(game, caster, mods)` function
@@ -167,9 +170,10 @@ work for any class.
 
 ## Class authoring guide — what each tier should provide
 
-A class's 12 abilities aren't 12 random spells; they fill specific
-**role slots** inside each tier. Hitting all the slots makes every
-build viable; missing a slot makes some build paths feel hollow.
+A class's 10 abilities aren't random; they fill specific **role slots**
+inside each tier. Hitting all the slots makes every build viable;
+missing a slot makes some build paths feel hollow. (Note: T2 dropped
+from 4 to 2 picks in the 2026-05 rebuild — see the new T2 baselines.)
 
 ### Class-level identity
 
@@ -225,26 +229,33 @@ per archetype:
 - Targeting / placement transform (e.g. Meteor Path — falls from
   above with stun)
 
-### Tier 2 — Defensive (4 ABILITIES)
+### Tier 2 — Defensive (2 ABILITIES, post 2026-05 rebuild)
 
-T2 is "how do you stay alive long enough to scale." Each pick has to
-solve a different threat shape. Wizard's existing slots:
+T2 is "how do you stay alive long enough to scale." Cut from 4 picks to
+**2 per class**: each remaining pick is a literal STRUCTURE with HP that
+absorbs damage and chips back. The two picks should solve *opposite*
+playstyles so the choice is meaningful.
 
-| slot | what it solves | wizard example |
+| identity axis | wizard | optician |
 |---|---|---|
-| **Damage soak** | Takes hits for you, recharges | Snow Fort |
-| **Retaliation** | Punishes attackers on contact / on-block | Fire Shield |
-| **Crowd control** | Pulls/slows enemies to safe zones | Gravital Anomalies |
-| **Sentry / DPS extension** | Auto-attacking turret that buys uptime | Shock Tower |
+| **Omnidirectional bubble** (you-centred) | Snow Fort | — |
+| **Directional offense-as-defense** (between you and them) | Firewall | — |
+| **Redirect / repel** (enemies walk AWAY) | — | Mirror Wall |
+| **Taunt / pull** (enemies walk TOWARD a tank) | — | Lighthouse |
 
-**T2 baselines** (defensive-tier abilities):
-- Cooldown 8–10s (they're not constant DPS, they're situational)
-- Effect duration 4–8s
-- Per-point dump scaling typically +13% / pt
-- "On-expire" specs (Avalanche / Phoenix) need a clear trigger; if
-  the entity has a recharging-shield model (Snow Fort), "expire"
-  means shield-break, not life-elapse — wire the trigger in
-  `Player.takeDamage`, not the entity's tick.
+**T2 baselines** (HP-bearing structures):
+- Cooldown 8–10s. The auto-cast just *spawns the first instance* — once
+  spawned, the entity lives on its own HP/recharge cycle. The cast()
+  body MUST guard against re-spawning while an instance exists:
+  `if (game.firewalls.length > 0) return;`
+- Effect "duration" is HP-driven, not time-driven. life: 9999 for
+  follow-the-player entities (Snow Fort) and life: 999 + HP-destruction
+  for placed entities (Firewall, Mirror Wall, Lighthouse).
+- "On-expire" specs trigger on STRUCTURE DESTRUCTION, not life-elapse.
+  For Snow Fort that's `Player.takeDamage` when shieldHp drops to 0;
+  for the placed entities it's inside the tickXxx loop when hp ≤ 0.
+- Paired dumps are a strong tool: Reinforce (+30 HP + 13% dmg /pt)
+  couples wall durability and chip together so investing scales BOTH.
 
 ### Tier 3 — Ultimate (4 ABILITIES)
 
@@ -421,64 +432,51 @@ hit.
   - **Mirror Image** — splits into 2 parallel beams on first hit.
   - **Shatter** — last pierce explodes for AoE damage in 80px.
 
-### Tier 2 — Defensive (pick 1, lvl 4)
+### Tier 2 — Defensive (pick 1 of 2, lvl 4)
+
+Same 2026-05 cut: 2 picks per class, each a structure with HP. Optician's
+two solve **opposite aggro vectors** — Mirror Wall pushes enemies AWAY,
+Lighthouse pulls them TOWARD it.
 
 | ability | slot | core twist |
 |---|---|---|
-| **Reflective Aegis** | Damage soak | 4 mirrors orbit you; absorb hits and reflect 80% back at attacker |
-| **Solar Halo** | Retaliation | Sunburst above your head; close-range DoT + auto-blinds anything that approaches |
-| **Lens Array** | Crowd control / focus | 3 floating lenses converge a high-DPS beam on the nearest elite |
-| **Lighthouse** | Sentry / sweep | Stationary tower with a rotating beam; sweeps an arc, not a single target |
+| **Mirror Wall** | Damage soak + CC | 4 mirrors in an arc between you and the cluster, 80 HP each. Confuse aura redirects enemies 120-180° away. Each mirror reflects 40% of damage taken back at the attacker. |
+| **Lighthouse** | Taunt sentry | Stationary tower with 250 HP and a 240u rotating beam (20 dps). 200u taunt aura — enemies prefer attacking the tower over the player. Explodes on destruction; rebuilds in 10s. |
 
-**Reflective Aegis** — `cd 8s / 4 mirrors / hits 4 / reflect 80%`.
-Mirrors orbit player. Each absorbs one incoming projectile-or-contact
-hit, reflects 80% damage back. Mirrors recharge individually over 5s.
-- Dumps: Polish (+12% reflect strength/pt), Orbit (+10% orbit radius/
-  pt), Recharge (+12% faster recharge/pt).
+**Mirror Wall** — `cd 8s / 4 mirrors @ 80 HP / 40% reflect / confuse 60u`.
+Mirrors stand in an arc at 110u standoff between player and densest
+cluster. Confuse aura rotates enemy movement vector 120-180° for 1.5s
+(they retreat). On enemy contact: mirror takes contact damage, reflects
+40% back. Per-mirror iframes prevent one enemy from shredding a mirror
+in a single frame. When ALL mirrors break, array recharges in 10s and
+re-faces the new densest cluster.
+- Dumps: Polish (+20 HP/mirror + 10% reflect /pt, paired), Wider Pane
+  (+12u confuse aura /pt), Realign (−1.0s recharge /pt, floor 4s).
 - Specs:
-  - **Hall of Mirrors** — adds a smaller 2nd orbiting ring of 2 mirrors
-    (6 total) with slower 7s recharge so it's frontloaded absorption,
-    not infinite scaling.
-  - **Spectrum Aegis** — each reflection blinds the attacker for 3s
-    in a 60u radius.
-  - **Fortified** — mirrors don't shatter — block 8 hits each, no
-    recharge needed but lose the +25% strength bonus.
+  - **Hall of Mirrors** — 6 mirrors @ 60 HP each instead of 4 @ 80, in
+    a wider arc — frontloaded coverage, less durability.
+  - **Spectrum Mirror** — enemies inside the confuse aura are also
+    blinded for 3s. Synergy with Optician's blind-amp T3s (Blinding
+    Flash, Solar Eclipse).
+  - **Optical Wall** — mirrors fuse into a SOLID wall: enemies can't
+    path through. Confuse aura disabled.
 
-**Solar Halo** — `cd 9s / dps 16 contact / radius 80px / life 7s`.
-A halo above the player that emits constant sunlight. Enemies in
-contact range take DoT and are blinded for 1s. No block charges.
-- Dumps: Flare (+13% dmg/pt), Reach (+10% radius/pt), Persist (+12%
-  life/pt).
+**Lighthouse** — `cd 10s / 250 HP / dps 20 / range 240px / 200u taunt`.
+Stationary tower placed 60u between player and densest cluster. 360°
+rotating beam (~3.1s/rotation, ≈32° half-width). Taunt aura makes
+enemies prefer the tower as their target (bosses get a tighter
+half-taunt so they aren't baited off the player for free). Tower takes
+contact damage; on destruction it explodes and rebuilds in 10s in a
+fresh position.
+- Dumps: Reinforce (+30 tower HP + 13% beam dmg /pt, paired), Reach
+  (+10% range /pt), Rotation (+12% rotation speed /pt).
 - Specs:
-  - **Coronal Burst** — every 2s pulses outward for an AoE blast.
-  - **Inferno Halo** — adds Ignite to the DoT.
-  - **Eclipse Halo** — flips to dark mode: no damage, but radius is
-    ×2 and blind duration is ×3.
-
-**Lens Array** — `cd 10s / 3 lenses / dps 20 single-target / life 7s`.
-3 lenses orbit player. They converge their beams on the nearest enemy
-within 200u — pure single-target burst.
-- Dumps: Focus (+13% dmg/pt), Reach (+10% targeting range/pt), Tempo
-  (+10% beam intensity/pt).
-- Specs:
-  - **Convergence** — all 3 lenses focus one super-beam (×3 damage
-    instead of stacking 3× damage).
-  - **Rotation** — lenses rotate around player; beam sweeps wider
-    arc, hits multiple enemies.
-  - **Dispersal** — each lens picks a different target (3 separate
-    beams, no convergence).
-
-**Lighthouse** — `cd 10s / dps 20 / range 240px / life 8s`. Stationary
-tower with a 360° rotating beam (~3.1s per full circle at base
-rotation speed). Beam half-width 0.55 rad (≈32° each side) → realized
-DPS on a stationary enemy is ~7 (advertised 20 dps × ~35% beam-arc
-uptime). Damage ticks while beam intersects an enemy.
-- Dumps: Voltage (+13% dmg/pt), Reach (+10% range/pt), Rotation (+12%
-  rotation speed/pt).
-- Specs:
-  - **Twin Lights** — second opposing beam (covers 360° in half time).
-  - **Solar Flare** — every full rotation, a wide AoE pulse around it.
-  - **Beacon** — doesn't expire, but you can only have one.
+  - **Twin Lights** — second opposing beam (covers 360° in half the
+    time). Tower HP halved — more output, less durability.
+  - **Solar Flare** — on tower DESTRUCTION (not per-rotation), 220u
+    AoE burst for 280 × dmgMult damage.
+  - **Beacon** — +20% HP, heals you 2 HP/s within 100u. Taunt range
+    halved — it's your sanctuary, not your aggro tank.
 
 ### Tier 3 — Ultimate (pick 1, lvl 9)
 

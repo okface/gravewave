@@ -85,17 +85,21 @@ renders as the vermilion spawn band's dashed threshold line + chevrons
 
 ## Wizard ability art — shipped from the design bundle
 
-All ported from `.codex_design/project/art-lab-v3.js`.
+All ported from `.codex_design/project/art-lab-v3.js` (unless noted).
 
 - [x] **Snow Fort** — hex with paper-fill + indigo hatch + dashed
       indigo inner wall + diamond crystal posts at vertices.
-      Recharging shows REFORMING arc.
-- [x] **Fire Shield** — vermilion orbs (ink core + gold highlight)
-      on elliptical orbit + analytic flame ribbons + gold pulse on
-      block + ⬨ charge marks above the player.
-- [x] **Shock Tower** — woodcut paper pillar + clipped ink hatch +
-      ink coil head + gold flicker eye + antenna rods + dashed gold
-      range halo pulsing per cast.
+      Recharging shows REFORMING arc. (2026-05: rim is now a 30u
+      gradient slow zone — no separate render layer yet, but the
+      crystal posts visually anchor "the wall is here".)
+- [x] **Firewall** — charred body (ink line) under a hot ember-yellow
+      core + flame tongues perpendicular toward enemy side + ground
+      glow wash + fuel bar above midpoint with REKINDLING countdown.
+      Bonfire spec swaps line for ring around the player. Placeholder-
+      grade right now — open for an art-lab handoff. *(2026-05, new T2.)*
+- [~] **Fire Shield / Shock Tower / Gravital Anomalies** — RETIRED in
+      the T2 rebuild (2026-05). Renderers still exist but their entity
+      arrays are always empty in new runs.
 - [x] **Black Hole** — ink pull halo + 8 light-bend arcs + 64-segment
       spinning accretion disk (gold every 8th + bright inner ring) +
       spiral motes + ink event horizon with bright photon ring.
@@ -143,16 +147,18 @@ All ported from `.codex_design/project/art-lab-v3.js`.
 - [x] **Blinding Flash** — true white-out: full-canvas paper wash
       drawn outside camera-shake + 3 staggered radial blind-rings +
       8-ray gold star.
-- [x] **Reflective Aegis** — hand-mirror sprites (silver fill +
-      highlight strip + ink frame + corner nubs + diagonal sheen at
-      full); Hall of Mirrors outer ring distinguished via 3 diffs
-      (smaller, +π/8 cant, silverLo frame); silver consume-pulse +
-      gold confirm spark.
-- [x] **Solar Halo** — bumped ground wash + dashed warm perimeter;
-      Eclipse spec proper "ring of fire" (eclipse disc + umbra
-      corona + white-hot rim + cardinal ink spike rays).
+- [x] **Mirror Wall** — silver lozenge mirrors (32×8) with ink frame,
+      paper highlight strip, and crack overlay at low HP; HP pip
+      above each mirror; dashed confuse-aura halos around live
+      mirrors; shattered-X markers + countdown bar during recharge.
+      Placeholder-grade; open for art-lab handoff. *(2026-05, new T2.)*
+- [~] **Reflective Aegis / Solar Halo / Lens Array** — RETIRED in the
+      T2 rebuild (2026-05). Renderers still exist but their entity
+      arrays are always empty in new runs.
 - [x] **Lighthouse** — arc-bounded wedge (top-down) with linear
-      gradient along aim axis + pulsing centerline + lamp pip.
+      gradient along aim axis + pulsing centerline + lamp pip; tower
+      now has HP bar above lamp + crack lines at low HP, dashed
+      taunt-aura ring, REBUILDING countdown when destroyed. *(2026-05.)*
 - [x] **Solar Eclipse** — disc alpha + rim alpha/width + dash flow
       speed all bind to ramp; white-hot crescent at ramp > 0.7.
 - [x] **Mirror Maze** — beams shifted to warm yellow; nodes as 4×4

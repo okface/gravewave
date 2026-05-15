@@ -2677,6 +2677,18 @@ const Vec = {
   dist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
 };
 
+// Shortest distance from point (px, py) to segment ((x1,y1) → (x2,y2)).
+// Used by Firewall to test enemy overlap with a line-shaped wall body.
+function distPointSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-6) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t * dx, cy = y1 + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
 // Pick N unique random elements
 function sampleN(arr, n) {
   const out = [];
@@ -3266,7 +3278,7 @@ const ABILITIES = {
   snow_fort: {
     id: 'snow_fort', name: 'Snow Fort', tier: 2, classId: 'wizard',
     icon: '☷', tag: 'defensive', color: '#bce8ff',
-    description: 'Ice wall follows you, absorbs 120 dmg, chips+slows nearby enemies. Reforms after 8s.',
+    description: 'Hex ice wall around you. 200 shield HP. Outer chill rim slows enemies 70% at the wall, fading to 0% by 30u out. Reforms after 8s.',
     damageType: 'elemental',
     cooldown: 8.0, damage: 12, damageNote: 'dps', radius: 110,
     cast(game, caster, mods) {
@@ -3274,192 +3286,120 @@ const ABILITIES = {
       // Only one real fort at a time (permafrost patches are flagged _permafrostPatch)
       if (game.snowForts.some(f => !f._permafrostPatch)) return;
       const beh        = mods.behavior || {};
-      const radius     = 110 * (mods.radiusMult || 1);
-      const dps        = 12  * (mods.dmgMult || 1);
-      const shieldHp   = Math.round(120 * (mods.dmgMult || 1));
-      const slowFactor = Math.max(0.20, 0.50 / (mods.slowMult || 1));
-      const rechargeTime = 8 / (mods.durationMult || 1);
-      // Avalanche spec scales its on-expire detonation with damage investment.
+      // Fortify dump (chillHp): +20 HP per pt (paired with +10% chip dmg).
+      const fortifyHp = (beh.shieldHpBonus || 0);
+      const dmgMult   = (mods.dmgMult || 1);
+      const radius    = 110 * (mods.radiusMult || 1);
+      const dps       = 12  * dmgMult;
+      const shieldHp  = Math.round((200 + fortifyHp) * dmgMult);
+      // Rim distance — base 30u outside the wall; Wider Wall dump adds +12u per pt.
+      const rimExtra  = (beh.rimBonus || 0);
+      const rimBase   = 30 + rimExtra;
+      const rim       = beh.crystalCrit ? rimBase * 2 : rimBase;
+      // Quick Reform dump: −1s per pt off 8s recharge, floor 3s (caps wave-15 cheese).
+      const rechargeTime = Math.max(3, 8 - (beh.rechargeReduce || 0));
+      // Specs that detonate on shield-break scale with damage investment.
       const spec = { ...beh };
-      if (spec.avalancheExpire) spec.avalancheExpire = beh.avalancheExpire * (mods.dmgMult || 1);
+      if (spec.avalancheExpire) spec.avalancheExpire = beh.avalancheExpire * dmgMult;
       game.snowForts.push(new SnowFort({
         x: caster.x, y: caster.y,
         radius, life: 999, dps,
         shieldHp, shieldMaxHp: shieldHp,
-        rechargeTime, slowFactor, slowDuration: 1.2, reduction: 0,
+        rechargeTime, slowFactor: 0.30, slowDuration: 0.6, reduction: 0,
+        chillRim: rim,
         spec,
       }));
       game.spawnExplosion(caster.x, caster.y, radius * 0.6, '#bce8ff', 'frost');
       game.addShake(0.08);
     },
     dumps: [
-      { id: 'chill',   name: 'Fortify',     desc: '+15% shield HP and chip damage per point.', stat: 'dmgMult',      perPoint: 0.15 },
-      { id: 'wider',   name: 'Wider Wall',  desc: '+8% radius per point.',                     stat: 'radiusMult',   perPoint: 0.08 },
-      { id: 'longer',  name: 'Quick Reform', stat: 'durationMult', perPoint: 0.12, invertedDuration: true, base: 8 },
+      { id: 'fortify', name: 'Fortify',     desc: '+20 wall HP and +10% chip damage per dump.', stat: 'shieldHpPair', perPoint: 20 },
+      { id: 'wider',   name: 'Wider Rim',   desc: '+12u chill-rim distance per dump.',           stat: 'rimBonus',     perPoint: 12 },
+      { id: 'longer',  name: 'Quick Reform', desc: '−1.0s recharge per dump (floor 3s).',        stat: 'rechargeReduce', perPoint: 1.0, invertedDuration: true, base: 8 },
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
-        desc: 'When the fort\'s shield breaks, an icy patch lingers for 3s applying slow.',
+        desc: 'When the wall breaks, a wide icy patch lingers for 4s — 70% slow inside its 80u radius.',
         behavior: { permafrost: true } },
       { id: 'avalanche',  name: 'Avalanche',
-        desc: 'When the fort\'s shield breaks, it collapses for 180 damage to all enemies inside.',
-        behavior: { avalancheExpire: 180 } },
+        desc: 'When the wall breaks, it collapses outward dealing 220 damage to all in the chill rim.',
+        behavior: { avalancheExpire: 220 } },
       { id: 'crystal',    name: 'Crystalline',
-        desc: 'While the fort\'s shield is up, your spells get +25% crit chance.',
+        desc: 'While the wall is intact, your spells get +25% crit chance AND the chill rim is doubled.',
         behavior: { crystalCrit: 0.25 } },
     ],
   },
 
-  fire_shield: {
-    id: 'fire_shield', name: 'Fire Shield', tier: 2, classId: 'wizard',
+  firewall: {
+    id: 'firewall', name: 'Firewall', tier: 2, classId: 'wizard',
     icon: '🜂', tag: 'defensive', color: '#ff7733',
-    description: '3 flame orbs orbit you. 24 dps contact damage, blocks 2 hits, lasts 6s.',
+    description: 'A wall of flame between you and the densest cluster. 300 fuel, 40 dps + ignite. Enemies smothering it halve its output and drain fuel faster. Extinguishes at 0 fuel; rekindles in 6s.',
     damageType: 'elemental',
-    cooldown: 8.0, damage: 24, damageNote: 'dps', radius: 70, duration: 6,
+    cooldown: 8.0, damage: 40, damageNote: 'dps', radius: 180,
     cast(game, caster, mods) {
-      const orbCount = 3;
-      const dps = 24 * mods.dmgMult;
-      const radius = 70 * mods.radiusMult;
-      const life = 6 * mods.durationMult;
-      // Base: 2 block charges. +1 from Aegis spec. Shield reads as a real wall.
       const beh = mods.behavior || {};
-      const blockCharges = Math.floor(2 * mods.shieldMult) + (beh.extraBlock || 0);
-      // Phoenix spec scales its on-expire detonation with damage investment.
-      const specCfg = { ...beh };
-      if (specCfg.phoenixExpire) {
-        specCfg.phoenixExpire = {
-          dmg:    beh.phoenixExpire.dmg    * mods.dmgMult,
-          radius: beh.phoenixExpire.radius * (mods.radiusMult || 1),
-        };
-      }
-      game.fireShields = game.fireShields || [];
-      // Replace any existing shield (single-instance defensive)
-      game.fireShields.length = 0;
-      game.fireShields.push(new FireShield({
-        caster, orbCount, dps, radius, life,
-        blockCharges, spec: specCfg,
-        cinderChance: beh.cinderChance || 0,   // Cinder Burst dump
+      const dmgMult   = (mods.dmgMult || 1);
+      const fuelMult  = (beh.fuelMult || 1);
+      const lenMult   = (beh.wallLenMult || 1);
+      const rekindleReduce = (beh.rekindleReduce || 0);
+      const dps       = 40 * dmgMult;
+      const fuelMax   = Math.round(300 * fuelMult);
+      const bonfire   = !!beh.bonfire;
+      // Bonfire: ring radius scales modestly with wall-length dump so the
+      // investment still matters; +50% DPS as advertised.
+      const ringR     = bonfire ? Math.round(80 * (1 + (lenMult - 1) * 0.5)) : 0;
+      const length    = bonfire ? 0 : 180 * lenMult;
+      const standoff  = bonfire ? 0 : 120;
+      // Pyre and Bonfire dps overrides — pyre damage scales with dmgMult.
+      const spec = { ...beh };
+      if (spec.pyreExpire) spec.pyreExpire = 100 * dmgMult;
+      const dpsFinal = bonfire ? dps * 1.50 : dps;
+      // Single-instance. Auto-cast cooldown only spawns the wall when
+      // none exists — the wall lives on its own fuel/rekindle lifecycle,
+      // re-casting on cooldown would constantly refill the fuel and break
+      // the smother/extinguish loop.
+      game.firewalls = game.firewalls || [];
+      if (game.firewalls.length > 0) return;
+      // Initial angle: face the densest cluster right now so it doesn't
+      // visibly swing during the first second.
+      const cluster = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      const ang0 = cluster ? Math.atan2(cluster.y - caster.y, cluster.x - caster.x) : 0;
+      game.firewalls.push(new Firewall({
+        dps: dpsFinal,
+        fuel: fuelMax, fuelMax,
+        length, standoff, ringR,
+        rekindleTime: Math.max(2.5, 6 - rekindleReduce),
+        angleCur: ang0, angleTarget: ang0,
+        spec,
       }));
-      caster._shieldCharges = blockCharges;
-      caster._shieldChargesMax = blockCharges;
-      caster._shieldExpires = (game.runElapsed || 0) + life;
-      caster._shieldBurnDamage = 50 * mods.dmgMult;
-      caster._shieldRetalRadius = beh.retalRadius || 0;
-      game.spawnExplosion(caster.x, caster.y, radius, '#ff7733', 'fire');
+      game.spawnExplosion(caster.x, caster.y, 80, '#ff7733', 'fire');
+      game.addShake(0.10);
     },
     dumps: [
-      { id: 'flare',    name: 'Flare',     desc: '+15% orb damage and retaliation per point.',  stat: 'dmgMult',    perPoint: 0.15 },
-      { id: 'cinder',   name: 'Cinder Burst', desc: '+6% chance per point that an orb hit spawns an ignite mini-burst.',
-                                                                                  stat: 'cinderChance', perPoint: 0.06 },
-      { id: 'persist',  name: 'Persistence', desc: '+15% duration per point.',  stat: 'durationMult', perPoint: 0.15 },
+      { id: 'heat',     name: 'Heat',      desc: '+18% damage and +18% fuel per dump.',
+                                            stat: 'firewallHeat',     perPoint: 0.18 },
+      { id: 'wider',    name: 'Wider',     desc: '+12% wall length per dump.',
+                                            stat: 'firewallLength',   perPoint: 0.12 },
+      { id: 'rekindle', name: 'Rekindle',  desc: '−0.5s rekindle time per dump (floor 2.5s).',
+                                            stat: 'firewallRekindle', perPoint: 0.5, invertedDuration: true, base: 6 },
     ],
     specs: [
-      { id: 'phoenix',  name: 'Phoenix',
-        desc: 'When the shield expires, it explodes for 240 damage in 130u.',
-        behavior: { phoenixExpire: { dmg: 240, radius: 130 } } },
-      { id: 'inferno',  name: 'Inferno',
-        desc: 'Each orb leaves a small flame patch on the ground every 0.5s.',
-        behavior: { infernoTrail: true } },
-      { id: 'aegis',    name: 'Aegis',
-        desc: 'Block 3 hits instead of 2; each retaliation hits a wider area.',
-        behavior: { extraBlock: 1, retalRadius: 90 } },
+      { id: 'pyre',         name: 'Pyre',
+        desc: 'When the wall extinguishes, it bursts in a 180u radius for 100 damage and ignites caught enemies.',
+        behavior: { pyreExpire: 100 } },
+      { id: 'eternal_flame', name: 'Eternal Flame',
+        desc: 'Wall never extinguishes. Its DPS scales with current fuel down to 45%. +10 fuel/sec regen when no enemies are touching it.',
+        behavior: { eternalFlame: true } },
+      { id: 'bonfire',       name: 'Bonfire',
+        desc: 'The wall is a ring of fire around you instead of a line. +50% DPS, lighter smother penalty (−25%).',
+        behavior: { bonfire: true } },
     ],
   },
 
-  gravital_anomaly: {
-    id: 'gravital_anomaly', name: 'Gravital Anomalies', tier: 2, classId: 'wizard',
-    icon: '◍', tag: 'defensive', color: '#7c3aed',
-    description: '3 pull-wells orbit you. 14 dps each, pull 240u, last 4s.',
-    damageType: 'arcane',
-    cooldown: 9.0, damage: 14, damageNote: 'dps', radius: 70, duration: 4,
-    cast(game, caster, mods) {
-      const beh = mods.behavior || {};
-      const baseRadius = 70 * mods.radiusMult;
-      const baseDps    = 14 * mods.dmgMult;
-      const life = 4 * mods.durationMult;
-      const pull = 240;
-      // Singularity Storm: one big well instead of three small ones.
-      const count   = beh.singularityStorm ? 1 : 3;
-      const radius  = beh.singularityStorm ? baseRadius * 2.0 : baseRadius;
-      const dps     = beh.singularityStorm ? baseDps * 1.4 : baseDps;
-      // Black Pulse damage scales with the player's investment.
-      const blackPulse = beh.blackPulse ? {
-        dmg: beh.blackPulse.dmg * mods.dmgMult,
-        interval: beh.blackPulse.interval,
-      } : null;
-      for (let i = 0; i < count; i++) {
-        const ang = (i / count) * TAU + Math.random() * 0.4;
-        const dist = beh.singularityStorm ? 0 : (90 + Math.random() * 60);
-        const x = caster.x + Math.cos(ang) * dist;
-        const y = caster.y + Math.sin(ang) * dist;
-        game.spawnGravityWell({
-          x, y, radius, pull, dps, life,
-          spell: 'gravital_anomaly',
-          blackPulse,
-          wandering: !!beh.wandering,
-          statusBonus: beh.statusBonus || 0,  // Crushing Synergy dump
-        });
-      }
-      game.addShake(0.08);
-    },
-    dumps: [
-      { id: 'mass',     name: 'Mass',      desc: '+13% well damage per point.', stat: 'dmgMult',     perPoint: 0.13 },
-      { id: 'crush',    name: 'Crushing Synergy', desc: '+15% damage per point to enemies with any active status.',
-                                                                                stat: 'statusBonus', perPoint: 0.15 },
-      { id: 'lasting',  name: 'Lasting',   desc: '+12% duration per point.',    stat: 'durationMult', perPoint: 0.12 },
-    ],
-    specs: [
-      { id: 'singularity_storm', name: 'Singularity Storm',
-        desc: 'One large ×2 radius well instead of three small ones.',
-        behavior: { singularityStorm: true } },
-      { id: 'black_pulse',       name: 'Black Pulse',
-        desc: 'Each well also pulses a damaging shockwave every 1s.',
-        behavior: { blackPulse: { dmg: 20, interval: 1 } } },
-      { id: 'wandering',         name: 'Wandering',
-        desc: 'Wells slowly chase the densest enemy cluster.',
-        behavior: { wandering: true } },
-    ],
-  },
-
-  shock_tower: {
-    id: 'shock_tower', name: 'Shock Tower', tier: 2, classId: 'wizard',
-    icon: '⚡', tag: 'defensive', color: '#1ba8d4',
-    description: 'Sentry near you auto-shocks nearest enemy. 22 dps, 240px range, 8s.',
-    damageType: 'elemental',
-    cooldown: 10.0, damage: 22, damageNote: 'dps', radius: 240, duration: 8,
-    cast(game, caster, mods) {
-      const dps = 22 * mods.dmgMult;
-      const range = 240 * mods.radiusMult;
-      const interval = 0.9 / mods.attackRateMult;
-      const life = 8 * mods.durationMult;
-      game.shockTowers = game.shockTowers || [];
-      // Place near the player with a small forward offset
-      const ang = Math.random() * TAU;
-      const dx = Math.cos(ang) * 30, dy = Math.sin(ang) * 30;
-      game.shockTowers.push(new ShockTower({
-        x: caster.x + dx, y: caster.y + dy, dps, range,
-        attackInterval: interval, life,
-        spec: mods.behavior || {},
-      }));
-    },
-    dumps: [
-      { id: 'voltage',   name: 'Voltage',   desc: '+13% tower damage per point.', stat: 'dmgMult',        perPoint: 0.13 },
-      { id: 'fork',      name: 'Arc Fork',  desc: '+18% chance per point each shot fires a second bolt at a different target (70% dmg).',
-                                                                                  stat: 'forkChance',     perPoint: 0.18 },
-      { id: 'tempo',     name: 'Tempo',     desc: '+12% attack rate per point.',  stat: 'attackRateMult', perPoint: 0.12 },
-    ],
-    specs: [
-      { id: 'tesla',     name: 'Tesla',
-        desc: 'Each shock chains to 1 nearby enemy at 60% damage.',
-        behavior: { teslaChain: true } },
-      { id: 'watchtower', name: 'Watchtower',
-        desc: 'Tower lasts forever, but you can only have one at a time.',
-        behavior: { permanent: true } },
-      { id: 'overcharge', name: 'Overcharge',
-        desc: 'Every 5th shot is ×3 damage and freezes target for 0.5s.',
-        behavior: { overchargeEvery: 5 } },
-    ],
-  },
+  // Gravital Anomalies and Shock Tower were retired in the 2026-05 T2
+  // rebuild — wizard's defensive picks are now Snow Fort (omnidirectional
+  // bubble) and Firewall (directional offense-as-defense). Tick / draw /
+  // class definitions for ShockTower remain in place but unreachable.
 
   // ============================================================
   // WIZARD — TIER 3 ULTIMATE SPELLS
@@ -3850,175 +3790,149 @@ const ABILITIES = {
   // ============================================================
   // OPTICIAN — TIER 2 DEFENSIVE SPELLS
   // ============================================================
-  reflective_aegis: {
-    id: 'reflective_aegis', name: 'Reflective Aegis', tier: 2, classId: 'optician',
+  mirror_wall: {
+    id: 'mirror_wall', name: 'Mirror Wall', tier: 2, classId: 'optician',
     icon: '◈', tag: 'defensive', color: '#dcecff',
-    description: '4 mirrors orbit you. Each absorbs an incoming hit and reflects 80% damage back. Recharge 5s per mirror.',
+    description: 'A row of 4 mirrors between you and the densest cluster. Each has 80 HP. Confuse aura makes enemies walk away. Reflects 40% of damage taken back at the attacker.',
     damageType: 'arcane',
-    cooldown: 8.0, damage: 80, damageNote: '%-reflect', radius: 90,
+    cooldown: 8.0, damage: 40, damageNote: '%-reflect', radius: 60,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
-      // Hall of Mirrors: adds a second smaller ring of 2 mirrors (6 total)
-      // and slows the recharge a little so it isn't a strict upgrade over
-      // the other specs. Net absorbs/sec ≈ 6/7 = 0.86 vs 4/5 = 0.8 — small
-      // but real, with the upside of more burst absorption frontloaded.
-      const mirrorCountInner = 4;
-      const mirrorCountOuter = beh.hallOfMirrors ? 2 : 0;
-      const reflectFrac = beh.fortified ? 0.80 : (0.80 + (mods.dmgMult - 1));
-      const radius = 90 * (mods.radiusMult || 1);
-      const recharge = beh.fortified ? 999 : (beh.hallOfMirrors ? 7 : 5) / (mods.durationMult || 1);
-      const charges = beh.fortified ? 8 : 1;       // per-mirror charge count
-      game.aegisMirrors = game.aegisMirrors || [];
-      game.aegisMirrors.length = 0;
-      game.aegisMirrors.push(new ReflectiveAegis({
+      const opticalWall = !!beh.opticalWall;
+      const hall = !!beh.hallOfMirrors;
+      const mirrorCount = hall ? 6 : 4;
+      const hpPerMirror = Math.round(((hall ? 60 : 80) + (beh.mirrorHpBonus || 0)) * (mods.dmgMult || 1));
+      const reflectFrac = 0.40 + (beh.mirrorReflectBonus || 0);
+      const confuseRadius = opticalWall ? 0 : 60 + (beh.confuseRadiusBonus || 0);
+      const recharge = Math.max(4, 10 - (beh.mirrorRechargeReduce || 0));
+      const standoff = 110;                       // distance from player to arc midpoint
+      const arc = hall ? 1.7 : 1.2;               // arc width in radians (wider for hall)
+      // Place mirrors along an arc facing densest cluster.
+      const cluster = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      const ang0 = cluster ? Math.atan2(cluster.y - caster.y, cluster.x - caster.x) : 0;
+      const mirrors = [];
+      for (let i = 0; i < mirrorCount; i++) {
+        const t = mirrorCount === 1 ? 0.5 : i / (mirrorCount - 1);
+        const localAng = ang0 + (t - 0.5) * arc;
+        const x = caster.x + Math.cos(localAng) * standoff;
+        const y = caster.y + Math.sin(localAng) * standoff;
+        // Mirror's pane normal points outward (radial). Its face-angle is
+        // perpendicular to the radial so its broad face stands against the
+        // incoming enemy flow.
+        const faceAng = localAng + Math.PI / 2;
+        mirrors.push({
+          x, y, ang: faceAng,
+          hp: hpPerMirror, hpMax: hpPerMirror,
+          broken: false, hitFlash: 0,
+        });
+      }
+      // Single-instance. Like Firewall, the wall lives on its own
+      // HP/recharge lifecycle; auto-cast cooldown only spawns when none
+      // exists. Replacing every cd would reset mirror HP every 8s for free.
+      game.mirrorWalls = game.mirrorWalls || [];
+      if (game.mirrorWalls.length > 0) return;
+      const W = new MirrorWall({
         caster,
-        mirrorCount: mirrorCountInner,
-        outerMirrorCount: mirrorCountOuter,
-        reflectFrac, radius, recharge, charges,
-        rings: beh.hallOfMirrors ? 2 : 1,
+        mirrors,
+        reflectFrac,
+        confuseRadius,
+        rechargeTime: recharge,
+        baseAngle: ang0,
+        standoff,
+        arc,
         spec: beh,
-      }));
-      caster._aegis = game.aegisMirrors[0];
-      game.spawnExplosion(caster.x, caster.y, radius * 0.6, '#dcecff');
+      });
+      game.mirrorWalls.push(W);
+      caster._mirrorWall = W;
+      game.spawnExplosion(caster.x, caster.y, standoff * 0.5, '#dcecff');
     },
     dumps: [
-      { id: 'polish',    name: 'Polish',    desc: '+12% reflect strength per point.', stat: 'dmgMult',     perPoint: 0.12 },
-      { id: 'orbit',     name: 'Orbit',     desc: '+10% orbit radius per point.',     stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'recharge',  name: 'Recharge',  stat: 'durationMult', perPoint: 0.12, invertedDuration: true, base: 5 },
+      { id: 'polish',    name: 'Polish',    desc: '+20 HP per mirror and +10% reflect per dump.',
+                                            stat: 'mirrorPolishHp', perPoint: 20 },
+      { id: 'pane',      name: 'Wider Pane', desc: '+12u confuse-aura radius per dump.',
+                                            stat: 'mirrorAuraBonus', perPoint: 12 },
+      { id: 'realign',   name: 'Realign',   desc: '−1.0s array recharge per dump (floor 4s).',
+                                            stat: 'mirrorRealign',  perPoint: 1.0, invertedDuration: true, base: 10 },
     ],
     specs: [
       { id: 'hall_of_mirrors', name: 'Hall of Mirrors',
-        desc: 'Adds a second outer ring of 2 mirrors (6 total). Recharge slows to 7s — more frontloaded absorbs, not infinite scaling.',
+        desc: '6 mirrors at 60 HP each (instead of 4 at 80) in a wider arc — frontloaded coverage, less durability.',
         behavior: { hallOfMirrors: true } },
-      { id: 'spectrum_aegis',  name: 'Spectrum Aegis',
-        desc: 'Each reflection blinds the attacker and any enemy in a 60u radius for 3s.',
-        behavior: { spectrumAegis: true } },
-      { id: 'fortified',       name: 'Fortified',
-        desc: 'Mirrors block 8 hits each and never recharge — soak all of it up front.',
-        behavior: { fortified: true } },
+      { id: 'spectrum_mirror', name: 'Spectrum Mirror',
+        desc: 'Enemies inside the confuse aura are also blinded for 3s — Optician build payoff.',
+        behavior: { spectrumMirror: true } },
+      { id: 'optical_wall',    name: 'Optical Wall',
+        desc: 'Mirrors fuse into a solid wall: enemies physically can\'t cross it. Confuse aura disabled.',
+        behavior: { opticalWall: true } },
     ],
   },
 
-  solar_halo: {
-    id: 'solar_halo', name: 'Solar Halo', tier: 2, classId: 'optician',
-    icon: '✺', tag: 'defensive', color: '#ffd66a',
-    description: 'Sunfire halo above you. 16 dps to enemies in contact, blinds them for 1s on touch. 7s.',
-    damageType: 'elemental',
-    cooldown: 9.0, damage: 16, damageNote: 'dps', radius: 80, duration: 7,
-    cast(game, caster, mods) {
-      const beh = mods.behavior || {};
-      const dps = 16 * mods.dmgMult * (beh.infernoHalo ? 1.5 : 1) * (beh.eclipseHalo ? 0 : 1);
-      const radius = 80 * (mods.radiusMult || 1) * (beh.eclipseHalo ? 2.0 : 1);
-      const life = 7 * (mods.durationMult || 1);
-      const blindDur = beh.eclipseHalo ? 3.0 : 1.0;
-      game.solarHalos = game.solarHalos || [];
-      game.solarHalos.length = 0;
-      game.solarHalos.push(new SolarHalo({
-        caster, dps, radius, life, blindDur,
-        coronalBurst: !!beh.coronalBurst, coronalDmg: 60 * mods.dmgMult,
-        infernoHalo:  !!beh.infernoHalo,
-        eclipseHalo:  !!beh.eclipseHalo,
-        spec: beh,
-      }));
-      game.spawnExplosion(caster.x, caster.y, radius, beh.eclipseHalo ? '#3a2a4a' : '#ffd66a');
-    },
-    dumps: [
-      { id: 'flare',   name: 'Flare',   desc: '+13% damage per point.',  stat: 'dmgMult',      perPoint: 0.13 },
-      { id: 'reach',   name: 'Reach',   desc: '+10% radius per point.',  stat: 'radiusMult',   perPoint: 0.10 },
-      { id: 'persist', name: 'Persist', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
-    ],
-    specs: [
-      { id: 'coronal_burst', name: 'Coronal Burst',
-        desc: 'Every 2s the halo pulses outward for an AoE blast.',
-        behavior: { coronalBurst: true } },
-      { id: 'inferno_halo',  name: 'Inferno Halo',
-        desc: 'Halo burns harder (×1.5 DPS) and applies Ignite to anything it touches.',
-        behavior: { infernoHalo: true } },
-      { id: 'eclipse_halo',  name: 'Eclipse Halo',
-        desc: 'Flips to dark mode: no damage, but radius ×2 and blind duration ×3.',
-        behavior: { eclipseHalo: true } },
-    ],
-  },
-
-  lens_array: {
-    id: 'lens_array', name: 'Lens Array', tier: 2, classId: 'optician',
-    icon: '⛬', tag: 'defensive', color: '#ffea99',
-    description: '3 lenses orbit you. They converge a high-DPS beam on the nearest enemy within 200u. 20 dps × 3 = 60 dps single-target.',
-    damageType: 'elemental',
-    cooldown: 10.0, damage: 20, damageNote: 'dps × 3', radius: 200, duration: 7,
-    cast(game, caster, mods) {
-      const beh = mods.behavior || {};
-      const dps = 20 * mods.dmgMult * (mods.attackRateMult || 1);
-      const range = 200 * (mods.radiusMult || 1);
-      const life = 7 * (mods.durationMult || 1);
-      game.lensArrays = game.lensArrays || [];
-      game.lensArrays.length = 0;
-      game.lensArrays.push(new LensArray({
-        caster, dps, range, life,
-        convergence: !!beh.convergence,
-        rotation:    !!beh.rotation,
-        dispersal:   !!beh.dispersal,
-        spec: beh,
-      }));
-      game.spawnExplosion(caster.x, caster.y, 30, '#ffea99');
-    },
-    dumps: [
-      { id: 'focus',   name: 'Focus',   desc: '+13% beam damage per point.', stat: 'dmgMult',        perPoint: 0.13 },
-      { id: 'reach',   name: 'Reach',   desc: '+10% targeting range per point.', stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'tempo',   name: 'Tempo',   desc: '+10% beam intensity per point.', stat: 'attackRateMult', perPoint: 0.10 },
-    ],
-    specs: [
-      { id: 'convergence', name: 'Convergence',
-        desc: 'All 3 lenses focus one super-beam on the same target (×3 damage to single target).',
-        behavior: { convergence: true } },
-      { id: 'rotation',    name: 'Rotation',
-        desc: 'Lenses rotate around you — beam sweeps a wider arc, hits multiple enemies in a band.',
-        behavior: { rotation: true } },
-      { id: 'dispersal',   name: 'Dispersal',
-        desc: 'Each lens picks a different target — 3 separate beams, no convergence.',
-        behavior: { dispersal: true } },
-    ],
-  },
+  // Solar Halo and Lens Array were retired in the 2026-05 T2 rebuild —
+  // optician's defensive picks are now Mirror Wall (confuse-redirect array)
+  // and Lighthouse (taunt-tank tower with HP). Their tick / draw / class
+  // definitions remain in place but unreachable.
 
   lighthouse: {
     id: 'lighthouse', name: 'Lighthouse', tier: 2, classId: 'optician',
     icon: '⛯', tag: 'defensive', color: '#ffe066',
-    description: 'Stationary tower with a 360° rotating beam. 20 dps × 240px range × 8s.',
+    description: 'Stationary tower with 250 HP. Sweeps a 240px rotating beam (20 dps). Taunts enemies in 200u to attack the tower instead of you. Explodes when destroyed; rebuilds in 10s.',
     damageType: 'elemental',
-    cooldown: 10.0, damage: 20, damageNote: 'dps', radius: 240, duration: 8,
+    cooldown: 10.0, damage: 20, damageNote: 'dps', radius: 240, duration: 999,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
-      const dps = 20 * mods.dmgMult;
+      const dmgMult = (mods.dmgMult || 1);
+      const dps = 20 * dmgMult;
       const range = 240 * (mods.radiusMult || 1);
       const rotSpeed = 2.0 * (mods.attackRateMult || 1);     // radians per second
-      const life = beh.beacon ? 9999 : 8 * (mods.durationMult || 1);
+      const twin = !!beh.twinLights;
+      const beacon = !!beh.beacon;
+      // Tower HP — Reinforce dump (+30 per pt) + paired 13% dmg. Twin Lights
+      // halves HP (more output, less durability).
+      const hpBase = 250 + (beh.towerHpBonus || 0);
+      const hp = Math.round(hpBase * (twin ? 0.5 : 1) * (beacon ? 1.2 : 1));
+      // Taunt aura — base 200u, halved on Beacon so it doesn't eat boss aggro
+      // free with its always-on tankiness.
+      const tauntRange = beacon ? 100 : 200;
+      // Single-instance, lifecycle-driven (HP-based destruction + in-entity
+      // rebuild timer). Auto-cast cooldown only spawns when none exists.
       game.lighthouses = game.lighthouses || [];
-      if (beh.beacon) game.lighthouses.length = 0;
-      const ang = Math.random() * TAU;
-      const dx = Math.cos(ang) * 28, dy = Math.sin(ang) * 28;
+      if (game.lighthouses.length > 0) return;
+      // Place near the player with a small forward offset (between player
+      // and densest cluster) so it can absorb the incoming wave.
+      const cluster = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
+      const ang0 = cluster ? Math.atan2(cluster.y - caster.y, cluster.x - caster.x) : (Math.random() * TAU);
+      const dx = Math.cos(ang0) * 60, dy = Math.sin(ang0) * 60;
       game.lighthouses.push(new Lighthouse({
         x: caster.x + dx, y: caster.y + dy,
-        dps, range, rotSpeed, life,
-        twinLights:  !!beh.twinLights,
-        solarFlare:  !!beh.solarFlare, flareDmg: 80 * mods.dmgMult,
-        beacon:      !!beh.beacon,
+        dps, range, rotSpeed,
+        life: 9999,                               // life expiry retired — HP-based destruction now
+        hp, hpMax: hp, tauntRange,
+        twinLights:  twin,
+        solarFlare:  !!beh.solarFlare,
+        flareDmg: 280 * dmgMult,                  // on-destroy AOE
+        beacon, dmgMult,
         spec: beh,
       }));
+      game.spawnExplosion(caster.x + dx, caster.y + dy, 40, '#ffe066');
+      game.addShake(0.10);
     },
     dumps: [
-      { id: 'voltage',  name: 'Voltage',  desc: '+13% beam damage per point.',  stat: 'dmgMult',        perPoint: 0.13 },
-      { id: 'reach',    name: 'Reach',    desc: '+10% range per point.',        stat: 'radiusMult',     perPoint: 0.10 },
-      { id: 'rotation', name: 'Rotation', desc: '+12% rotation speed per point.', stat: 'attackRateMult', perPoint: 0.12 },
+      { id: 'reinforce', name: 'Reinforce', desc: '+30 tower HP and +13% beam damage per dump.',
+                                            stat: 'towerReinforce', perPoint: 30 },
+      { id: 'reach',     name: 'Reach',     desc: '+10% range per dump.',
+                                            stat: 'radiusMult',     perPoint: 0.10 },
+      { id: 'rotation',  name: 'Rotation',  desc: '+12% rotation speed per dump.',
+                                            stat: 'attackRateMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'twin_lights', name: 'Twin Lights',
-        desc: 'A second opposing beam covers 360° in half the time.',
+        desc: 'A second opposing beam covers 360° in half the time. Tower HP is halved — more output, less durability.',
         behavior: { twinLights: true } },
       { id: 'solar_flare', name: 'Solar Flare',
-        desc: 'Every full rotation, a wide AoE pulse erupts around the tower.',
+        desc: 'When the tower is destroyed it bursts in a 220u radius for 280 damage.',
         behavior: { solarFlare: true } },
       { id: 'beacon',      name: 'Beacon',
-        desc: 'Tower lasts forever (only one at a time) AND heals you 2 HP/s while you stand in its range.',
+        desc: 'Tower has +20% HP and heals you 2 HP/s within 100u. Taunt range halved — it\'s your sanctuary, not your tank.',
         behavior: { beacon: true } },
     ],
   },
@@ -4255,7 +4169,8 @@ const SPELL_DAMAGE_TYPES = {
   frost_spike:       'elemental',
   // Wizard — entities tag their damage with the ABILITIES id
   snow_fort:         'elemental',
-  fire_shield:       'elemental',
+  firewall:          'elemental',         // new T2 wizard
+  fire_shield:       'elemental',         // legacy (unreachable; kept for safety)
   gravital_anomaly:  'arcane',
   shock_tower:       'elemental',
   meteor:            'elemental',
@@ -4266,6 +4181,7 @@ const SPELL_DAMAGE_TYPES = {
   focused_beam:      'elemental',
   burning_lens:      'elemental',
   refraction_bolt:   'elemental',
+  mirror_wall:       'arcane',            // new T2 optician
   reflective_aegis:  'arcane',
   solar_halo:        'elemental',
   lens_array:        'elemental',
@@ -4788,33 +4704,37 @@ class Player {
           game.spawnExplosion(this.x, this.y, fort.radius * 0.8, '#bce8ff', 'frost');
           game.spawnHitParticles(this.x, this.y, '#bce8ff', 18);
           game.addShake(0.20);
-          // Avalanche spec — collapse damage burst on shield break.
+          // Avalanche spec — collapse damage burst on shield break. Hits
+          // everything in the chill rim (wider than the wall itself) so
+          // there's a real payoff for letting enemies stack against the
+          // wall before it breaks.
           if (fort.spec?.avalancheExpire) {
             const dmgFinal = fort.spec.avalancheExpire;
+            const rimR = fort.radius + (fort.chillRim ?? 30);
             for (const e of game.enemies) {
               if (!e.alive) continue;
-              if (Vec.dist(fort, e) < fort.radius + e.radius) {
+              if (Vec.dist(fort, e) < rimR + e.radius) {
                 const a = e.takeDamage(dmgFinal, { spell: 'snow_fort' });
                 game.totalDamageDealt += a;
                 game.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
               }
             }
-            game.spawnExplosion(fort.x, fort.y, fort.radius, '#bce8ff', 'frost');
+            game.spawnExplosion(fort.x, fort.y, rimR, '#bce8ff', 'frost');
             game.addShake(0.30);
           }
-          // Permafrost spec — leave a lingering icy patch on the spot.
-          // Slow-only (no chip damage), so the description "applying slow"
-          // is accurate.
+          // Permafrost spec — wider patch (80u), 4s, 70% slow. Slow-only
+          // (no chip), but the chillRim model means slow IS the wall.
           if (fort.spec?.permafrost) {
             game.snowForts.push(new SnowFort({
               x: fort.x, y: fort.y,
-              radius: fort.radius * 0.9,
-              life: 3,
+              radius: 80,
+              life: 4,
               dps: 0,
               shieldHp: 0, shieldMaxHp: 0,
               rechargeTime: 999,
-              slowFactor: 0.40, slowDuration: 1.0,
+              slowFactor: 0.30, slowDuration: 0.8,
               reduction: 0,
+              chillRim: 0,
               spec: { permafrost: true },
               _permafrostPatch: true,
             }));
@@ -4951,6 +4871,12 @@ class Enemy {
     // Shock just refreshes — multiplier overwrites if higher
     if (name === 'shock' && (opts.multiplier ?? 1) > (existing.multiplier ?? 1)) {
       existing.multiplier = opts.multiplier;
+    }
+    // Confused: refresh angle to the latest mirror's rotation choice (so a
+    // second mirror touch doesn't fight a stale rotation). Duration auto-
+    // refreshes via the `expires` check above.
+    if (name === 'confused' && opts.dirRot !== undefined) {
+      existing.dirRot = opts.dirRot;
     }
   }
   takeDamage(amount, source) {
@@ -5323,6 +5249,67 @@ class MirrorMaze {
   }
 }
 
+/* ------------------------------------------------------------------
+ * WIZARD T2 — Firewall
+ *
+ * Line-segment wall of flame placed between the player and the densest
+ * enemy cluster. The wall has a FUEL budget (dmg "HP"): every point of
+ * damage it deals depletes fuel. Enemies overlapping the wall take DPS
+ * and ignite, but enemies standing ON the wall midline ("smothering")
+ * passive-drain extra fuel and halve the wall's DPS until they leave.
+ * When fuel hits 0, the wall extinguishes and rekindles after rekindle
+ * seconds at a fresh densest-cluster bearing.
+ *
+ * Bonfire spec turns the line into a ring around the player; the same
+ * smother rules apply (anyone fully inside the ring counts).
+ * ------------------------------------------------------------------ */
+class Firewall {
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.dmgAcc = 0;
+    this.fuelAcc = 0;       // regen accumulator (Eternal Flame)
+    this.lit = true;
+    this.rekindleAcc = 0;
+    // Wall is anchored to a midpoint at distance `standoff` from caster.
+    // angleTarget is the bearing player→cluster; angleCur lerps toward it.
+    this.angleTarget = 0;
+    this.angleCur = 0;
+    // Cached endpoint cache for collision (recomputed in tick).
+    this.x1 = 0; this.y1 = 0; this.x2 = 0; this.y2 = 0;
+    // Visual flame particles
+    this._flames = [];
+  }
+}
+
+/* ------------------------------------------------------------------
+ * OPTICIAN T2 — Mirror Wall
+ *
+ * A row of mirrors in an arc between the player and the densest enemy
+ * cluster. Each mirror has its own HP. Mirrors emit a `confuseRadius`
+ * field — enemies within it have their movement direction rotated 120-
+ * 180 degrees away from the player for 1.5s (they retreat). Mirrors
+ * take contact damage from enemies that touch them and reflect a frac-
+ * tion of that damage back. When ALL mirrors are destroyed the array
+ * enters a `recharge` state and respawns at the next-best position.
+ *
+ * Optical Wall spec fuses the mirrors into one solid barrier (no
+ * confuse aura, but enemies can't path through and total HP is pooled).
+ * ------------------------------------------------------------------ */
+class MirrorWall {
+  constructor(opts) {
+    Object.assign(this, opts);
+    this.t = 0;
+    this.angleCur = 0;
+    this.angleTarget = 0;
+    // Each mirror: { x, y, ang, hp, hpMax, shaken, hitFlash, broken }
+    this.mirrors = [];
+    this.recharging = false;
+    this.rechargeAcc = 0;
+    this._iframesByEnemy = new WeakMap(); // per-enemy contact iframes so we don't shred mirrors in one frame
+  }
+}
+
 class DamageNumber {
   // Floating damage text that pops up on hits. Crits get bigger/colored.
   constructor(x, y, value, isCrit) {
@@ -5569,8 +5556,9 @@ class Game {
     this.flamePatches = [];      // Lingering Crater (Meteor spec) ground fire
     this.stormClouds = [];       // Storm Cloud spell — hovering shock dispenser
     this.snowForts = [];
-    this.fireShields = [];
-    this.shockTowers = [];
+    this.firewalls = [];         // new T2 wizard — line of flame with fuel budget
+    this.fireShields = [];       // legacy (kept harmless; new runs never populate)
+    this.shockTowers = [];       // legacy
     this.hydraHeads = [];
     this.meteors = [];
     this.wormholes = [];
@@ -5579,9 +5567,10 @@ class Game {
     this.explosions = [];        // visual-only expanding ring on impact
     // Optician entities
     this.burningLenses = [];
-    this.aegisMirrors = [];
-    this.solarHalos = [];
-    this.lensArrays = [];
+    this.mirrorWalls = [];       // new T2 optician — array of HP-bearing mirrors w/ confuse aura
+    this.aegisMirrors = [];      // legacy
+    this.solarHalos = [];        // legacy
+    this.lensArrays = [];        // legacy
     this.lighthouses = [];
     this.solarEclipses = [];
     this.mirrorMazes = [];
@@ -5669,6 +5658,7 @@ class Game {
     this.flamePatches = [];
     this.stormClouds = [];
     this.snowForts = [];
+    this.firewalls   = [];
     this.fireShields = [];
     this.shockTowers = [];
     this.hydraHeads  = [];
@@ -5677,6 +5667,7 @@ class Game {
     this.snowStorms  = [];
     // Optician entities
     this.burningLenses = [];
+    this.mirrorWalls   = [];
     this.aegisMirrors  = [];
     this.solarHalos    = [];
     this.lensArrays    = [];
@@ -5846,17 +5837,19 @@ class Game {
     this.tickPullFields(dt);
     this.tickFlamePatches(dt);
     this.tickStormClouds(dt);
-    this.tickFireShields(dt);
-    this.tickShockTowers(dt);
+    this.tickFirewalls(dt);          // new T2 wizard
+    this.tickFireShields(dt);        // legacy (always-empty array on new runs)
+    this.tickShockTowers(dt);        // legacy
     this.tickWormholes(dt);
     this.tickSnowStorms(dt);
     this.tickMinion(dt);
     this.tickHydraHeads(dt);
     this.tickMeteors(dt);
     this.tickBurningLenses(dt);
-    this.tickAegisMirrors(dt);
-    this.tickSolarHalos(dt);
-    this.tickLensArrays(dt);
+    this.tickMirrorWalls(dt);        // new T2 optician
+    this.tickAegisMirrors(dt);       // legacy
+    this.tickSolarHalos(dt);         // legacy
+    this.tickLensArrays(dt);         // legacy
     this.tickLighthouses(dt);
     this.tickSolarEclipses(dt);
     this.tickMirrorMazes(dt);
@@ -6152,27 +6145,36 @@ class Game {
       // Expose active fort to the player (for shield absorption in takeDamage)
       if (this.player) this.player._snowFort = f;
 
-      // Chip damage + slow in inner zone; outer slow-only zone at 1.3× radius
+      // Chill rim — enemies within `chillRim` units OUTSIDE the wall surface
+      // get slowed on a linear gradient: 70% slow right at the wall, 0% at
+      // chillRim units further out. Inner zone (rare; teleported / shoved):
+      // 12 DPS + 70% slow.
       f.dmgAcc += dt;
       const tickIv  = 0.3;
       const wantTick = f.dmgAcc >= tickIv && f.dps > 0;
       const tickDmg  = f.dps * tickIv;
-      const outerR   = f.radius * 1.3;
+      const chillRim = f.chillRim ?? 30;
+      const outerR   = f.radius + chillRim;
       for (const e of this.enemies) {
         if (!e.alive) continue;
         const dist = Vec.dist(f, e);
         if (dist >= outerR + e.radius) continue;
-        const innerHit = dist < f.radius + e.radius;
-        // Inner zone: full slow + chip damage
+        const innerHit = dist < f.radius;
         if (innerHit) {
-          e.applyStatus('slow', { duration: f.slowDuration, factor: f.slowFactor }, this.runElapsed);
+          // Inner zone: hard 70% slow + chip damage
+          e.applyStatus('slow', { duration: 0.6, factor: 0.30 }, this.runElapsed);
           if (wantTick) {
             const a = e.takeDamage(tickDmg, { spell: 'snow_fort' });
             this.totalDamageDealt += a;
           }
         } else {
-          // Outer approach zone: lighter slow to push them away from the wall
-          e.applyStatus('slow', { duration: 0.4, factor: 0.72 }, this.runElapsed);
+          // Outer rim: linear gradient. At distance == radius → factor 0.30 (70% slow).
+          // At distance == radius + chillRim → factor 1.00 (no slow).
+          const t01 = Math.max(0, Math.min(1, (dist - f.radius) / chillRim));
+          const factor = 0.30 + 0.70 * t01;     // 0.30 → 1.00
+          // Strongest slow wins inside Enemy.applyStatus, so Snow Storm /
+          // Frost Bolt still beat this when relevant.
+          e.applyStatus('slow', { duration: 0.4, factor }, this.runElapsed);
         }
       }
       if (wantTick) f.dmgAcc = 0;
@@ -6180,6 +6182,173 @@ class Game {
       // Spec: crystalCrit — boost player crit while fort is up
       if (f.spec?.crystalCrit && this.player) {
         this.player._fortCritBonus = f.spec.crystalCrit;
+      }
+    }
+  }
+
+  /* ----------------------------------------------------------------
+   * Firewall (Wizard T2) — a literal line of flame between the player
+   * and the densest enemy cluster. Has a `fuel` budget; every point of
+   * damage dealt depletes it. Enemies overlapping the wall body take
+   * DPS + ignite; enemies fully ON the wall midline "smother" it, drai-
+   * ning extra fuel/sec AND halving the wall's effective DPS until they
+   * leave. When fuel ≤ 0 the wall extinguishes; rekindles after
+   * `rekindleTime` seconds at a fresh cluster bearing.
+   *
+   * Bonfire spec turns the line into a ring around the player; smother
+   * penalty is lighter (-25% DPS) but still present.
+   * Eternal Flame spec keeps the wall always lit; DPS scales with cur-
+   * rent fuel down to a 45% floor; fuel slowly regens when no enemies
+   * touch the wall.
+   * ---------------------------------------------------------------- */
+  tickFirewalls(dt) {
+    if (!this.firewalls?.length) return;
+    const player = this.player;
+    for (let i = this.firewalls.length - 1; i >= 0; i--) {
+      const w = this.firewalls[i];
+      w.t += dt;
+      const beh = w.spec || {};
+      const eternal = !!beh.eternalFlame;
+      const bonfire = !!beh.bonfire;
+      if (!player?.alive) { this.firewalls.splice(i, 1); continue; }
+
+      // ── Re-aim toward densest cluster ───────────────────────────
+      // For line-wall: angleCur lerps toward angleTarget at 1.5 rad/s so
+      // the wall doesn't snap around violently. For Bonfire (ring): angle
+      // is unused; the ring is anchored on the player.
+      if (!bonfire) {
+        let aim = w.angleCur;
+        const cluster = this.findEnemyCluster(player) || this.findNearestEnemy(player);
+        if (cluster) {
+          aim = Math.atan2(cluster.y - player.y, cluster.x - player.x);
+        }
+        // Shortest-arc lerp
+        let dAng = aim - w.angleCur;
+        while (dAng >  Math.PI) dAng -= TAU;
+        while (dAng < -Math.PI) dAng += TAU;
+        const maxStep = 1.5 * dt;
+        w.angleCur += Math.max(-maxStep, Math.min(maxStep, dAng));
+        // Anchor wall midpoint at `standoff` away from player along angleCur.
+        const mx = player.x + Math.cos(w.angleCur) * w.standoff;
+        const my = player.y + Math.sin(w.angleCur) * w.standoff;
+        // Endpoints are perpendicular to the bearing.
+        const px = -Math.sin(w.angleCur), py = Math.cos(w.angleCur);
+        w.x1 = mx + px * (w.length * 0.5);
+        w.y1 = my + py * (w.length * 0.5);
+        w.x2 = mx - px * (w.length * 0.5);
+        w.y2 = my - py * (w.length * 0.5);
+        w.mx = mx; w.my = my;
+      } else {
+        // Bonfire — ring around player. We reuse mx/my as the center and
+        // `ringR` as the ring radius (set at cast time).
+        w.mx = player.x; w.my = player.y;
+      }
+
+      // ── Rekindle handling ───────────────────────────────────────
+      if (!w.lit) {
+        w.rekindleAcc += dt;
+        if (w.rekindleAcc >= w.rekindleTime) {
+          w.lit = true;
+          w.rekindleAcc = 0;
+          w.fuel = w.fuelMax;
+          this.spawnExplosion((w.mx || player.x), (w.my || player.y), 60, '#ff7733', 'fire');
+          this.addShake(0.10);
+        }
+        continue;
+      }
+
+      // ── Damage application ──────────────────────────────────────
+      // Tick at 0.25s cadence so ignite + damage feel responsive but the
+      // smother accounting is stable.
+      w.dmgAcc += dt;
+      const tickIv = 0.25;
+      const wantTick = w.dmgAcc >= tickIv;
+      let smothering = 0;          // count of enemies fully on the wall
+
+      // Smother coefficient: line walls -50% DPS; bonfire ring -25% DPS.
+      const smotherPenalty = bonfire ? 0.25 : 0.50;
+      const smotherDrain   = bonfire ? 3 : 5;        // fuel/sec lost per smotherer
+
+      // Pre-resolve effective DPS for this tick.
+      // Eternal Flame: scale with current fuel fraction down to 45% floor.
+      let effDps = w.dps;
+      if (eternal) {
+        const frac = w.fuel / w.fuelMax;
+        effDps = w.dps * Math.max(0.45, frac);
+      }
+
+      const hitThickness = bonfire ? 14 : 12;        // half-width for damage hitbox
+      const enemiesOnWall = [];
+
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        // Distance from enemy center to wall body.
+        let d;
+        if (bonfire) {
+          d = Math.abs(Vec.dist(player, e) - w.ringR);
+        } else {
+          d = distPointSeg(e.x, e.y, w.x1, w.y1, w.x2, w.y2);
+        }
+        if (d > hitThickness + e.radius) continue;
+        enemiesOnWall.push(e);
+        // Smother check: enemy center within the wall's "core" (half the
+        // hit thickness). They're standing right on the flame.
+        if (d <= hitThickness * 0.5) smothering += 1;
+      }
+
+      const smothered = smothering > 0;
+      const dpsThisTick = effDps * (smothered ? (1 - smotherPenalty) : 1);
+
+      let damageDealtThisTick = 0;
+      if (wantTick && dpsThisTick > 0) {
+        const tickDmg = dpsThisTick * tickIv;
+        for (const e of enemiesOnWall) {
+          if (!e.alive) continue;
+          const a = e.takeDamage(tickDmg, { spell: 'firewall' });
+          this.totalDamageDealt += a;
+          damageDealtThisTick += a;
+          // Ignite (3s, 30% of dps as DoT) — flavor + boss-melt synergy.
+          e.applyStatus('ignite', { duration: 3.0, dps: tickDmg * 0.6, dmg: tickDmg }, this.runElapsed);
+          if (Math.random() < 0.25) this.spawnHitParticles(e.x, e.y, '#ff8844', 1);
+        }
+        w.dmgAcc = 0;
+      }
+
+      // Fuel accounting — base: 0.5 fuel per point of damage dealt.
+      // Smotherers drain extra. Eternal regen when no smother + no damage.
+      w.fuel -= damageDealtThisTick * 0.5;
+      w.fuel -= smothering * smotherDrain * dt;
+
+      if (eternal) {
+        const taking = smothering > 0 || damageDealtThisTick > 0;
+        if (!taking) {
+          w.fuel = Math.min(w.fuelMax, w.fuel + 10 * dt);
+        }
+      }
+
+      // ── Extinguish check ────────────────────────────────────────
+      if (w.fuel <= 0 && !eternal) {
+        w.fuel = 0;
+        w.lit = false;
+        w.rekindleAcc = 0;
+        // Pyre spec — burst on extinguish, scales with dmgMult investment.
+        if (beh.pyreExpire) {
+          const pyreR = 180;
+          const pyreDmg = beh.pyreExpire;
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist({ x: w.mx, y: w.my }, e) < pyreR + e.radius) {
+              const a = e.takeDamage(pyreDmg, { spell: 'firewall' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+              e.applyStatus('ignite', { duration: 3.0, dps: pyreDmg * 0.10, dmg: pyreDmg * 0.5 }, this.runElapsed);
+            }
+          }
+          this.spawnExplosion(w.mx, w.my, pyreR, '#ff7733', 'fire');
+          this.addShake(0.28);
+        } else {
+          this.spawnExplosion(w.mx, w.my, 50, '#7a4422');     // small puff
+        }
       }
     }
   }
@@ -6627,6 +6796,153 @@ class Game {
     }
   }
 
+  /* ----------------------------------------------------------------
+   * Mirror Wall (Optician T2) — an arc of mirrors between the player
+   * and the densest cluster. Each mirror has HP; enemies that touch a
+   * mirror contact-damage it (with per-enemy iframes so we don't shred
+   * mirrors in one frame) and take a reflected fraction of that damage
+   * back. Mirrors emit a confuse aura that rotates enemy movement
+   * 120-180° (they walk wrong-way), so they tend to drift away after
+   * banking off the mirror. When ALL mirrors are broken the array
+   * enters a 10s recharge state and respawns facing the new cluster.
+   *
+   * Optical Wall spec replaces the confuse aura with a physical barrier:
+   * enemies are pushed back if they try to cross the line between
+   * neighbouring mirrors. Total HP is pooled.
+   * ---------------------------------------------------------------- */
+  tickMirrorWalls(dt) {
+    if (!this.mirrorWalls?.length) return;
+    const elapsed = this.runElapsed;
+    const player = this.player;
+    if (!player?.alive) return;
+    for (let i = this.mirrorWalls.length - 1; i >= 0; i--) {
+      const W = this.mirrorWalls[i];
+      W.t += dt;
+      const opticalWall = !!W.spec?.opticalWall;
+      const spectrum    = !!W.spec?.spectrumMirror;
+
+      // ── Recharging branch ──────────────────────────────────────
+      if (W.recharging) {
+        W.rechargeAcc += dt;
+        if (W.rechargeAcc >= W.rechargeTime) {
+          // Respawn facing the densest cluster.
+          const cluster = this.findEnemyCluster(player) || this.findNearestEnemy(player);
+          const ang0 = cluster ? Math.atan2(cluster.y - player.y, cluster.x - player.x) : 0;
+          W.baseAngle = ang0;
+          W.recharging = false;
+          W.rechargeAcc = 0;
+          for (let k = 0; k < W.mirrors.length; k++) {
+            const m = W.mirrors[k];
+            const t = W.mirrors.length === 1 ? 0.5 : k / (W.mirrors.length - 1);
+            const localAng = ang0 + (t - 0.5) * W.arc;
+            m.x = player.x + Math.cos(localAng) * W.standoff;
+            m.y = player.y + Math.sin(localAng) * W.standoff;
+            m.ang = localAng + Math.PI / 2;
+            m.hp = m.hpMax;
+            m.broken = false;
+            m.hitFlash = 0.4;
+          }
+          this.spawnExplosion(player.x, player.y, W.standoff * 0.4, '#dcecff');
+          this.addShake(0.10);
+        }
+        continue;
+      }
+
+      // ── Apply confuse aura + collisions ────────────────────────
+      const auraR2 = (W.confuseRadius || 0) * (W.confuseRadius || 0);
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+
+        // Confuse aura — rotate dir away from player. Pick rotation:
+        // 120° = 2.094 rad, 180° = π. We randomize per-application but
+        // status refresh keeps duration smooth.
+        if (!opticalWall && auraR2 > 0) {
+          // Cheap broad-phase: only check mirrors within bounding range.
+          for (const m of W.mirrors) {
+            if (m.broken) continue;
+            const dx = m.x - e.x, dy = m.y - e.y;
+            if (dx * dx + dy * dy < auraR2) {
+              const rot = 2.0 + Math.random() * (Math.PI - 2.0);    // 2.0 ≈ 114°, π ≈ 180°
+              e.applyStatus('confused', { duration: 1.5, dirRot: rot }, elapsed);
+              if (spectrum) {
+                e.applyStatus('blind', { duration: 3.0 }, elapsed);
+              }
+              break;
+            }
+          }
+        }
+
+        // Contact damage on mirrors. We use per-enemy iframes so a single
+        // enemy can't drain all the mirror HP in one frame.
+        let ifr = W._iframesByEnemy.get(e) || 0;
+        ifr -= dt;
+        if (ifr < 0) ifr = 0;
+        for (const m of W.mirrors) {
+          if (m.broken) continue;
+          // Mirror is a 32×8 oriented rectangle but approximate with
+          // a circle of radius 14 for the contact check.
+          const dx = m.x - e.x, dy = m.y - e.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < (14 + e.radius) * (14 + e.radius) && ifr <= 0) {
+            const contactDmg = Math.max(1, Math.round(e.damage * 0.6 + e.hp * 0.06));
+            m.hp -= contactDmg;
+            m.hitFlash = 0.45;
+            // Reflect a fraction back at the attacker.
+            const reflect = contactDmg * W.reflectFrac;
+            if (reflect > 0) {
+              const a = e.takeDamage(reflect, { spell: 'mirror_wall' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+              this.spawnHitParticles(m.x, m.y, '#dcecff', 6);
+            }
+            ifr = 0.45;       // ~0.45s contact iframe vs THIS mirror system
+            // Optical Wall — push the enemy back so they can't path through.
+            if (opticalWall) {
+              const d = Math.hypot(dx, dy) || 1;
+              e.x -= (dx / d) * 8;
+              e.y -= (dy / d) * 8;
+              e.pvx -= (dx / d) * 30;
+              e.pvy -= (dy / d) * 30;
+            }
+            if (m.hp <= 0) {
+              m.broken = true;
+              m.hp = 0;
+              this.spawnExplosion(m.x, m.y, 26, '#dcecff');
+              this.spawnHitParticles(m.x, m.y, '#f4f4ee', 14);
+              this.addShake(0.10);
+            }
+            break;
+          }
+        }
+        if (ifr > 0) W._iframesByEnemy.set(e, ifr);
+      }
+
+      // Re-anchor mirror positions to the player (they orbit around the
+      // standoff arc, not free-floating). This lets the wall track player
+      // movement IF the class ever moves; for Wizard/Optician (moveSpeed 0)
+      // it just keeps positions stable on canvas resize.
+      for (let k = 0; k < W.mirrors.length; k++) {
+        const m = W.mirrors[k];
+        if (m.broken) continue;
+        const t = W.mirrors.length === 1 ? 0.5 : k / (W.mirrors.length - 1);
+        const localAng = W.baseAngle + (t - 0.5) * W.arc;
+        m.x = player.x + Math.cos(localAng) * W.standoff;
+        m.y = player.y + Math.sin(localAng) * W.standoff;
+        m.ang = localAng + Math.PI / 2;
+        if (m.hitFlash > 0) m.hitFlash = Math.max(0, m.hitFlash - dt);
+      }
+
+      // ── All-broken → enter recharge ────────────────────────────
+      const anyAlive = W.mirrors.some(m => !m.broken);
+      if (!anyAlive) {
+        W.recharging = true;
+        W.rechargeAcc = 0;
+        this.spawnExplosion(player.x, player.y, 60, '#dcecff');
+        this.addShake(0.18);
+      }
+    }
+  }
+
   tickAegisMirrors(dt) {
     if (!this.aegisMirrors?.length) return;
     for (let i = this.aegisMirrors.length - 1; i >= 0; i--) {
@@ -6782,7 +7098,86 @@ class Game {
     for (let i = this.lighthouses.length - 1; i >= 0; i--) {
       const L = this.lighthouses[i];
       L.t += dt;
-      if (!L.beacon && L.t >= L.life) { this.lighthouses.splice(i, 1); continue; }
+      // Rebuilding state (after destruction): wait, then respawn HP + position.
+      if (L._rebuilding) {
+        L._rebuildAcc = (L._rebuildAcc || 0) + dt;
+        if (L._rebuildAcc >= (L._rebuildTime || 10)) {
+          L._rebuilding = false;
+          L._rebuildAcc = 0;
+          L.hp = L.hpMax;
+          // Reposition between player and the new densest cluster.
+          if (this.player?.alive) {
+            const cluster = this.findEnemyCluster(this.player) || this.findNearestEnemy(this.player);
+            const ang0 = cluster ? Math.atan2(cluster.y - this.player.y, cluster.x - this.player.x) : (Math.random() * TAU);
+            L.x = this.player.x + Math.cos(ang0) * 60;
+            L.y = this.player.y + Math.sin(ang0) * 60;
+          }
+          this.spawnExplosion(L.x, L.y, 50, '#ffe066');
+          this.addShake(0.10);
+        }
+        continue;
+      }
+      // HP destruction trigger (replaces life-elapse for the recharging-
+      // structure model — see DESIGN.md "on-expire semantics").
+      if (L.hp <= 0) {
+        if (L.solarFlare) {
+          const r = 220;
+          for (const e of this.enemies) {
+            if (!e.alive) continue;
+            if (Vec.dist(L, e) < r + e.radius) {
+              const a = e.takeDamage(L.flareDmg, { spell: 'lighthouse' });
+              this.totalDamageDealt += a;
+              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
+            }
+          }
+          this.spawnExplosion(L.x, L.y, r, '#ffd66a', 'fire');
+          this.addShake(0.35);
+        } else {
+          this.spawnExplosion(L.x, L.y, 120, '#ffe066', 'fire');
+          this.addShake(0.20);
+        }
+        // Clear taunt references so enemies don't keep targeting a dead tower.
+        for (const e of this.enemies) { if (e._tauntTarget === L) e._tauntTarget = null; }
+        L._rebuilding = true;
+        L._rebuildAcc = 0;
+        L._rebuildTime = 10;
+        continue;
+      }
+      // Contact damage: enemies that touch the tower deal their contact
+      // damage to it (gated by per-enemy iframes). The taunt aura makes
+      // them WANT to come here, then the beam burns them.
+      L._contactIframes = L._contactIframes || new WeakMap();
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const d = Vec.dist(L, e);
+        // Apply taunt-target while in range.
+        if (d <= L.tauntRange) {
+          // Bosses get half-taunt (only when very close) so they don't
+          // path past the player for free.
+          if (!e.boss || d < L.tauntRange * 0.55) e._tauntTarget = L;
+        } else if (e._tauntTarget === L) {
+          e._tauntTarget = null;
+        }
+        // Contact hit: enemy within 22u of tower center.
+        if (d < 22 + e.radius) {
+          let ifr = L._contactIframes.get(e) || 0;
+          ifr -= dt;
+          if (ifr <= 0) {
+            const contactDmg = Math.max(1, Math.round(e.damage * 0.7 + e.hp * 0.06));
+            L.hp -= contactDmg;
+            this.spawnHitParticles(L.x, L.y, '#ffe066', 6);
+            // Enemy detonates against the tower (same convention as decoy).
+            e.hp = 0;
+            e.alive = false;
+            this.spawnExplosion(e.x, e.y, e.radius * 1.4, e.color || '#ff5b6e');
+            ifr = 0.30;
+          }
+          L._contactIframes.set(e, ifr);
+        } else {
+          let ifr = L._contactIframes.get(e) || 0;
+          if (ifr > 0) L._contactIframes.set(e, Math.max(0, ifr - dt));
+        }
+      }
       const prevAng = L.beamAng;
       L.beamAng += L.rotSpeed * dt;
       L.dmgAcc += dt;
@@ -6814,27 +7209,11 @@ class Game {
           }
         }
       }
-      // Solar Flare: every full rotation, AoE pulse.
-      if (L.solarFlare) {
-        const fullRot = TAU;
-        // Detect crossing the same starting angle.
-        if (Math.floor(prevAng / fullRot) !== Math.floor(L.beamAng / fullRot)) {
-          for (const e of this.enemies) {
-            if (!e.alive) continue;
-            if (Vec.dist(L, e) < L.range && Vec.dist(L, e) > 8) {
-              const a = e.takeDamage(L.flareDmg, { spell: 'lighthouse' });
-              this.totalDamageDealt += a;
-              this.spawnDamageNumber(e.x, e.y - e.radius - 6, a, true, e);
-            }
-          }
-          this.spawnExplosion(L.x, L.y, L.range * 0.6, '#ffe066', 'fire');
-          this.addShake(0.18);
-        }
-      }
-      // Beacon: passive 1.5 HP/sec heal while you're inside its range.
-      // Differentiates it from Twin Lights / Solar Flare which are pure
-      // offence — Beacon is the "park here and recover" pick.
-      if (L.beacon && this.player?.alive && Vec.dist(L, this.player) < L.range) {
+      // Beacon: passive 2 HP/sec heal while you're inside a tight 100u
+      // sanctuary around the tower. Reduced range (vs the old 'whole beam
+      // range') so it pairs with positioning rather than being a free
+      // global regen.
+      if (L.beacon && this.player?.alive && Vec.dist(L, this.player) < 100) {
         L._healAcc = (L._healAcc || 0) + dt;
         if (L._healAcc >= 1.0) {
           L._healAcc -= 1.0;
@@ -7521,6 +7900,24 @@ class Game {
         case 'statusBonus':    base.behavior.statusBonus  = (base.behavior.statusBonus  || 0) + total; break;
         case 'forkChance':     base.behavior.forkChance   = (base.behavior.forkChance   || 0) + total; break;
         case 'refractBeams':   base.behavior.refractBeams = (base.behavior.refractBeams || 0) + Math.floor(total); break;
+        // Snow Fort: Fortify dump = +20 wall HP + 10% chip dmg per pt (paired).
+        case 'shieldHpPair':   base.behavior.shieldHpBonus = (base.behavior.shieldHpBonus || 0) + total;
+                               base.dmgMult += 0.10 * pts; break;
+        case 'rimBonus':       base.behavior.rimBonus      = (base.behavior.rimBonus      || 0) + total; break;
+        case 'rechargeReduce': base.behavior.rechargeReduce = (base.behavior.rechargeReduce || 0) + total; break;
+        // Firewall: Heat dump = +18% DPS + 18% fuel per pt (paired).
+        case 'firewallHeat':   base.dmgMult += total;
+                               base.behavior.fuelMult = (base.behavior.fuelMult || 1) + total; break;
+        case 'firewallLength': base.behavior.wallLenMult = (base.behavior.wallLenMult || 1) + total; break;
+        case 'firewallRekindle': base.behavior.rekindleReduce = (base.behavior.rekindleReduce || 0) + total; break;
+        // Mirror Wall: Polish dump = +20 HP per mirror + 10% reflect per pt (paired).
+        case 'mirrorPolishHp': base.behavior.mirrorHpBonus = (base.behavior.mirrorHpBonus || 0) + total;
+                               base.behavior.mirrorReflectBonus = (base.behavior.mirrorReflectBonus || 0) + 0.10 * pts; break;
+        case 'mirrorAuraBonus': base.behavior.confuseRadiusBonus = (base.behavior.confuseRadiusBonus || 0) + total; break;
+        case 'mirrorRealign':  base.behavior.mirrorRechargeReduce = (base.behavior.mirrorRechargeReduce || 0) + total; break;
+        // Lighthouse: Reinforce dump = +30 tower HP + 13% beam dmg per pt (paired).
+        case 'towerReinforce': base.behavior.towerHpBonus = (base.behavior.towerHpBonus || 0) + total;
+                               base.dmgMult += 0.13 * pts; break;
         // cdMult is read in computeAbilityCooldown
       }
     }
@@ -7570,6 +7967,7 @@ class Game {
       let speedFactor = 1;
       let igniteDmg = 0;
       let blindTickDmg = 0;
+      let dirRotate = 0;     // Confused status — rotates movement vector away from target
       for (const name in e.statuses) {
         const s = e.statuses[name];
         if (elapsed > s.expires) { delete e.statuses[name]; continue; }
@@ -7578,6 +7976,13 @@ class Game {
         // Blind: 30% slow + 50% contact damage reduction (consumed in
         // Player.takeDamage when this enemy collides with the player).
         if (name === 'blind')  speedFactor *= 0.70;
+        // Confused (Mirror Wall): movement direction is rotated by dirRot
+        // radians, so enemies walk perpendicular or away from the player
+        // for the duration. Slight slow on top (they're disoriented).
+        if (name === 'confused') {
+          dirRotate = s.dirRot ?? Math.PI;
+          speedFactor *= 0.80;
+        }
         if (name === 'ignite') {
           s.tickAcc = (s.tickAcc || 0) + dt;
           while (s.tickAcc >= 0.25) {
@@ -7607,9 +8012,19 @@ class Game {
       }
       // Decoy taunt — if a decoy is alive and within range, the enemy
       // walks toward it (and detonates on contact) instead of the player.
+      // Lighthouse taunt is also threaded through _tauntTarget (see
+      // tickLighthouses); enemies prefer attacking the lit tower over the
+      // player while within its aura.
       const taunt = e._tauntTarget;
       const target = (taunt && taunt.alive) ? taunt : player;
-      const dir = Vec.norm(Vec.sub(target, e));
+      let dir = Vec.norm(Vec.sub(target, e));
+      // Confused: rotate the steering vector. Mirror Wall sets dirRot in
+      // [2.1, π] (≈120-180°) so enemies walk wrong way; resets when status
+      // expires (1.5s).
+      if (dirRotate !== 0) {
+        const cs = Math.cos(dirRotate), sn = Math.sin(dirRotate);
+        dir = { x: dir.x * cs - dir.y * sn, y: dir.x * sn + dir.y * cs };
+      }
       const movementSpeed = e.speed * speedFactor;
       let vx = dir.x * movementSpeed;
       let vy = dir.y * movementSpeed;
@@ -8508,12 +8923,14 @@ const Renderer = {
     //  threshold line is the same line the targeting cap pins to.)
     this.drawFlamePatches(ctx, game.flamePatches, game.runElapsed);
     this.drawSnowForts(ctx, game.snowForts, game.runElapsed);
+    if (game.player) this.drawFirewalls(ctx, game.firewalls, game.player, game.runElapsed);
     this.drawSnowStorms(ctx, game.snowStorms, game.runElapsed);
     this.drawShockTowers(ctx, game.shockTowers, game.runElapsed);
     this.drawHydraHeads(ctx, game.hydraHeads, game.runElapsed);
     this.drawMeteors(ctx, game.meteors, game.runElapsed);
     this.drawWormholes(ctx, game.wormholes, game.runElapsed);
     this.drawBurningLenses(ctx, game.burningLenses, game.runElapsed);
+    if (game.player) this.drawMirrorWalls(ctx, game.mirrorWalls, game.player, game.runElapsed);
     this.drawSolarHalos(ctx, game.solarHalos, game.player, game.runElapsed);
     this.drawLensArrays(ctx, game.lensArrays, game.player, game.runElapsed);
     this.drawLighthouses(ctx, game.lighthouses, game.runElapsed);
@@ -10571,7 +10988,7 @@ const Renderer = {
       // Permafrost patch — drop the wall geometry entirely. Reads as
       // ground frost, not a tiny fort. Per OPTICIAN_HANDOFF.md companion.
       if (f._permafrostPatch) {
-        const patchR = 22;
+        const patchR = f.radius || 22;
         // Disc fill
         ctx.fillStyle = `rgba(44,74,140,${0.18 * baseA})`;
         ctx.beginPath(); ctx.arc(cx, cy, patchR, 0, TAU); ctx.fill();
@@ -10748,6 +11165,232 @@ const Renderer = {
         ctx.font = 'bold 10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('REFORMING', cx, cy + 3);
+      }
+      ctx.restore();
+    }
+  },
+
+  /*
+   * Firewall — line of flame (or ring, for Bonfire spec) between the
+   * player and the densest enemy cluster. Burning state shows licking
+   * flame tongues + ember motes + a fuel bar above the wall midpoint.
+   * Extinguished state shows a smoldering ash silhouette with the
+   * rekindle countdown.
+   */
+  drawFirewalls(ctx, walls, player, t) {
+    if (!walls) return;
+    const dt = (this._lastFwT === undefined) ? 0.016 : Math.min(0.05, t - this._lastFwT);
+    this._lastFwT = t;
+    for (const w of walls) {
+      const eternal = !!(w.spec && w.spec.eternalFlame);
+      const bonfire = !!(w.spec && w.spec.bonfire);
+      const lit = w.lit;
+      const fuelFrac = Math.max(0, Math.min(1, w.fuel / w.fuelMax));
+      const alpha = lit ? (eternal ? Math.max(0.45, fuelFrac) : 0.95) : 0.40;
+
+      ctx.save();
+
+      if (bonfire) {
+        // ── Ring of fire around player ────────────────────────────
+        const rr = w.ringR;
+        // Glow disc
+        ctx.fillStyle = `rgba(184,76,28,${0.10 * alpha})`;
+        ctx.beginPath(); ctx.arc(w.mx, w.my, rr + 14, 0, TAU); ctx.fill();
+        // Charred ring (paper-warm fill, thick)
+        ctx.strokeStyle = `rgba(122,40,24,${alpha})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(w.mx, w.my, rr, 0, TAU); ctx.stroke();
+        // Inner gold core
+        ctx.strokeStyle = `rgba(232,184,64,${alpha * 0.85})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(w.mx, w.my, rr - 1.5, 0, TAU); ctx.stroke();
+        // Flame tongues — 18 small flames around the ring
+        if (lit) {
+          for (let i = 0; i < 24; i++) {
+            const a = i / 24 * TAU + Math.sin(t * 2 + i) * 0.05;
+            const x = w.mx + Math.cos(a) * rr;
+            const y = w.my + Math.sin(a) * rr;
+            const h = 4 + Math.sin(t * 8 + i * 1.7) * 1.5 + (Math.random() < 0.3 ? 2 : 0);
+            ctx.strokeStyle = `rgba(232,168,48,${0.7 * alpha})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + Math.cos(a) * h, y + Math.sin(a) * h);
+            ctx.stroke();
+          }
+        }
+      } else {
+        // ── Line wall ─────────────────────────────────────────────
+        const x1 = w.x1, y1 = w.y1, x2 = w.x2, y2 = w.y2;
+        // Soft ground glow (under the flame)
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = `rgba(184,76,28,${0.20 * alpha})`;
+        ctx.lineWidth = 20;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        // Charred body
+        ctx.strokeStyle = `rgba(58,30,20,${alpha})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        // Inner ember-yellow core
+        if (lit) {
+          ctx.strokeStyle = `rgba(232,184,64,${alpha * 0.9})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
+        ctx.restore();
+        // Flame tongues — N along the wall, pointing perpendicular toward the enemies
+        if (lit) {
+          // Perpendicular pointing away from player
+          const dx = x2 - x1, dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          let px = -uy, py = ux;
+          // Flip so px,py points away from the player
+          const cx = (x1 + x2) * 0.5, cy = (y1 + y2) * 0.5;
+          if ((px * (cx - player.x) + py * (cy - player.y)) < 0) { px = -px; py = -py; }
+          const count = Math.max(8, Math.round(len / 14));
+          for (let i = 0; i < count; i++) {
+            const tt = (i + 0.5) / count;
+            const fx = x1 + dx * tt;
+            const fy = y1 + dy * tt;
+            const flick = 4 + Math.sin(t * 7 + i * 1.4) * 2 + (Math.random() < 0.25 ? 3 : 0);
+            // Hot inner tongue
+            ctx.strokeStyle = `rgba(232,184,64,${0.75 * alpha})`;
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(fx, fy);
+            ctx.lineTo(fx + px * flick, fy + py * flick);
+            ctx.stroke();
+            // Outer vermilion tip
+            ctx.strokeStyle = `rgba(184,76,28,${0.5 * alpha})`;
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.moveTo(fx + px * flick * 0.6, fy + py * flick * 0.6);
+            ctx.lineTo(fx + px * (flick + 3), fy + py * (flick + 3));
+            ctx.stroke();
+          }
+        }
+      }
+
+      // ── Fuel bar above midpoint ──────────────────────────────────
+      const bx = w.mx, by = w.my - 22;
+      ctx.fillStyle = `rgba(26,22,18,${0.30})`;
+      ctx.fillRect(bx - 22, by - 2, 44, 4);
+      ctx.fillStyle = lit
+        ? `rgba(232,148,28,${0.95})`
+        : `rgba(122,90,60,${0.85})`;
+      ctx.fillRect(bx - 22, by - 2, 44 * fuelFrac, 4);
+      if (!lit && !eternal) {
+        const prog = Math.min(1, w.rekindleAcc / w.rekindleTime);
+        ctx.fillStyle = `rgba(168,58,44,${0.85})`;
+        ctx.fillRect(bx - 22, by - 2, 44 * prog, 4);
+        ctx.fillStyle = `rgba(26,22,18,0.85)`;
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('REKINDLING', bx, by - 6);
+      } else if (eternal && fuelFrac < 0.7) {
+        ctx.fillStyle = `rgba(26,22,18,0.75)`;
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.round(fuelFrac * 100)}%`, bx, by - 6);
+      }
+      ctx.restore();
+    }
+  },
+
+  /*
+   * Mirror Wall — row of standing mirrors in an arc between the player
+   * and the densest cluster. Each mirror is a silver lozenge with an ink
+   * frame and a confuse-aura disc that pulses softly. Mirrors crack
+   * visually as HP drops; an "X" appears on broken mirrors during the
+   * recharge state.
+   */
+  drawMirrorWalls(ctx, walls, player, t) {
+    if (!walls) return;
+    for (const W of walls) {
+      const isRecharging = W.recharging;
+      ctx.save();
+      // Confuse aura halos (only for the array variant, not Optical Wall)
+      const opticalWall = !!(W.spec && W.spec.opticalWall);
+      const auraR = W.confuseRadius;
+      if (!opticalWall && !isRecharging && auraR > 0) {
+        for (const m of W.mirrors) {
+          if (m.broken) continue;
+          ctx.fillStyle = `rgba(220,236,255,0.06)`;
+          ctx.beginPath(); ctx.arc(m.x, m.y, auraR, 0, TAU); ctx.fill();
+          ctx.strokeStyle = `rgba(140,160,200,${0.30})`;
+          ctx.setLineDash([3, 4]);
+          ctx.lineDashOffset = -t * 8;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath(); ctx.arc(m.x, m.y, auraR, 0, TAU); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // Mirrors (draw oriented to face perpendicular to player line)
+      for (const m of W.mirrors) {
+        if (m.broken) continue;
+        const hpFrac = m.hp / m.hpMax;
+        const a = (isRecharging ? 0.35 : 1) * (m.hitFlash > 0 ? 1.2 : 1);
+        const ang = m.ang;
+        const w = 32, h = 8;
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(ang);
+        // Silver pane
+        ctx.fillStyle = `rgba(232,236,236,${0.85 * a})`;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        // Highlight strip
+        ctx.fillStyle = `rgba(248,248,240,${0.7 * a})`;
+        ctx.fillRect(-w / 2 + 2, -h / 2 + 1, w - 4, 2);
+        // Ink frame
+        ctx.strokeStyle = `rgba(26,22,18,${a})`;
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+        // Cracks at low HP
+        if (hpFrac < 0.66) {
+          ctx.strokeStyle = `rgba(26,22,18,${0.6 * a})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(-w / 4, -h / 2); ctx.lineTo(w / 8, h / 2);
+          ctx.moveTo(0, -h / 2);      ctx.lineTo(-w / 6, h / 2);
+          if (hpFrac < 0.33) {
+            ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, h / 4);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+        // HP pip above mirror (small bar)
+        ctx.fillStyle = 'rgba(26,22,18,0.30)';
+        ctx.fillRect(m.x - 12, m.y - 14, 24, 2);
+        ctx.fillStyle = `rgba(232,184,64,0.85)`;
+        ctx.fillRect(m.x - 12, m.y - 14, 24 * hpFrac, 2);
+        if (m.hitFlash > 0) m.hitFlash -= 0.02;
+      }
+
+      // Recharging state: shattered "X" markers + countdown bar
+      if (isRecharging) {
+        for (const m of W.mirrors) {
+          if (!m.broken) continue;
+          ctx.save();
+          ctx.translate(m.x, m.y);
+          ctx.strokeStyle = `rgba(168,58,44,0.55)`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(-8, -4); ctx.lineTo(8, 4);
+          ctx.moveTo(8, -4);  ctx.lineTo(-8, 4);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Countdown bar over player
+        if (player) {
+          const prog = Math.min(1, W.rechargeAcc / W.rechargeTime);
+          ctx.fillStyle = 'rgba(26,22,18,0.30)';
+          ctx.fillRect(player.x - 24, player.y - player.radius - 16, 48, 3);
+          ctx.fillStyle = 'rgba(168,58,44,0.85)';
+          ctx.fillRect(player.x - 24, player.y - player.radius - 16, 48 * prog, 3);
+        }
       }
       ctx.restore();
     }
@@ -11487,22 +12130,75 @@ const Renderer = {
   drawLighthouses(ctx, lights, t) {
     if (!lights?.length) return;
     for (const L of lights) {
-      const fade = L.beacon ? 1 : Math.min(1, L.t / 0.2) * Math.min(1, (L.life - L.t) / 0.4);
+      // Rebuilding state: foundation footprint + countdown.
+      if (L._rebuilding) {
+        const prog = Math.min(1, L._rebuildAcc / L._rebuildTime);
+        ctx.save();
+        ctx.strokeStyle = `rgba(122,90,60,0.55)`;
+        ctx.setLineDash([3, 3]);
+        ctx.lineDashOffset = -t * 4;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(L.x, L.y, 14, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(26,22,18,0.30)';
+        ctx.fillRect(L.x - 22, L.y - 22, 44, 3);
+        ctx.fillStyle = 'rgba(184,76,28,0.85)';
+        ctx.fillRect(L.x - 22, L.y - 22, 44 * prog, 3);
+        ctx.fillStyle = 'rgba(26,22,18,0.75)';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('REBUILDING', L.x, L.y - 28);
+        ctx.restore();
+        continue;
+      }
+      const hpFrac = Math.max(0, L.hp / L.hpMax);
+      // Damage tint: more reddish as HP drops.
+      const fade = Math.min(1, L.t / 0.2);
       // Tower base
       ctx.save();
       ctx.translate(L.x, L.y);
-      ctx.fillStyle = `rgba(60, 50, 40, ${0.85 * fade})`;
+      ctx.fillStyle = hpFrac < 0.4
+        ? `rgba(90, 50, 36, ${0.85 * fade})`
+        : `rgba(60, 50, 40, ${0.85 * fade})`;
       ctx.beginPath();
       ctx.moveTo(-7, 12); ctx.lineTo(7, 12); ctx.lineTo(5, -8); ctx.lineTo(-5, -8); ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = `rgba(20, 14, 8, ${0.85 * fade})`;
       ctx.lineWidth = 1; ctx.stroke();
+      // Cracks at low HP
+      if (hpFrac < 0.5) {
+        ctx.strokeStyle = `rgba(20, 14, 8, ${0.65})`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(-3, 12); ctx.lineTo(-1, -2);
+        ctx.moveTo(2, 12);  ctx.lineTo(0, 4);
+        if (hpFrac < 0.25) { ctx.moveTo(-5, 0); ctx.lineTo(4, 6); }
+        ctx.stroke();
+      }
       // Lamp top
       ctx.fillStyle = `rgba(255, 224, 120, ${0.95 * fade})`;
       ctx.beginPath(); ctx.arc(0, -10, 5, 0, TAU); ctx.fill();
       ctx.strokeStyle = `rgba(180, 130, 40, ${0.95 * fade})`;
       ctx.lineWidth = 1; ctx.stroke();
       ctx.restore();
+      // HP bar above lamp.
+      const bx = L.x, by = L.y - 24;
+      ctx.fillStyle = `rgba(26,22,18,0.35)`;
+      ctx.fillRect(bx - 18, by, 36, 3);
+      ctx.fillStyle = hpFrac > 0.5
+        ? `rgba(232,184,64,0.92)`
+        : (hpFrac > 0.25 ? `rgba(216,124,40,0.92)` : `rgba(184,58,44,0.92)`);
+      ctx.fillRect(bx - 18, by, 36 * hpFrac, 3);
+      // Taunt aura indicator (very faint dashed circle, only render when
+      // alive and not Beacon-restricted; otherwise board reads noisy).
+      if (!L.beacon && L.tauntRange > 0) {
+        ctx.strokeStyle = `rgba(232,184,64,0.10)`;
+        ctx.setLineDash([4, 6]);
+        ctx.lineDashOffset = -t * 4;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(L.x, L.y, L.tauntRange, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+      }
       // Beam(s) — wedge fill via arc path + linear gradient along aim
       // axis (per OPTICIAN_HANDOFF.md §6: "hot at lamp → fade at tip").
       // Centerline + lamp pulse on shared sin(t*4 + phase).
@@ -12791,6 +13487,17 @@ function formatStat(stat, total) {
     case 'statusBonus':       return `${pct(total)} dmg vs statused`;
     case 'forkChance':        return `${pct(total)} arc fork`;
     case 'refractBeams':      return `+${Math.floor(total)} beams`;
+    // Defensive-wall paired dumps (T2 rebuild)
+    case 'shieldHpPair':      return `+${Math.round(total)} wall HP`;
+    case 'rimBonus':          return `+${Math.round(total)}u rim`;
+    case 'rechargeReduce':    return `−${total.toFixed(1)}s recharge`;
+    case 'firewallHeat':      return `${pct(total)} dmg + fuel`;
+    case 'firewallLength':    return `${pct(total)} length`;
+    case 'firewallRekindle':  return `−${total.toFixed(1)}s rekindle`;
+    case 'mirrorPolishHp':    return `+${Math.round(total)} HP/mirror`;
+    case 'mirrorAuraBonus':   return `+${Math.round(total)}u aura`;
+    case 'mirrorRealign':     return `−${total.toFixed(1)}s recharge`;
+    case 'towerReinforce':    return `+${Math.round(total)} tower HP`;
     default:                  return '';
   }
 }
@@ -12883,6 +13590,34 @@ function formatDumpAt(dump, ab, pts) {
     case 'statusBonus':       return `+${Math.round(total * 100)}% vs statused`;
     case 'forkChance':        return `${Math.round(total * 100)}%`;
     case 'refractBeams':      return `+${Math.floor(total)} beams`;
+    // Defensive-wall paired/inverted dumps
+    case 'shieldHpPair':
+      // Snow Fort base wall HP 200; pair shows the wall HP that fortify gives.
+      return `${Math.round(200 + total)} wall HP`;
+    case 'rimBonus':
+      return `${Math.round(30 + total)}u rim`;
+    case 'rechargeReduce':
+      // Floor at 3s.
+      if (dump.base !== undefined) return `${Math.max(3, dump.base - total).toFixed(1)}s recharge`;
+      break;
+    case 'firewallHeat':
+      // Show the primary DPS readout. Fuel scales proportionally.
+      if (ab && ab.damage) return `${Math.round(ab.damage * (1 + total))} dps`;
+      break;
+    case 'firewallLength':
+      return `${Math.round(180 * (1 + total))}u`;
+    case 'firewallRekindle':
+      if (dump.base !== undefined) return `${Math.max(2.5, dump.base - total).toFixed(1)}s rekindle`;
+      break;
+    case 'mirrorPolishHp':
+      return `${Math.round(80 + total)} HP/mirror`;
+    case 'mirrorAuraBonus':
+      return `${Math.round(60 + total)}u aura`;
+    case 'mirrorRealign':
+      if (dump.base !== undefined) return `${Math.max(4, dump.base - total).toFixed(1)}s recharge`;
+      break;
+    case 'towerReinforce':
+      return `${Math.round(250 + total)} tower HP`;
   }
   return formatStat(dump.stat, total);
 }
@@ -12969,6 +13704,17 @@ function formatDumpPerPoint(dump, ab) {
     case 'statusBonus':       line = `${sign(Math.round(pp * 100))}% dmg vs statused`; break;
     case 'forkChance':        line = `${sign(Math.round(pp * 100))}% arc fork`; break;
     case 'refractBeams':      line = `+${pp.toFixed(1)} beams (rounds down)`; break;
+    // Defensive-wall paired/inverted dumps — slope display
+    case 'shieldHpPair':      line = `+${Math.round(pp)} HP + 10% chip`; break;
+    case 'rimBonus':          line = `+${Math.round(pp)}u rim`; break;
+    case 'rechargeReduce':    line = `−${pp.toFixed(1)}s recharge`; break;
+    case 'firewallHeat':      line = `${sign(Math.round(pp * 100))}% dmg + fuel`; break;
+    case 'firewallLength':    line = `${sign(Math.round(pp * 100))}% length`; break;
+    case 'firewallRekindle':  line = `−${pp.toFixed(1)}s rekindle`; break;
+    case 'mirrorPolishHp':    line = `+${Math.round(pp)} HP + 10% reflect`; break;
+    case 'mirrorAuraBonus':   line = `+${Math.round(pp)}u aura`; break;
+    case 'mirrorRealign':     line = `−${pp.toFixed(1)}s recharge`; break;
+    case 'towerReinforce':    line = `+${Math.round(pp)} HP + 13% dmg`; break;
   }
   if (!line) line = dump.desc || '';
   // Annotate ramp curves so the player knows the slope is the floor.
