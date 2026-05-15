@@ -72,8 +72,8 @@ The build identity question is "how do I want my wall to look?", not
 
 | ability | core idea |
 |---|---|
-| **Snow Fort** | Hex ice wall around you. 200 wall HP. Outer chill rim slows enemies 70 % at the wall surface, fading linearly to 0 % at 30 u out — you can hear them slow down as they close. Recharges in 8 s on shield break. |
-| **Firewall** | A line of flame between you and the densest cluster. 300 fuel; each point of damage dealt depletes fuel. Enemies *standing on* the wall halve its DPS and drain extra fuel ("smother"). Extinguishes at 0 fuel; rekindles in 6 s. |
+| **Snow Fort** | Hex ice wall around you. 200 wall HP, segmented per hex side. Outer chill rim slows enemies 70% at the wall, fading to 0% at 30u out. Recharges in 8s on break. Visible: thick ink walls with gold edge tiles per HP segment, indigo crystal posts. |
+| **Firewall** | Hexagonal palisade of flame around you. 300 fuel; each point of damage dealt depletes fuel. Enemies straddling the ring midline halve its DPS and drain extra fuel ("smother"). Extinguishes at 0 fuel; rekindles in 6s. Visible: charred ring with 6 large flame towers at hex vertices, smaller flame tongues all around. |
 
 ### Tier 3 — Ultimate (pick 1, level 9)
 
@@ -440,26 +440,26 @@ Lighthouse pulls them TOWARD it.
 
 | ability | slot | core twist |
 |---|---|---|
-| **Mirror Wall** | Damage soak + CC | 4 mirrors in an arc between you and the cluster, 80 HP each. Confuse aura redirects enemies 120-180° away. Each mirror reflects 40% of damage taken back at the attacker. |
-| **Lighthouse** | Taunt sentry | Stationary tower with 250 HP and a 240u rotating beam (20 dps). 200u taunt aura — enemies prefer attacking the tower over the player. Explodes on destruction; rebuilds in 10s. |
+| **Mirror Wall** | Damage soak + CC | 4 mirrors at N/S/E/W around you, 80 HP each. Confuse aura redirects enemies 120-180° away. Each mirror reflects 40% of damage taken back. Visible: bigger silver panes with paper plinths + cracks + HP pips; broken mirrors leave glass-shard footprints. |
+| **Lighthouse** | Taunt sentry | Stationary tower with 250 HP placed between you and the cluster. 200u taunt aura — enemies prefer attacking the tower over you. Explodes on destruction; rebuilds in 10s. Visible: thicker stone tower with footing + cracks + smoke at low HP + REBUILDING countdown. |
 
 **Mirror Wall** — `cd 8s / 4 mirrors @ 80 HP / 40% reflect / confuse 60u`.
-Mirrors stand in an arc at 110u standoff between player and densest
-cluster. Confuse aura rotates enemy movement vector 120-180° for 1.5s
-(they retreat). On enemy contact: mirror takes contact damage, reflects
-40% back. Per-mirror iframes prevent one enemy from shredding a mirror
-in a single frame. When ALL mirrors break, array recharges in 10s and
-re-faces the new densest cluster.
+Mirrors stand at fixed compass points (N/S/E/W) around the player at
+100u standoff — the SURROUND layout is the whole identity. Confuse aura
+rotates enemy movement vector 120-180° for 1.5s (they retreat). On enemy
+contact: mirror takes contact damage, reflects 40% back. Per-mirror
+iframes prevent shredding in one frame. When ALL mirrors break, array
+repairs in 10s and respawns in the same compass slots.
 - Dumps: Polish (+20 HP/mirror + 10% reflect /pt, paired), Wider Pane
   (+12u confuse aura /pt), Realign (−1.0s recharge /pt, floor 4s).
 - Specs:
-  - **Hall of Mirrors** — 6 mirrors @ 60 HP each instead of 4 @ 80, in
-    a wider arc — frontloaded coverage, less durability.
-  - **Spectrum Mirror** — enemies inside the confuse aura are also
-    blinded for 3s. Synergy with Optician's blind-amp T3s (Blinding
-    Flash, Solar Eclipse).
-  - **Optical Wall** — mirrors fuse into a SOLID wall: enemies can't
-    path through. Confuse aura disabled.
+  - **Hall of Mirrors** — 8 mirrors at compass-points (N/NE/E/SE/S/SW/
+    W/NW) @ 60 HP each — every direction covered, less per-mirror HP.
+  - **Spectrum Mirror** — enemies inside confuse aura are also blinded
+    for 3s. Synergy with Optician blind-amp T3s.
+  - **Optical Wall** — mirrors fuse into a solid octagon: enemies can't
+    path through. Confuse aura disabled. Visualised as a silver
+    polygon connecting live mirrors.
 
 **Lighthouse** — `cd 10s / 250 HP / dps 20 / range 240px / 200u taunt`.
 Stationary tower placed 60u between player and densest cluster. 360°

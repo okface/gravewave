@@ -3333,66 +3333,54 @@ const ABILITIES = {
   firewall: {
     id: 'firewall', name: 'Firewall', tier: 2, classId: 'wizard',
     icon: '🜂', tag: 'defensive', color: '#ff7733',
-    description: 'A wall of flame between you and the densest cluster. 300 fuel, 40 dps + ignite. Enemies smothering it halve its output and drain fuel faster. Extinguishes at 0 fuel; rekindles in 6s.',
+    description: 'A hexagonal palisade of flame around you. 300 fuel, 40 dps + ignite to enemies crossing it. Smothering enemies halve its output and drain fuel faster. Extinguishes at 0 fuel; rekindles in 6s.',
     damageType: 'elemental',
-    cooldown: 8.0, damage: 40, damageNote: 'dps', radius: 180,
+    cooldown: 8.0, damage: 40, damageNote: 'dps', radius: 110,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const dmgMult   = (mods.dmgMult || 1);
       const fuelMult  = (beh.fuelMult || 1);
-      const lenMult   = (beh.wallLenMult || 1);
+      const radMult   = (beh.wallLenMult || 1);          // Wider dump now scales ring radius
       const rekindleReduce = (beh.rekindleReduce || 0);
       const dps       = 40 * dmgMult;
       const fuelMax   = Math.round(300 * fuelMult);
-      const bonfire   = !!beh.bonfire;
-      // Bonfire: ring radius scales modestly with wall-length dump so the
-      // investment still matters; +50% DPS as advertised.
-      const ringR     = bonfire ? Math.round(80 * (1 + (lenMult - 1) * 0.5)) : 0;
-      const length    = bonfire ? 0 : 180 * lenMult;
-      const standoff  = bonfire ? 0 : 120;
-      // Pyre and Bonfire dps overrides — pyre damage scales with dmgMult.
+      // Ring radius — base 110u. Wider dump scales modestly (max +60% = 176u).
+      const ringR     = Math.round(110 * radMult);
+      // Pyre damage scales with dmgMult.
       const spec = { ...beh };
       if (spec.pyreExpire) spec.pyreExpire = 100 * dmgMult;
-      const dpsFinal = bonfire ? dps * 1.50 : dps;
       // Single-instance. Auto-cast cooldown only spawns the wall when
-      // none exists — the wall lives on its own fuel/rekindle lifecycle,
-      // re-casting on cooldown would constantly refill the fuel and break
-      // the smother/extinguish loop.
+      // none exists — the wall lives on its own fuel/rekindle lifecycle.
       game.firewalls = game.firewalls || [];
       if (game.firewalls.length > 0) return;
-      // Initial angle: face the densest cluster right now so it doesn't
-      // visibly swing during the first second.
-      const cluster = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
-      const ang0 = cluster ? Math.atan2(cluster.y - caster.y, cluster.x - caster.x) : 0;
       game.firewalls.push(new Firewall({
-        dps: dpsFinal,
+        dps,
         fuel: fuelMax, fuelMax,
-        length, standoff, ringR,
+        ringR,
         rekindleTime: Math.max(2.5, 6 - rekindleReduce),
-        angleCur: ang0, angleTarget: ang0,
         spec,
       }));
-      game.spawnExplosion(caster.x, caster.y, 80, '#ff7733', 'fire');
+      game.spawnExplosion(caster.x, caster.y, ringR * 0.8, '#ff7733', 'fire');
       game.addShake(0.10);
     },
     dumps: [
       { id: 'heat',     name: 'Heat',      desc: '+18% damage and +18% fuel per dump.',
                                             stat: 'firewallHeat',     perPoint: 0.18 },
-      { id: 'wider',    name: 'Wider',     desc: '+12% wall length per dump.',
+      { id: 'wider',    name: 'Wider Ring', desc: '+12% palisade radius per dump.',
                                             stat: 'firewallLength',   perPoint: 0.12 },
       { id: 'rekindle', name: 'Rekindle',  desc: '−0.5s rekindle time per dump (floor 2.5s).',
                                             stat: 'firewallRekindle', perPoint: 0.5, invertedDuration: true, base: 6 },
     ],
     specs: [
       { id: 'pyre',         name: 'Pyre',
-        desc: 'When the wall extinguishes, it bursts in a 180u radius for 100 damage and ignites caught enemies.',
+        desc: 'When the palisade extinguishes, it bursts outward in a 180u shockwave for 100 damage and ignites caught enemies.',
         behavior: { pyreExpire: 100 } },
       { id: 'eternal_flame', name: 'Eternal Flame',
-        desc: 'Wall never extinguishes. Its DPS scales with current fuel down to 45%. +10 fuel/sec regen when no enemies are touching it.',
+        desc: 'Palisade never extinguishes. Its DPS scales with current fuel down to a 45% floor. +10 fuel/sec regen when no enemies are touching it.',
         behavior: { eternalFlame: true } },
-      { id: 'bonfire',       name: 'Bonfire',
-        desc: 'The wall is a ring of fire around you instead of a line. +50% DPS, lighter smother penalty (−25%).',
-        behavior: { bonfire: true } },
+      { id: 'hearth',       name: 'Hearth',
+        desc: 'While the palisade is lit, you heal 1.5 HP/s — the fire keeps you warm. Lose the heal once it extinguishes.',
+        behavior: { hearth: true } },
     ],
   },
 
@@ -3793,42 +3781,40 @@ const ABILITIES = {
   mirror_wall: {
     id: 'mirror_wall', name: 'Mirror Wall', tier: 2, classId: 'optician',
     icon: '◈', tag: 'defensive', color: '#dcecff',
-    description: 'A row of 4 mirrors between you and the densest cluster. Each has 80 HP. Confuse aura makes enemies walk away. Reflects 40% of damage taken back at the attacker.',
+    description: '4 standing mirrors at N/S/E/W around you. 80 HP each. Confuse aura on each side makes enemies walk away. Reflects 40% of damage taken back at the attacker. All-broken → repair in 10s.',
     damageType: 'arcane',
-    cooldown: 8.0, damage: 40, damageNote: '%-reflect', radius: 60,
+    cooldown: 8.0, damage: 40, damageNote: '%-reflect', radius: 100,
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const opticalWall = !!beh.opticalWall;
       const hall = !!beh.hallOfMirrors;
-      const mirrorCount = hall ? 6 : 4;
+      const mirrorCount = hall ? 8 : 4;
       const hpPerMirror = Math.round(((hall ? 60 : 80) + (beh.mirrorHpBonus || 0)) * (mods.dmgMult || 1));
       const reflectFrac = 0.40 + (beh.mirrorReflectBonus || 0);
       const confuseRadius = opticalWall ? 0 : 60 + (beh.confuseRadiusBonus || 0);
       const recharge = Math.max(4, 10 - (beh.mirrorRechargeReduce || 0));
-      const standoff = 110;                       // distance from player to arc midpoint
-      const arc = hall ? 1.7 : 1.2;               // arc width in radians (wider for hall)
-      // Place mirrors along an arc facing densest cluster.
-      const cluster = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
-      const ang0 = cluster ? Math.atan2(cluster.y - caster.y, cluster.x - caster.x) : 0;
+      const standoff = 100;                       // distance from player to each mirror
+      // Place mirrors evenly around the player (N/E/S/W for 4; 8 compass
+      // points for Hall of Mirrors). Surround layout — same visual on
+      // every side so the player ALWAYS sees defenses on each cardinal.
+      // Start angle at -π/2 (north) so the "front" mirror is on top.
+      const ang0 = -Math.PI / 2;
       const mirrors = [];
       for (let i = 0; i < mirrorCount; i++) {
-        const t = mirrorCount === 1 ? 0.5 : i / (mirrorCount - 1);
-        const localAng = ang0 + (t - 0.5) * arc;
+        const localAng = ang0 + (i / mirrorCount) * TAU;
         const x = caster.x + Math.cos(localAng) * standoff;
         const y = caster.y + Math.sin(localAng) * standoff;
-        // Mirror's pane normal points outward (radial). Its face-angle is
-        // perpendicular to the radial so its broad face stands against the
-        // incoming enemy flow.
+        // Mirror's broad face is perpendicular to the radial (so it faces
+        // the incoming enemy flow head-on from that cardinal).
         const faceAng = localAng + Math.PI / 2;
         mirrors.push({
           x, y, ang: faceAng,
           hp: hpPerMirror, hpMax: hpPerMirror,
           broken: false, hitFlash: 0,
+          slot: i,                                 // for repositioning on recharge
         });
       }
-      // Single-instance. Like Firewall, the wall lives on its own
-      // HP/recharge lifecycle; auto-cast cooldown only spawns when none
-      // exists. Replacing every cd would reset mirror HP every 8s for free.
+      // Single-instance, lifecycle-driven.
       game.mirrorWalls = game.mirrorWalls || [];
       if (game.mirrorWalls.length > 0) return;
       const W = new MirrorWall({
@@ -3839,7 +3825,6 @@ const ABILITIES = {
         rechargeTime: recharge,
         baseAngle: ang0,
         standoff,
-        arc,
         spec: beh,
       });
       game.mirrorWalls.push(W);
@@ -3856,13 +3841,13 @@ const ABILITIES = {
     ],
     specs: [
       { id: 'hall_of_mirrors', name: 'Hall of Mirrors',
-        desc: '6 mirrors at 60 HP each (instead of 4 at 80) in a wider arc — frontloaded coverage, less durability.',
+        desc: '8 mirrors at 60 HP each instead of 4 at 80 — every compass point covered, less durability per mirror.',
         behavior: { hallOfMirrors: true } },
       { id: 'spectrum_mirror', name: 'Spectrum Mirror',
-        desc: 'Enemies inside the confuse aura are also blinded for 3s — Optician build payoff.',
+        desc: 'Enemies inside the confuse aura are also blinded for 3s — Optician blind-build payoff.',
         behavior: { spectrumMirror: true } },
       { id: 'optical_wall',    name: 'Optical Wall',
-        desc: 'Mirrors fuse into a solid wall: enemies physically can\'t cross it. Confuse aura disabled.',
+        desc: 'Mirrors fuse into a solid octagon: enemies physically can\'t cross it. Confuse aura disabled.',
         behavior: { opticalWall: true } },
     ],
   },
@@ -5252,33 +5237,25 @@ class MirrorMaze {
 /* ------------------------------------------------------------------
  * WIZARD T2 — Firewall
  *
- * Line-segment wall of flame placed between the player and the densest
- * enemy cluster. The wall has a FUEL budget (dmg "HP"): every point of
- * damage it deals depletes fuel. Enemies overlapping the wall take DPS
- * and ignite, but enemies standing ON the wall midline ("smothering")
- * passive-drain extra fuel and halve the wall's DPS until they leave.
- * When fuel hits 0, the wall extinguishes and rekindles after rekindle
- * seconds at a fresh densest-cluster bearing.
+ * Hexagonal palisade of flame surrounding the player at radius ringR.
+ * The ring has a unified FUEL budget; every point of damage dealt
+ * depletes fuel. Enemies crossing the ring perimeter take DPS + ignite;
+ * enemies straddling the ring midline ("smothering") drain extra fuel
+ * AND halve the palisade's DPS until they leave. When fuel hits 0 the
+ * palisade extinguishes; rekindles after rekindleTime seconds.
  *
- * Bonfire spec turns the line into a ring around the player; the same
- * smother rules apply (anyone fully inside the ring counts).
+ * Eternal Flame spec keeps it always lit (DPS scales with fuel down to
+ * a 45% floor; fuel regens when no enemies touch it). Hearth spec heals
+ * the player while the palisade is lit.
  * ------------------------------------------------------------------ */
 class Firewall {
   constructor(opts) {
     Object.assign(this, opts);
     this.t = 0;
     this.dmgAcc = 0;
-    this.fuelAcc = 0;       // regen accumulator (Eternal Flame)
     this.lit = true;
     this.rekindleAcc = 0;
-    // Wall is anchored to a midpoint at distance `standoff` from caster.
-    // angleTarget is the bearing player→cluster; angleCur lerps toward it.
-    this.angleTarget = 0;
-    this.angleCur = 0;
-    // Cached endpoint cache for collision (recomputed in tick).
-    this.x1 = 0; this.y1 = 0; this.x2 = 0; this.y2 = 0;
-    // Visual flame particles
-    this._flames = [];
+    this.mx = 0; this.my = 0;            // centre (re-anchored each tick)
   }
 }
 
@@ -6187,19 +6164,17 @@ class Game {
   }
 
   /* ----------------------------------------------------------------
-   * Firewall (Wizard T2) — a literal line of flame between the player
-   * and the densest enemy cluster. Has a `fuel` budget; every point of
-   * damage dealt depletes it. Enemies overlapping the wall body take
-   * DPS + ignite; enemies fully ON the wall midline "smother" it, drai-
-   * ning extra fuel/sec AND halving the wall's effective DPS until they
-   * leave. When fuel ≤ 0 the wall extinguishes; rekindles after
-   * `rekindleTime` seconds at a fresh cluster bearing.
+   * Firewall (Wizard T2) — a hexagonal palisade of flame around the
+   * player. The ring has a unified `fuel` budget; every point of damage
+   * it deals depletes fuel by 0.5. Enemies overlapping the ring perimeter
+   * take DPS + ignite; enemies straddling the ring midline ("smother" it),
+   * draining extra fuel/sec AND halving the wall's effective DPS until
+   * they leave. When fuel ≤ 0 the palisade extinguishes; rekindles after
+   * `rekindleTime` seconds.
    *
-   * Bonfire spec turns the line into a ring around the player; smother
-   * penalty is lighter (-25% DPS) but still present.
-   * Eternal Flame spec keeps the wall always lit; DPS scales with cur-
-   * rent fuel down to a 45% floor; fuel slowly regens when no enemies
-   * touch the wall.
+   * Eternal Flame spec keeps it always lit; DPS scales with current fuel
+   * down to a 45% floor; fuel slowly regens when no enemies touch it.
+   * Hearth spec heals the player while the palisade is lit.
    * ---------------------------------------------------------------- */
   tickFirewalls(dt) {
     if (!this.firewalls?.length) return;
@@ -6209,40 +6184,10 @@ class Game {
       w.t += dt;
       const beh = w.spec || {};
       const eternal = !!beh.eternalFlame;
-      const bonfire = !!beh.bonfire;
       if (!player?.alive) { this.firewalls.splice(i, 1); continue; }
 
-      // ── Re-aim toward densest cluster ───────────────────────────
-      // For line-wall: angleCur lerps toward angleTarget at 1.5 rad/s so
-      // the wall doesn't snap around violently. For Bonfire (ring): angle
-      // is unused; the ring is anchored on the player.
-      if (!bonfire) {
-        let aim = w.angleCur;
-        const cluster = this.findEnemyCluster(player) || this.findNearestEnemy(player);
-        if (cluster) {
-          aim = Math.atan2(cluster.y - player.y, cluster.x - player.x);
-        }
-        // Shortest-arc lerp
-        let dAng = aim - w.angleCur;
-        while (dAng >  Math.PI) dAng -= TAU;
-        while (dAng < -Math.PI) dAng += TAU;
-        const maxStep = 1.5 * dt;
-        w.angleCur += Math.max(-maxStep, Math.min(maxStep, dAng));
-        // Anchor wall midpoint at `standoff` away from player along angleCur.
-        const mx = player.x + Math.cos(w.angleCur) * w.standoff;
-        const my = player.y + Math.sin(w.angleCur) * w.standoff;
-        // Endpoints are perpendicular to the bearing.
-        const px = -Math.sin(w.angleCur), py = Math.cos(w.angleCur);
-        w.x1 = mx + px * (w.length * 0.5);
-        w.y1 = my + py * (w.length * 0.5);
-        w.x2 = mx - px * (w.length * 0.5);
-        w.y2 = my - py * (w.length * 0.5);
-        w.mx = mx; w.my = my;
-      } else {
-        // Bonfire — ring around player. We reuse mx/my as the center and
-        // `ringR` as the ring radius (set at cast time).
-        w.mx = player.x; w.my = player.y;
-      }
+      // Ring centred on the player at all times.
+      w.mx = player.x; w.my = player.y;
 
       // ── Rekindle handling ───────────────────────────────────────
       if (!w.lit) {
@@ -6251,48 +6196,47 @@ class Game {
           w.lit = true;
           w.rekindleAcc = 0;
           w.fuel = w.fuelMax;
-          this.spawnExplosion((w.mx || player.x), (w.my || player.y), 60, '#ff7733', 'fire');
+          this.spawnExplosion(w.mx, w.my, w.ringR * 0.8, '#ff7733', 'fire');
           this.addShake(0.10);
         }
         continue;
       }
 
+      // Hearth spec: while lit, heal the player on a steady cadence
+      // (1.5 HP/sec). Strongly readable benefit and pairs with kiting
+      // builds — keeping the wall lit becomes its own positional goal.
+      if (beh.hearth && player.alive) {
+        w._healAcc = (w._healAcc || 0) + dt;
+        if (w._healAcc >= 1.0 / 1.5) {
+          w._healAcc -= 1.0 / 1.5;
+          this.healPlayer(1);
+        }
+      }
+
       // ── Damage application ──────────────────────────────────────
-      // Tick at 0.25s cadence so ignite + damage feel responsive but the
-      // smother accounting is stable.
       w.dmgAcc += dt;
       const tickIv = 0.25;
       const wantTick = w.dmgAcc >= tickIv;
-      let smothering = 0;          // count of enemies fully on the wall
+      let smothering = 0;
+      const smotherPenalty = 0.50;     // -50% DPS while anyone is on the ring core
+      const smotherDrain   = 4;        // fuel/sec drained per smotherer
 
-      // Smother coefficient: line walls -50% DPS; bonfire ring -25% DPS.
-      const smotherPenalty = bonfire ? 0.25 : 0.50;
-      const smotherDrain   = bonfire ? 3 : 5;        // fuel/sec lost per smotherer
-
-      // Pre-resolve effective DPS for this tick.
-      // Eternal Flame: scale with current fuel fraction down to 45% floor.
+      // Eternal Flame: scale DPS with current fuel fraction (45% floor).
       let effDps = w.dps;
       if (eternal) {
         const frac = w.fuel / w.fuelMax;
         effDps = w.dps * Math.max(0.45, frac);
       }
 
-      const hitThickness = bonfire ? 14 : 12;        // half-width for damage hitbox
+      const hitThickness = 16;        // ring "thickness" for damage hitbox
       const enemiesOnWall = [];
-
       for (const e of this.enemies) {
         if (!e.alive) continue;
-        // Distance from enemy center to wall body.
-        let d;
-        if (bonfire) {
-          d = Math.abs(Vec.dist(player, e) - w.ringR);
-        } else {
-          d = distPointSeg(e.x, e.y, w.x1, w.y1, w.x2, w.y2);
-        }
+        const d = Math.abs(Vec.dist(player, e) - w.ringR);
         if (d > hitThickness + e.radius) continue;
         enemiesOnWall.push(e);
-        // Smother check: enemy center within the wall's "core" (half the
-        // hit thickness). They're standing right on the flame.
+        // Smother check: enemy centre within the ring's flame "core"
+        // (half the hit thickness). They're standing right on the flame.
         if (d <= hitThickness * 0.5) smothering += 1;
       }
 
@@ -6307,15 +6251,14 @@ class Game {
           const a = e.takeDamage(tickDmg, { spell: 'firewall' });
           this.totalDamageDealt += a;
           damageDealtThisTick += a;
-          // Ignite (3s, 30% of dps as DoT) — flavor + boss-melt synergy.
           e.applyStatus('ignite', { duration: 3.0, dps: tickDmg * 0.6, dmg: tickDmg }, this.runElapsed);
           if (Math.random() < 0.25) this.spawnHitParticles(e.x, e.y, '#ff8844', 1);
         }
         w.dmgAcc = 0;
       }
 
-      // Fuel accounting — base: 0.5 fuel per point of damage dealt.
-      // Smotherers drain extra. Eternal regen when no smother + no damage.
+      // Fuel accounting — base: 0.5 fuel per point of damage dealt; +
+      // smother drain per smotherer. Eternal regens fuel when idle.
       w.fuel -= damageDealtThisTick * 0.5;
       w.fuel -= smothering * smotherDrain * dt;
 
@@ -6331,9 +6274,9 @@ class Game {
         w.fuel = 0;
         w.lit = false;
         w.rekindleAcc = 0;
-        // Pyre spec — burst on extinguish, scales with dmgMult investment.
+        // Pyre spec — burst outward in a shockwave on extinguish.
         if (beh.pyreExpire) {
-          const pyreR = 180;
+          const pyreR = w.ringR + 80;
           const pyreDmg = beh.pyreExpire;
           for (const e of this.enemies) {
             if (!e.alive) continue;
@@ -6347,7 +6290,7 @@ class Game {
           this.spawnExplosion(w.mx, w.my, pyreR, '#ff7733', 'fire');
           this.addShake(0.28);
         } else {
-          this.spawnExplosion(w.mx, w.my, 50, '#7a4422');     // small puff
+          this.spawnExplosion(w.mx, w.my, w.ringR, '#7a4422');     // ash puff
         }
       }
     }
@@ -6825,16 +6768,17 @@ class Game {
       if (W.recharging) {
         W.rechargeAcc += dt;
         if (W.rechargeAcc >= W.rechargeTime) {
-          // Respawn facing the densest cluster.
-          const cluster = this.findEnemyCluster(player) || this.findNearestEnemy(player);
-          const ang0 = cluster ? Math.atan2(cluster.y - player.y, cluster.x - player.x) : 0;
+          // Respawn in the same fixed compass positions (north-anchored).
+          // Repair is a refresh of the surround formation, not a rotation
+          // toward the new cluster — keeps the visual stable.
+          const ang0 = -Math.PI / 2;
           W.baseAngle = ang0;
           W.recharging = false;
           W.rechargeAcc = 0;
-          for (let k = 0; k < W.mirrors.length; k++) {
+          const n = W.mirrors.length;
+          for (let k = 0; k < n; k++) {
             const m = W.mirrors[k];
-            const t = W.mirrors.length === 1 ? 0.5 : k / (W.mirrors.length - 1);
-            const localAng = ang0 + (t - 0.5) * W.arc;
+            const localAng = ang0 + (k / n) * TAU;
             m.x = player.x + Math.cos(localAng) * W.standoff;
             m.y = player.y + Math.sin(localAng) * W.standoff;
             m.ang = localAng + Math.PI / 2;
@@ -6917,15 +6861,14 @@ class Game {
         if (ifr > 0) W._iframesByEnemy.set(e, ifr);
       }
 
-      // Re-anchor mirror positions to the player (they orbit around the
-      // standoff arc, not free-floating). This lets the wall track player
-      // movement IF the class ever moves; for Wizard/Optician (moveSpeed 0)
-      // it just keeps positions stable on canvas resize.
-      for (let k = 0; k < W.mirrors.length; k++) {
+      // Re-anchor mirror positions to the player every frame. The compass
+      // layout stays fixed (north-anchored evenly around the circle) so
+      // the surround visual is stable.
+      const n = W.mirrors.length;
+      for (let k = 0; k < n; k++) {
         const m = W.mirrors[k];
         if (m.broken) continue;
-        const t = W.mirrors.length === 1 ? 0.5 : k / (W.mirrors.length - 1);
-        const localAng = W.baseAngle + (t - 0.5) * W.arc;
+        const localAng = W.baseAngle + (k / n) * TAU;
         m.x = player.x + Math.cos(localAng) * W.standoff;
         m.y = player.y + Math.sin(localAng) * W.standoff;
         m.ang = localAng + Math.PI / 2;
@@ -11089,11 +11032,49 @@ const Renderer = {
         ctx.restore();
       }
 
-      // ── Outer ink wall ────────────────────────────────────────────────
+      const shieldFrac = f.shieldMaxHp > 0 ? Math.max(0, f.shieldHp / f.shieldMaxHp) : 0;
+
+      // ── Per-side HP segments (gold = healthy, red = critical) ─────────
+      // Each of the 6 hex sides is its own HP segment so the player can
+      // see at a glance "I'm at 4/6 walls". Segments dim sequentially as
+      // shield HP drops, but the WALL line stays solid so the structure
+      // visually persists even when damaged.
+      if (!isRecharging && f.shieldMaxHp > 0) {
+        const segmentsAlive = Math.max(0, Math.min(SIDES, Math.ceil(shieldFrac * SIDES)));
+        // Edge midpoint highlights — a gold "tile" on each side that's alive
+        for (let i = 0; i < SIDES; i++) {
+          const p0 = pts[i];
+          const p1 = pts[(i + 1) % SIDES];
+          const mx = (p0.x + p1.x) * 0.5;
+          const my = (p0.y + p1.y) * 0.5;
+          // Outward normal (from centre)
+          const nx = mx - cx, ny = my - cy;
+          const nl = Math.hypot(nx, ny) || 1;
+          const ox = nx / nl * 6, oy = ny / nl * 6;
+          // Tile orientation along edge
+          const dx = p1.x - p0.x, dy = p1.y - p0.y;
+          const eang = Math.atan2(dy, dx);
+          const elen = Math.hypot(dx, dy) * 0.78;
+          ctx.save();
+          ctx.translate(mx + ox * 0.0, my + oy * 0.0);
+          ctx.rotate(eang);
+          const alive = i < segmentsAlive;
+          ctx.fillStyle = alive
+            ? `rgba(200,148,26,${0.85 * a})`
+            : `rgba(168,58,44,${0.65 * a})`;
+          ctx.fillRect(-elen / 2, -2, elen, 4);
+          ctx.strokeStyle = `rgba(26,22,18,${0.8 * a})`;
+          ctx.lineWidth = 0.7;
+          ctx.strokeRect(-elen / 2, -2, elen, 4);
+          ctx.restore();
+        }
+      }
+
+      // ── Outer ink wall (heavy stroke for "it's a real wall") ──────────
       ctx.strokeStyle = isRecharging
-        ? `rgba(26,22,18,${0.45 * baseA})`
+        ? `rgba(26,22,18,${0.40 * baseA})`
         : `rgba(26,22,18,${a})`;
-      ctx.lineWidth = isRecharging ? 1.2 : 1.8;
+      ctx.lineWidth = isRecharging ? 1.2 : 3;        // thicker line when intact
       ctx.beginPath();
       pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
       ctx.closePath(); ctx.stroke();
@@ -11101,7 +11082,7 @@ const Renderer = {
       // ── Inner indigo dashed wall (flowing) ────────────────────────────
       if (!isRecharging) {
         ctx.strokeStyle = `rgba(44,74,140,${a})`;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.4;
         ctx.setLineDash([6, 4]);
         ctx.lineDashOffset = -t * 8;
         ctx.beginPath();
@@ -11114,17 +11095,39 @@ const Renderer = {
         ctx.closePath(); ctx.stroke();
         ctx.setLineDash([]);
 
-        // ── Crystal diamond posts at each vertex ───────────────────────
-        for (const p of pts) {
+        // ── Ice crack overlays at low HP ─────────────────────────────
+        if (shieldFrac < 0.66) {
+          ctx.strokeStyle = `rgba(20,12,8,${(shieldFrac < 0.33 ? 0.85 : 0.55) * a})`;
+          ctx.lineWidth = 1.1;
+          // Cracks radiate out from random hex vertices toward the centre
+          const crackCount = shieldFrac < 0.33 ? 5 : 3;
+          for (let i = 0; i < crackCount; i++) {
+            const v = pts[(i * 2) % SIDES];
+            const mid = { x: (v.x + cx) * 0.5, y: (v.y + cy) * 0.5 };
+            const jx = (Math.sin(f.seed + i * 1.7) * r * 0.18);
+            const jy = (Math.cos(f.seed + i * 2.1) * r * 0.18);
+            ctx.beginPath();
+            ctx.moveTo(v.x * 0.95 + cx * 0.05, v.y * 0.95 + cy * 0.05);
+            ctx.lineTo(mid.x + jx, mid.y + jy);
+            ctx.lineTo(cx + jx * 0.4, cy + jy * 0.4);
+            ctx.stroke();
+          }
+        }
+
+        // ── Crystal diamond posts at each vertex (bigger when full HP) ─
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          const segmentsAlive = Math.ceil(shieldFrac * SIDES);
+          const aliveSide = (i < segmentsAlive);
           const wob = 1 + Math.sin(t * 1.5 + p.ang * 3) * 0.08;
-          const sz = 6 * bloom * wob;
+          const sz = (aliveSide ? 7 : 5) * bloom * wob;
           ctx.save();
           ctx.translate(p.x, p.y);
           ctx.rotate(p.ang + Math.PI / 2);
           // Outer diamond — paper fill, ink stroke
           ctx.fillStyle = `rgba(232,220,192,${0.95 * a})`;
           ctx.strokeStyle = `rgba(26,22,18,${a})`;
-          ctx.lineWidth = 1.2;
+          ctx.lineWidth = 1.4;
           ctx.beginPath();
           ctx.moveTo(0, -sz * 1.6);
           ctx.lineTo(sz * 0.7, 0);
@@ -11132,8 +11135,10 @@ const Renderer = {
           ctx.lineTo(-sz * 0.7, 0);
           ctx.closePath();
           ctx.fill(); ctx.stroke();
-          // Inner indigo diamond
-          ctx.fillStyle = `rgba(44,74,140,${a})`;
+          // Inner indigo diamond — color shifts toward red when fully dim
+          ctx.fillStyle = aliveSide
+            ? `rgba(44,74,140,${a})`
+            : `rgba(122,60,52,${a * 0.7})`;
           ctx.beginPath();
           ctx.moveTo(0, -sz * 1.0);
           ctx.lineTo(sz * 0.4, -0.2);
@@ -11143,183 +11148,220 @@ const Renderer = {
           ctx.fill();
           ctx.restore();
         }
-
-        // Shield HP arc — gold-on-paper rather than the cyan it was.
-        if (f.shieldMaxHp > 0) {
-          const frac = Math.max(0, f.shieldHp / f.shieldMaxHp);
-          ctx.strokeStyle = `rgba(200,148,26,${0.85 * a})`;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(cx, cy, r + 6, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+      } else {
+        // ── Recharge state: ghostly dashed outline + big REFORMING ────
+        // Player should be able to GLANCE at the screen and know "I'm
+        // exposed for N more seconds."
+        ctx.strokeStyle = `rgba(122,60,52,${0.65 * baseA})`;
+        ctx.setLineDash([5, 7]);
+        ctx.lineDashOffset = -t * 4;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.closePath(); ctx.stroke();
+        ctx.setLineDash([]);
+        // Charred post stumps at each vertex
+        for (const p of pts) {
+          ctx.fillStyle = `rgba(60,40,28,${0.9 * baseA})`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, TAU); ctx.fill();
+          ctx.strokeStyle = `rgba(20,14,10,${baseA})`;
+          ctx.lineWidth = 0.8;
           ctx.stroke();
         }
-      } else {
-        // ── Recharge progress arc + REFORMING label ────────────────────
+        // Centred countdown
         const prog = Math.min(1, (f.rechargeAcc || 0) / (f.rechargeTime || 8));
-        ctx.strokeStyle = `rgba(44,74,140,${0.7 * baseA})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 6, -Math.PI / 2, -Math.PI / 2 + prog * TAU);
-        ctx.stroke();
-        ctx.fillStyle = `rgba(26,22,18,${0.78 * baseA})`;
-        ctx.font = 'bold 10px monospace';
+        const remain = Math.max(0, (f.rechargeTime || 8) - (f.rechargeAcc || 0));
+        ctx.fillStyle = 'rgba(26,22,18,0.30)';
+        ctx.fillRect(cx - 36, cy - 4, 72, 6);
+        ctx.fillStyle = 'rgba(168,58,44,0.85)';
+        ctx.fillRect(cx - 36, cy - 4, 72 * prog, 6);
+        ctx.strokeStyle = 'rgba(26,22,18,0.65)';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(cx - 36, cy - 4, 72, 6);
+        ctx.fillStyle = `rgba(168,58,44,0.95)`;
+        ctx.font = 'bold 11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('REFORMING', cx, cy + 3);
+        ctx.fillText(`REFORMING ${remain.toFixed(1)}s`, cx, cy - 8);
       }
       ctx.restore();
     }
   },
 
   /*
-   * Firewall — line of flame (or ring, for Bonfire spec) between the
-   * player and the densest enemy cluster. Burning state shows licking
-   * flame tongues + ember motes + a fuel bar above the wall midpoint.
-   * Extinguished state shows a smoldering ash silhouette with the
-   * rekindle countdown.
+   * Firewall — hexagonal palisade of flame around the player. Visually
+   * unmistakable as a defensive structure: a glowing ring of fire with
+   * 6 large flame towers at the hex vertices, each licking outward;
+   * dozens of smaller flame tongues all around the perimeter; ground
+   * scorch wash showing the ring's footprint. Extinguished: a dark
+   * ash ring with a REKINDLING countdown so the player can see at a
+   * glance how long they're exposed.
    */
   drawFirewalls(ctx, walls, player, t) {
     if (!walls) return;
-    const dt = (this._lastFwT === undefined) ? 0.016 : Math.min(0.05, t - this._lastFwT);
-    this._lastFwT = t;
     for (const w of walls) {
       const eternal = !!(w.spec && w.spec.eternalFlame);
-      const bonfire = !!(w.spec && w.spec.bonfire);
       const lit = w.lit;
       const fuelFrac = Math.max(0, Math.min(1, w.fuel / w.fuelMax));
-      const alpha = lit ? (eternal ? Math.max(0.45, fuelFrac) : 0.95) : 0.40;
+      // Brightness of the palisade reads its current fuel — dimming as
+      // it burns down, fully bright when fresh, very dim when extinguished.
+      const alpha = lit ? (0.55 + 0.45 * fuelFrac) : 0.30;
+      const cx = w.mx, cy = w.my, rr = w.ringR;
 
       ctx.save();
 
-      if (bonfire) {
-        // ── Ring of fire around player ────────────────────────────
-        const rr = w.ringR;
-        // Glow disc
-        ctx.fillStyle = `rgba(184,76,28,${0.10 * alpha})`;
-        ctx.beginPath(); ctx.arc(w.mx, w.my, rr + 14, 0, TAU); ctx.fill();
-        // Charred ring (paper-warm fill, thick)
-        ctx.strokeStyle = `rgba(122,40,24,${alpha})`;
-        ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(w.mx, w.my, rr, 0, TAU); ctx.stroke();
-        // Inner gold core
-        ctx.strokeStyle = `rgba(232,184,64,${alpha * 0.85})`;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.arc(w.mx, w.my, rr - 1.5, 0, TAU); ctx.stroke();
-        // Flame tongues — 18 small flames around the ring
-        if (lit) {
-          for (let i = 0; i < 24; i++) {
-            const a = i / 24 * TAU + Math.sin(t * 2 + i) * 0.05;
-            const x = w.mx + Math.cos(a) * rr;
-            const y = w.my + Math.sin(a) * rr;
-            const h = 4 + Math.sin(t * 8 + i * 1.7) * 1.5 + (Math.random() < 0.3 ? 2 : 0);
-            ctx.strokeStyle = `rgba(232,168,48,${0.7 * alpha})`;
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + Math.cos(a) * h, y + Math.sin(a) * h);
-            ctx.stroke();
-          }
-        }
+      // ── Ground scorch wash inside the ring (your "safe" footprint) ──
+      if (lit) {
+        const wash = ctx.createRadialGradient(cx, cy, rr * 0.2, cx, cy, rr * 1.1);
+        wash.addColorStop(0,    `rgba(232,168,48,${0.06 * alpha})`);
+        wash.addColorStop(0.85, `rgba(184,76,28,${0.16 * alpha})`);
+        wash.addColorStop(1,    `rgba(122,40,24,0)`);
+        ctx.fillStyle = wash;
+        ctx.beginPath(); ctx.arc(cx, cy, rr * 1.1, 0, TAU); ctx.fill();
+      }
+
+      // ── Outer ash band (always present so the boundary is readable) ─
+      ctx.strokeStyle = `rgba(58,30,20,${0.85})`;
+      ctx.lineWidth = lit ? 6 : 4;
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+
+      // ── Inner ember core (visible only when lit; dims with fuel) ────
+      if (lit) {
+        ctx.strokeStyle = `rgba(232,184,64,${alpha * 0.95})`;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.arc(cx, cy, rr - 1.5, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,243,200,${alpha * 0.55})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(cx, cy, rr - 1.5, 0, TAU); ctx.stroke();
       } else {
-        // ── Line wall ─────────────────────────────────────────────
-        const x1 = w.x1, y1 = w.y1, x2 = w.x2, y2 = w.y2;
-        // Soft ground glow (under the flame)
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = `rgba(184,76,28,${0.20 * alpha})`;
-        ctx.lineWidth = 20;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        // Charred body
-        ctx.strokeStyle = `rgba(58,30,20,${alpha})`;
-        ctx.lineWidth = 6;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        // Inner ember-yellow core
+        // Dashed "outline" so you can still see where the ring WILL be.
+        ctx.strokeStyle = `rgba(58,30,20,${0.45})`;
+        ctx.setLineDash([4, 6]);
+        ctx.lineDashOffset = -t * 6;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // ── Hex flame towers at 6 vertices (big visible "wall" markers) ──
+      // These are the "fortified posts" that make the ring read as a
+      // palisade rather than just a glow.
+      const towerCount = 6;
+      for (let i = 0; i < towerCount; i++) {
+        const a = (i / towerCount) * TAU - Math.PI / 2 + t * 0.12;
+        const px = cx + Math.cos(a) * rr;
+        const py = cy + Math.sin(a) * rr;
         if (lit) {
-          ctx.strokeStyle = `rgba(232,184,64,${alpha * 0.9})`;
-          ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        }
-        ctx.restore();
-        // Flame tongues — N along the wall, pointing perpendicular toward the enemies
-        if (lit) {
-          // Perpendicular pointing away from player
-          const dx = x2 - x1, dy = y2 - y1;
-          const len = Math.hypot(dx, dy) || 1;
-          const ux = dx / len, uy = dy / len;
-          let px = -uy, py = ux;
-          // Flip so px,py points away from the player
-          const cx = (x1 + x2) * 0.5, cy = (y1 + y2) * 0.5;
-          if ((px * (cx - player.x) + py * (cy - player.y)) < 0) { px = -px; py = -py; }
-          const count = Math.max(8, Math.round(len / 14));
-          for (let i = 0; i < count; i++) {
-            const tt = (i + 0.5) / count;
-            const fx = x1 + dx * tt;
-            const fy = y1 + dy * tt;
-            const flick = 4 + Math.sin(t * 7 + i * 1.4) * 2 + (Math.random() < 0.25 ? 3 : 0);
-            // Hot inner tongue
-            ctx.strokeStyle = `rgba(232,184,64,${0.75 * alpha})`;
-            ctx.lineWidth = 1.4;
-            ctx.beginPath();
-            ctx.moveTo(fx, fy);
-            ctx.lineTo(fx + px * flick, fy + py * flick);
-            ctx.stroke();
-            // Outer vermilion tip
-            ctx.strokeStyle = `rgba(184,76,28,${0.5 * alpha})`;
-            ctx.lineWidth = 0.9;
-            ctx.beginPath();
-            ctx.moveTo(fx + px * flick * 0.6, fy + py * flick * 0.6);
-            ctx.lineTo(fx + px * (flick + 3), fy + py * (flick + 3));
-            ctx.stroke();
-          }
+          // Base scorched stump
+          ctx.fillStyle = `rgba(40,22,16,0.95)`;
+          ctx.beginPath(); ctx.arc(px, py, 4, 0, TAU); ctx.fill();
+          // Flame body — rising outward
+          const flick = 10 + Math.sin(t * 6 + i * 1.7) * 3;
+          const grad = ctx.createRadialGradient(px, py, 2, px, py, flick + 4);
+          grad.addColorStop(0,    `rgba(255,243,200,${0.85 * alpha})`);
+          grad.addColorStop(0.45, `rgba(232,168,48,${0.65 * alpha})`);
+          grad.addColorStop(1,    `rgba(184,76,28,0)`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(px, py, flick + 4, 0, TAU); ctx.fill();
+          // Hot core dot
+          ctx.fillStyle = `rgba(255,243,200,${alpha})`;
+          ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TAU); ctx.fill();
+        } else {
+          // Charred stump only when extinguished — the post is still there,
+          // just unlit. Reads as "we have walls, they're just out."
+          ctx.fillStyle = `rgba(60,40,28,${0.85})`;
+          ctx.beginPath(); ctx.arc(px, py, 4, 0, TAU); ctx.fill();
+          ctx.strokeStyle = `rgba(20,14,10,0.7)`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
         }
       }
 
-      // ── Fuel bar above midpoint ──────────────────────────────────
-      const bx = w.mx, by = w.my - 22;
+      // ── Small flame tongues all around the perimeter (when lit) ─────
+      if (lit) {
+        const count = 28;
+        for (let i = 0; i < count; i++) {
+          const a = i / count * TAU;
+          const x = cx + Math.cos(a) * rr;
+          const y = cy + Math.sin(a) * rr;
+          const h = 4 + Math.sin(t * 9 + i * 1.31) * 1.5 + (((i * 7 + ((t * 14) | 0)) % 17) < 4 ? 2.5 : 0);
+          // Hot inner tongue (radial outward)
+          ctx.strokeStyle = `rgba(232,184,64,${0.7 * alpha})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.cos(a) * h, y + Math.sin(a) * h);
+          ctx.stroke();
+          // Outer vermilion tip
+          ctx.strokeStyle = `rgba(184,76,28,${0.5 * alpha})`;
+          ctx.lineWidth = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * h * 0.6, y + Math.sin(a) * h * 0.6);
+          ctx.lineTo(x + Math.cos(a) * (h + 3), y + Math.sin(a) * (h + 3));
+          ctx.stroke();
+        }
+      }
+
+      // ── Fuel bar / status banner above the player ────────────────
+      const bx = cx, by = cy - rr - 22;
       ctx.fillStyle = `rgba(26,22,18,${0.30})`;
-      ctx.fillRect(bx - 22, by - 2, 44, 4);
-      ctx.fillStyle = lit
-        ? `rgba(232,148,28,${0.95})`
-        : `rgba(122,90,60,${0.85})`;
-      ctx.fillRect(bx - 22, by - 2, 44 * fuelFrac, 4);
+      ctx.fillRect(bx - 32, by, 64, 5);
+      // Color shifts gold → red as fuel depletes so degraded state reads.
+      const barCol = lit
+        ? (fuelFrac > 0.5 ? '232,168,48' : (fuelFrac > 0.25 ? '216,124,40' : '184,58,44'))
+        : '122,90,60';
+      ctx.fillStyle = `rgba(${barCol},0.92)`;
+      ctx.fillRect(bx - 32, by, 64 * fuelFrac, 5);
+      ctx.strokeStyle = `rgba(26,22,18,0.65)`;
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(bx - 32, by, 64, 5);
+
       if (!lit && !eternal) {
+        // Clear, big REKINDLING countdown so the player knows they're
+        // exposed and roughly when defenses come back.
         const prog = Math.min(1, w.rekindleAcc / w.rekindleTime);
-        ctx.fillStyle = `rgba(168,58,44,${0.85})`;
-        ctx.fillRect(bx - 22, by - 2, 44 * prog, 4);
-        ctx.fillStyle = `rgba(26,22,18,0.85)`;
+        const remain = Math.max(0, w.rekindleTime - w.rekindleAcc);
+        ctx.fillStyle = `rgba(168,58,44,0.85)`;
+        ctx.fillRect(bx - 32, by, 64 * prog, 5);
+        ctx.fillStyle = `rgba(168,58,44,0.95)`;
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`REKINDLING ${remain.toFixed(1)}s`, bx, by - 4);
+      } else {
+        ctx.fillStyle = `rgba(26,22,18,0.8)`;
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('REKINDLING', bx, by - 6);
-      } else if (eternal && fuelFrac < 0.7) {
-        ctx.fillStyle = `rgba(26,22,18,0.75)`;
-        ctx.font = '9px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(fuelFrac * 100)}%`, bx, by - 6);
+        ctx.fillText(`FUEL ${Math.round(fuelFrac * 100)}%`, bx, by - 3);
       }
       ctx.restore();
     }
   },
 
   /*
-   * Mirror Wall — row of standing mirrors in an arc between the player
-   * and the densest cluster. Each mirror is a silver lozenge with an ink
-   * frame and a confuse-aura disc that pulses softly. Mirrors crack
-   * visually as HP drops; an "X" appears on broken mirrors during the
-   * recharge state.
+   * Mirror Wall — 4 (or 8 with Hall) standing mirrors arrayed around
+   * the player at fixed compass points. Each mirror is a large silver
+   * pane with an ink frame, a sheen highlight, and a paper-disc plinth
+   * at its base so it reads as a planted structure rather than a flat
+   * pickup. HP pip above each. Confuse aura disc pulses softly. Cracks
+   * appear as HP drops; broken mirrors leave a glass-shard footprint.
+   * Optical Wall spec draws an additional fused octagon connecting all
+   * live mirrors — the literal "solid wall" the spec promises.
    */
   drawMirrorWalls(ctx, walls, player, t) {
     if (!walls) return;
     for (const W of walls) {
       const isRecharging = W.recharging;
-      ctx.save();
-      // Confuse aura halos (only for the array variant, not Optical Wall)
       const opticalWall = !!(W.spec && W.spec.opticalWall);
       const auraR = W.confuseRadius;
+      ctx.save();
+
+      // ── Confuse aura halos around live mirrors ─────────────────
       if (!opticalWall && !isRecharging && auraR > 0) {
         for (const m of W.mirrors) {
           if (m.broken) continue;
-          ctx.fillStyle = `rgba(220,236,255,0.06)`;
+          ctx.fillStyle = `rgba(220,236,255,0.07)`;
           ctx.beginPath(); ctx.arc(m.x, m.y, auraR, 0, TAU); ctx.fill();
-          ctx.strokeStyle = `rgba(140,160,200,${0.30})`;
+          ctx.strokeStyle = `rgba(140,160,200,${0.35})`;
           ctx.setLineDash([3, 4]);
           ctx.lineDashOffset = -t * 8;
           ctx.lineWidth = 0.8;
@@ -11328,69 +11370,146 @@ const Renderer = {
         }
       }
 
-      // Mirrors (draw oriented to face perpendicular to player line)
+      // ── Optical Wall: fused octagon connecting live mirrors ────
+      if (opticalWall && !isRecharging) {
+        const live = W.mirrors.filter(m => !m.broken);
+        if (live.length >= 2) {
+          // Sort by angle so the polygon is convex
+          const sorted = [...live].sort((a, b) => {
+            const aa = Math.atan2(a.y - player.y, a.x - player.x);
+            const bb = Math.atan2(b.y - player.y, b.x - player.x);
+            return aa - bb;
+          });
+          // Inner silver wash
+          ctx.fillStyle = `rgba(220,236,255,0.10)`;
+          ctx.beginPath();
+          sorted.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+          ctx.closePath(); ctx.fill();
+          // Solid silver edge
+          ctx.strokeStyle = `rgba(180,200,220,0.85)`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          sorted.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+          ctx.closePath(); ctx.stroke();
+          ctx.strokeStyle = `rgba(26,22,18,0.7)`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          sorted.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+          ctx.closePath(); ctx.stroke();
+        }
+      }
+
+      // ── Mirrors themselves (live + broken footprints) ──────────
       for (const m of W.mirrors) {
-        if (m.broken) continue;
         const hpFrac = m.hp / m.hpMax;
-        const a = (isRecharging ? 0.35 : 1) * (m.hitFlash > 0 ? 1.2 : 1);
+        if (m.broken) {
+          // Glass-shard footprint at the broken position (still visible
+          // so player knows where defenses WERE / are missing).
+          ctx.save();
+          ctx.translate(m.x, m.y);
+          ctx.rotate(m.ang);
+          for (let s = 0; s < 5; s++) {
+            const sx = -16 + s * 8;
+            const sy = (s % 2 ? -3 : 3);
+            ctx.fillStyle = `rgba(232,236,236,0.35)`;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(sx + 3, sy - 2);
+            ctx.lineTo(sx + 5, sy + 1);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = `rgba(26,22,18,0.45)`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+          // Big red X marker overlay
+          ctx.strokeStyle = `rgba(168,58,44,0.65)`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(-10, -5); ctx.lineTo(10, 5);
+          ctx.moveTo(10, -5);  ctx.lineTo(-10, 5);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        const a = (isRecharging ? 0.45 : 1) * (m.hitFlash > 0 ? 1.2 : 1);
         const ang = m.ang;
-        const w = 32, h = 8;
+        const W_PX = 44, H_PX = 12;        // bigger than before so each side is unmistakable
         ctx.save();
         ctx.translate(m.x, m.y);
         ctx.rotate(ang);
+        // Paper-disc plinth (so the mirror reads as standing UP, not floating)
+        ctx.fillStyle = `rgba(232,220,192,${0.75 * a})`;
+        ctx.beginPath(); ctx.ellipse(0, H_PX * 0.55, W_PX * 0.55, 3, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(26,22,18,${0.7 * a})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.ellipse(0, H_PX * 0.55, W_PX * 0.55, 3, 0, 0, TAU); ctx.stroke();
         // Silver pane
-        ctx.fillStyle = `rgba(232,236,236,${0.85 * a})`;
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-        // Highlight strip
-        ctx.fillStyle = `rgba(248,248,240,${0.7 * a})`;
-        ctx.fillRect(-w / 2 + 2, -h / 2 + 1, w - 4, 2);
-        // Ink frame
+        ctx.fillStyle = `rgba(232,236,236,${0.92 * a})`;
+        ctx.fillRect(-W_PX / 2, -H_PX / 2, W_PX, H_PX);
+        // Highlight strip (top)
+        ctx.fillStyle = `rgba(248,248,240,${0.75 * a})`;
+        ctx.fillRect(-W_PX / 2 + 2, -H_PX / 2 + 1, W_PX - 4, 3);
+        // Diagonal sheen
+        ctx.strokeStyle = `rgba(255,255,255,${0.45 * a})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-W_PX / 2 + 6, H_PX / 2 - 1);
+        ctx.lineTo(-W_PX / 2 + 14, -H_PX / 2 + 1);
+        ctx.stroke();
+        // Ink frame — thicker so it reads as a SOLID mirror at a glance
         ctx.strokeStyle = `rgba(26,22,18,${a})`;
-        ctx.lineWidth = 1.4;
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
-        // Cracks at low HP
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-W_PX / 2, -H_PX / 2, W_PX, H_PX);
+        // Corner nubs
+        ctx.fillStyle = `rgba(26,22,18,${a})`;
+        for (const [nx, ny] of [[-W_PX / 2, -H_PX / 2], [W_PX / 2, -H_PX / 2], [-W_PX / 2, H_PX / 2], [W_PX / 2, H_PX / 2]]) {
+          ctx.beginPath(); ctx.arc(nx, ny, 1.4, 0, TAU); ctx.fill();
+        }
+        // Cracks at low HP — progressively more visible
         if (hpFrac < 0.66) {
-          ctx.strokeStyle = `rgba(26,22,18,${0.6 * a})`;
-          ctx.lineWidth = 0.6;
+          ctx.strokeStyle = `rgba(26,22,18,${0.7 * a})`;
+          ctx.lineWidth = 0.7;
           ctx.beginPath();
-          ctx.moveTo(-w / 4, -h / 2); ctx.lineTo(w / 8, h / 2);
-          ctx.moveTo(0, -h / 2);      ctx.lineTo(-w / 6, h / 2);
+          ctx.moveTo(-W_PX / 4, -H_PX / 2);   ctx.lineTo(W_PX / 8, H_PX / 2);
+          ctx.moveTo(0, -H_PX / 2);            ctx.lineTo(-W_PX / 6, H_PX / 2);
           if (hpFrac < 0.33) {
-            ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, h / 4);
+            ctx.moveTo(-W_PX / 2, 0);          ctx.lineTo(W_PX / 2, H_PX / 4);
+            ctx.moveTo(W_PX / 3, -H_PX / 2);   ctx.lineTo(-W_PX / 4, H_PX / 2);
           }
           ctx.stroke();
         }
         ctx.restore();
-        // HP pip above mirror (small bar)
-        ctx.fillStyle = 'rgba(26,22,18,0.30)';
-        ctx.fillRect(m.x - 12, m.y - 14, 24, 2);
-        ctx.fillStyle = `rgba(232,184,64,0.85)`;
-        ctx.fillRect(m.x - 12, m.y - 14, 24 * hpFrac, 2);
+        // HP bar above the mirror (wider, more visible)
+        ctx.fillStyle = 'rgba(26,22,18,0.40)';
+        ctx.fillRect(m.x - 18, m.y - 18, 36, 3);
+        const hpColor = hpFrac > 0.5
+          ? '232,184,64'
+          : (hpFrac > 0.25 ? '216,124,40' : '184,58,44');
+        ctx.fillStyle = `rgba(${hpColor},0.92)`;
+        ctx.fillRect(m.x - 18, m.y - 18, 36 * hpFrac, 3);
+        ctx.strokeStyle = 'rgba(26,22,18,0.55)';
+        ctx.lineWidth = 0.6;
+        ctx.strokeRect(m.x - 18, m.y - 18, 36, 3);
         if (m.hitFlash > 0) m.hitFlash -= 0.02;
       }
 
-      // Recharging state: shattered "X" markers + countdown bar
-      if (isRecharging) {
-        for (const m of W.mirrors) {
-          if (!m.broken) continue;
-          ctx.save();
-          ctx.translate(m.x, m.y);
-          ctx.strokeStyle = `rgba(168,58,44,0.55)`;
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.moveTo(-8, -4); ctx.lineTo(8, 4);
-          ctx.moveTo(8, -4);  ctx.lineTo(-8, 4);
-          ctx.stroke();
-          ctx.restore();
-        }
-        // Countdown bar over player
-        if (player) {
-          const prog = Math.min(1, W.rechargeAcc / W.rechargeTime);
-          ctx.fillStyle = 'rgba(26,22,18,0.30)';
-          ctx.fillRect(player.x - 24, player.y - player.radius - 16, 48, 3);
-          ctx.fillStyle = 'rgba(168,58,44,0.85)';
-          ctx.fillRect(player.x - 24, player.y - player.radius - 16, 48 * prog, 3);
-        }
+      // ── Recharging countdown banner over player ────────────────
+      if (isRecharging && player) {
+        const prog = Math.min(1, W.rechargeAcc / W.rechargeTime);
+        const remain = Math.max(0, W.rechargeTime - W.rechargeAcc);
+        const bx = player.x, by = player.y - player.radius - 22;
+        ctx.fillStyle = 'rgba(26,22,18,0.35)';
+        ctx.fillRect(bx - 36, by, 72, 5);
+        ctx.fillStyle = 'rgba(168,58,44,0.85)';
+        ctx.fillRect(bx - 36, by, 72 * prog, 5);
+        ctx.strokeStyle = 'rgba(26,22,18,0.65)';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(bx - 36, by, 72, 5);
+        ctx.fillStyle = `rgba(168,58,44,0.95)`;
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`REPAIRING ${remain.toFixed(1)}s`, bx, by - 4);
       }
       ctx.restore();
     }
@@ -12130,72 +12249,124 @@ const Renderer = {
   drawLighthouses(ctx, lights, t) {
     if (!lights?.length) return;
     for (const L of lights) {
-      // Rebuilding state: foundation footprint + countdown.
+      // ── REBUILDING: stone foundation + clear countdown + ghost outline ─
       if (L._rebuilding) {
         const prog = Math.min(1, L._rebuildAcc / L._rebuildTime);
+        const remain = Math.max(0, L._rebuildTime - L._rebuildAcc);
         ctx.save();
-        ctx.strokeStyle = `rgba(122,90,60,0.55)`;
+        // Foundation rubble (visible "we have a tower spot here")
+        ctx.fillStyle = `rgba(80,60,42,0.55)`;
+        ctx.beginPath(); ctx.arc(L.x, L.y, 12, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(20,14,8,0.75)`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Ghost outline of the tower so the player can see WHERE it's
+        // rebuilding (not just an empty spot).
+        ctx.strokeStyle = `rgba(122,90,60,${0.55})`;
         ctx.setLineDash([3, 3]);
         ctx.lineDashOffset = -t * 4;
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(L.x, L.y, 14, 0, TAU); ctx.stroke();
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(L.x - 7, L.y + 12); ctx.lineTo(L.x + 7, L.y + 12);
+        ctx.lineTo(L.x + 5, L.y - 8);  ctx.lineTo(L.x - 5, L.y - 8);
+        ctx.closePath(); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(26,22,18,0.30)';
-        ctx.fillRect(L.x - 22, L.y - 22, 44, 3);
-        ctx.fillStyle = 'rgba(184,76,28,0.85)';
-        ctx.fillRect(L.x - 22, L.y - 22, 44 * prog, 3);
-        ctx.fillStyle = 'rgba(26,22,18,0.75)';
-        ctx.font = 'bold 9px monospace';
+        // Countdown banner
+        const bx = L.x, by = L.y - 32;
+        ctx.fillStyle = 'rgba(26,22,18,0.35)';
+        ctx.fillRect(bx - 36, by, 72, 5);
+        ctx.fillStyle = 'rgba(184,76,28,0.90)';
+        ctx.fillRect(bx - 36, by, 72 * prog, 5);
+        ctx.strokeStyle = 'rgba(26,22,18,0.65)';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(bx - 36, by, 72, 5);
+        ctx.fillStyle = 'rgba(168,58,44,0.95)';
+        ctx.font = 'bold 11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('REBUILDING', L.x, L.y - 28);
+        ctx.fillText(`REBUILDING ${remain.toFixed(1)}s`, bx, by - 4);
         ctx.restore();
         continue;
       }
       const hpFrac = Math.max(0, L.hp / L.hpMax);
-      // Damage tint: more reddish as HP drops.
       const fade = Math.min(1, L.t / 0.2);
-      // Tower base
+      // Damage tint shifts the stone toward charred red as HP drops.
+      const baseR = 60 + (1 - hpFrac) * 50;
+      const baseG = 50;
+      const baseB = 40;
       ctx.save();
       ctx.translate(L.x, L.y);
-      ctx.fillStyle = hpFrac < 0.4
-        ? `rgba(90, 50, 36, ${0.85 * fade})`
-        : `rgba(60, 50, 40, ${0.85 * fade})`;
+      // ── Wide footing (so the tower reads as planted) ──────────────
+      ctx.fillStyle = `rgba(80,60,42,${0.75 * fade})`;
+      ctx.beginPath(); ctx.ellipse(0, 14, 10, 3, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = `rgba(20,14,8,${0.75 * fade})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      // ── Tower body (taller / thicker than before for visibility) ──
+      ctx.fillStyle = `rgba(${baseR | 0}, ${baseG | 0}, ${baseB | 0}, ${0.90 * fade})`;
       ctx.beginPath();
-      ctx.moveTo(-7, 12); ctx.lineTo(7, 12); ctx.lineTo(5, -8); ctx.lineTo(-5, -8); ctx.closePath();
+      ctx.moveTo(-8, 12); ctx.lineTo(8, 12); ctx.lineTo(6, -10); ctx.lineTo(-6, -10); ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = `rgba(20, 14, 8, ${0.85 * fade})`;
-      ctx.lineWidth = 1; ctx.stroke();
-      // Cracks at low HP
+      ctx.strokeStyle = `rgba(20, 14, 8, ${0.95 * fade})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      // Stone-block hatch
+      ctx.strokeStyle = `rgba(20, 14, 8, ${0.45 * fade})`;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(-7, 4); ctx.lineTo(7, 4);
+      ctx.moveTo(-6, -2); ctx.lineTo(6, -2);
+      ctx.moveTo(-6, -8); ctx.lineTo(6, -8);
+      ctx.stroke();
+      // Cracks at low HP — clearly visible damage state
       if (hpFrac < 0.5) {
-        ctx.strokeStyle = `rgba(20, 14, 8, ${0.65})`;
-        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = `rgba(20, 14, 8, ${0.85})`;
+        ctx.lineWidth = 0.8;
         ctx.beginPath();
         ctx.moveTo(-3, 12); ctx.lineTo(-1, -2);
         ctx.moveTo(2, 12);  ctx.lineTo(0, 4);
-        if (hpFrac < 0.25) { ctx.moveTo(-5, 0); ctx.lineTo(4, 6); }
+        if (hpFrac < 0.25) {
+          ctx.moveTo(-5, 0); ctx.lineTo(4, 6);
+          ctx.moveTo(-4, 10); ctx.lineTo(3, -6);
+        }
         ctx.stroke();
+        // Smoke wisps when very low
+        if (hpFrac < 0.25) {
+          for (let k = 0; k < 3; k++) {
+            const sx = -3 + k * 3 + Math.sin(t * 2 + k) * 1;
+            const sy = -12 - k * 2 - (t * 6 % 8);
+            ctx.fillStyle = `rgba(80,60,40,${0.35 - k * 0.10})`;
+            ctx.beginPath(); ctx.arc(sx, sy, 2, 0, TAU); ctx.fill();
+          }
+        }
       }
-      // Lamp top
+      // Lamp dome
       ctx.fillStyle = `rgba(255, 224, 120, ${0.95 * fade})`;
-      ctx.beginPath(); ctx.arc(0, -10, 5, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -12, 6, 0, TAU); ctx.fill();
       ctx.strokeStyle = `rgba(180, 130, 40, ${0.95 * fade})`;
-      ctx.lineWidth = 1; ctx.stroke();
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      // Lamp hot core
+      ctx.fillStyle = `rgba(255, 243, 200, ${0.95 * fade})`;
+      ctx.beginPath(); ctx.arc(0, -12, 2.5, 0, TAU); ctx.fill();
       ctx.restore();
-      // HP bar above lamp.
-      const bx = L.x, by = L.y - 24;
-      ctx.fillStyle = `rgba(26,22,18,0.35)`;
-      ctx.fillRect(bx - 18, by, 36, 3);
+
+      // ── HP bar above lamp — wider so it's readable at a glance ──
+      const bx = L.x, by = L.y - 28;
+      ctx.fillStyle = `rgba(26,22,18,0.40)`;
+      ctx.fillRect(bx - 24, by, 48, 4);
       ctx.fillStyle = hpFrac > 0.5
         ? `rgba(232,184,64,0.92)`
         : (hpFrac > 0.25 ? `rgba(216,124,40,0.92)` : `rgba(184,58,44,0.92)`);
-      ctx.fillRect(bx - 18, by, 36 * hpFrac, 3);
-      // Taunt aura indicator (very faint dashed circle, only render when
-      // alive and not Beacon-restricted; otherwise board reads noisy).
-      if (!L.beacon && L.tauntRange > 0) {
-        ctx.strokeStyle = `rgba(232,184,64,0.10)`;
+      ctx.fillRect(bx - 24, by, 48 * hpFrac, 4);
+      ctx.strokeStyle = `rgba(26,22,18,0.65)`;
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(bx - 24, by, 48, 4);
+      // Taunt aura — gold dashed ring (clearer than before)
+      if (L.tauntRange > 0) {
+        ctx.strokeStyle = `rgba(232,184,64,${L.beacon ? 0.08 : 0.16})`;
         ctx.setLineDash([4, 6]);
         ctx.lineDashOffset = -t * 4;
-        ctx.lineWidth = 0.8;
+        ctx.lineWidth = 0.9;
         ctx.beginPath(); ctx.arc(L.x, L.y, L.tauntRange, 0, TAU); ctx.stroke();
         ctx.setLineDash([]);
       }

@@ -87,16 +87,21 @@ renders as the vermilion spawn band's dashed threshold line + chevrons
 
 All ported from `.codex_design/project/art-lab-v3.js` (unless noted).
 
-- [x] **Snow Fort** — hex with paper-fill + indigo hatch + dashed
-      indigo inner wall + diamond crystal posts at vertices.
-      Recharging shows REFORMING arc. (2026-05: rim is now a 30u
-      gradient slow zone — no separate render layer yet, but the
-      crystal posts visually anchor "the wall is here".)
-- [x] **Firewall** — charred body (ink line) under a hot ember-yellow
-      core + flame tongues perpendicular toward enemy side + ground
-      glow wash + fuel bar above midpoint with REKINDLING countdown.
-      Bonfire spec swaps line for ring around the player. Placeholder-
-      grade right now — open for an art-lab handoff. *(2026-05, new T2.)*
+- [x] **Snow Fort** — thick ink hex walls (3px stroke) + paper-fill +
+      indigo hatch + dashed indigo inner wall + GOLD EDGE TILES per hex
+      side (one HP segment each, dim/redden as HP drops) + diamond
+      crystal posts at vertices (smaller + greyed for "down" sides) +
+      indigo→red shift on broken posts + ice cracks at <66% HP +
+      centred REFORMING countdown with progress bar when broken.
+      *(2026-05 visual pass: clear intact/broken state at a glance.)*
+- [x] **Firewall** — hexagonal palisade of flame around player:
+      charred ring + ember-yellow inner core + 6 large flame towers at
+      hex vertices + ~28 small flame tongues all around perimeter +
+      radial ground scorch wash inside the ring + FUEL/REKINDLING
+      banner above player with colour-shifting bar (gold→amber→red).
+      Extinguished state shows ash ring + charred post stumps + dashed
+      outline so the player can still see where the wall WILL be.
+      *(2026-05, new T2.)*
 - [~] **Fire Shield / Shock Tower / Gravital Anomalies** — RETIRED in
       the T2 rebuild (2026-05). Renderers still exist but their entity
       arrays are always empty in new runs.
@@ -147,18 +152,25 @@ All ported from `.codex_design/project/art-lab-v3.js` (unless noted).
 - [x] **Blinding Flash** — true white-out: full-canvas paper wash
       drawn outside camera-shake + 3 staggered radial blind-rings +
       8-ray gold star.
-- [x] **Mirror Wall** — silver lozenge mirrors (32×8) with ink frame,
-      paper highlight strip, and crack overlay at low HP; HP pip
-      above each mirror; dashed confuse-aura halos around live
-      mirrors; shattered-X markers + countdown bar during recharge.
-      Placeholder-grade; open for art-lab handoff. *(2026-05, new T2.)*
+- [x] **Mirror Wall** — 4 (or 8 w/ Hall of Mirrors) standing mirrors
+      arrayed at fixed compass points around the player: bigger silver
+      panes (44×12) + paper-disc plinths (the mirror stands UP, not
+      floating) + ink frame + corner nubs + diagonal sheen + cracks
+      progressive at <66% / <33% HP + HP bar above each mirror (gold→
+      amber→red); broken mirrors leave glass-shard footprints with red
+      X overlay; centred REPAIRING countdown over the player when all
+      down; Optical Wall spec draws a fused silver octagon connecting
+      live mirrors. *(2026-05 visual pass: surround layout + clear
+      damage state.)*
 - [~] **Reflective Aegis / Solar Halo / Lens Array** — RETIRED in the
       T2 rebuild (2026-05). Renderers still exist but their entity
       arrays are always empty in new runs.
-- [x] **Lighthouse** — arc-bounded wedge (top-down) with linear
-      gradient along aim axis + pulsing centerline + lamp pip; tower
-      now has HP bar above lamp + crack lines at low HP, dashed
-      taunt-aura ring, REBUILDING countdown when destroyed. *(2026-05.)*
+- [x] **Lighthouse** — beefier stone tower (-10/+12 body, footing
+      ellipse, block-hatch lines), arc-bounded beam wedge, lamp dome
+      with hot core, HP bar above lamp (gold→amber→red with frame),
+      cracks at <50% HP, smoke wisps at <25% HP, dashed taunt-aura
+      ring, REBUILDING banner with progress bar + ghost outline of
+      tower at the rebuild spot. *(2026-05.)*
 - [x] **Solar Eclipse** — disc alpha + rim alpha/width + dash flow
       speed all bind to ramp; white-hot crescent at ramp > 0.7.
 - [x] **Mirror Maze** — beams shifted to warm yellow; nodes as 4×4
