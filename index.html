@@ -2154,12 +2154,21 @@
     flex-direction: column;
     gap: 6px;
   }
+  /* New 2026-05 layout — values-first dump row.
+   *   Row 1: NAME | + button | LEVEL/MAX | CURRENT → NEXT
+   *   Row 2: italic terse desc (one line, ≤ 6 words)
+   * The arrow uses vermilion for WCAG-AA contrast on parchment. */
   .lu-dump-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .lu-dump-line {
     display: grid;
-    grid-template-columns: 110px 140px 1fr;
+    grid-template-columns: 130px 32px 44px 1fr;
     align-items: center;
     gap: 10px;
-    padding: 4px 0;
   }
   .lu-dump-name {
     font-family: 'JetBrains Mono', monospace;
@@ -2168,63 +2177,69 @@
     color: var(--ink);
     text-transform: uppercase;
   }
-  .lu-dump-pips {
-    display: flex;
-    gap: 6px;
-  }
-  .lu-pip {
-    width: 18px; height: 18px;
-    border: 1px solid rgba(29,21,12,0.55);
-    background: rgba(255,255,255,0.25);
-    border-radius: 50%;
-    transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
-  }
-  .lu-pip.filled {
-    background: var(--accent, var(--vermilion));
-    border-color: var(--ink);
-    box-shadow: inset 0 1px 0 rgba(255, 220, 200, 0.35), 0 1px 0 rgba(29, 21, 12, 0.4);
-    animation: pipPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  }
-  @keyframes pipPop {
-    from { transform: scale(0.55); opacity: 0.4; }
-    to   { transform: scale(1);    opacity: 1; }
-  }
-  .lu-pip.clickable {
+  .lu-dump-btn {
+    width: 26px; height: 26px;
+    border: 1px solid var(--ink);
+    background: var(--paper-soft, #f4e9cb);
+    color: var(--ink);
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1;
     cursor: pointer;
-    border-color: var(--ink);
-    box-shadow: 0 0 0 2px rgba(204, 168, 95, 0.35);
+    border-radius: 4px;
+    box-shadow: 0 2px 0 rgba(29,21,12,0.30);
+    transition: transform 0.10s ease, background 0.10s ease, box-shadow 0.10s ease;
+    padding: 0;
   }
-  .lu-pip.clickable:hover {
-    transform: translateY(-1px) scale(1.05);
-    background: rgba(204, 168, 95, 0.4);
+  .lu-dump-btn:hover {
+    background: rgba(204, 168, 95, 0.35);
+    transform: translateY(-1px);
   }
-  .lu-dump-desc {
-    font-family: 'Spectral', serif;
-    font-size: 12px;
+  .lu-dump-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(29,21,12,0.30); }
+  .lu-dump-btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.35;
+    box-shadow: 0 1px 0 rgba(29,21,12,0.15);
+  }
+  .lu-dump-btn[data-state="max"] {
+    background: var(--vermilion-deep, #7a1d18);
+    color: var(--paper, #f4e9cb);
+    cursor: default;
+  }
+  .lu-dump-level {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
     color: var(--ink-mid);
-    line-height: 1.35;
+    letter-spacing: 0.06em;
+    text-align: left;
   }
   .lu-dump-progress {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
-    margin-top: 3px;
-    color: var(--ink-mid);
-    letter-spacing: 0.02em;
-  }
-  .lu-dump-progress b {
+    font-size: 11.5px;
     color: var(--ink);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .lu-dump-now b { color: var(--ink); }
-  /* Vermilion for the "+1pt → X" preview gives WCAG-AA contrast on the
-   * paper background; the previous gold-on-paper was ~2.6:1 (failing)
-   * and per-spell accent colors were even worse (#bce8ff = ~1.2:1). */
-  .lu-dump-next b { color: var(--vermilion); }
-  .lu-dump-max {
+  .lu-dump-progress .arrow { color: var(--vermilion); padding: 0 4px; font-weight: 700; }
+  .lu-dump-progress .unit  { color: var(--ink-mid); padding-left: 4px; }
+  .lu-dump-progress .max   {
     font-family: 'Cinzel', serif;
     font-size: 10px;
     letter-spacing: 0.16em;
     color: var(--vermilion-deep, #7a1d18);
     text-transform: uppercase;
+    padding-left: 6px;
+  }
+  .lu-dump-desc {
+    font-family: 'Spectral', serif;
+    font-size: 12px;
+    color: var(--ink-mid);
+    font-style: italic;
+    line-height: 1.3;
+    padding-left: 130px;     /* align under the name column */
   }
 
   .lu-spec-wrap {
@@ -3192,10 +3207,9 @@ const ABILITIES = {
     cooldown: 1.5, damage: 24, radius: 80,
     cast: (game, caster, mods) => SPELLS.fireball.cast(game, caster, mods),
     dumps: [
-      { id: 'heat',    name: 'Heat',       desc: '+12% Fireball damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'split',   name: 'Splitfire',  desc: '+20% chance on impact to spawn 2 child fireballs at 50% dmg.',
-                                                                                    stat: 'splitChance', perPoint: 0.20 },
-      { id: 'quick',   name: 'Quick Cast', desc: '−5% cooldown per point.',         stat: 'cdMult',     perPoint: -0.05 },
+      { id: 'heat',    name: 'Heat',       desc: 'Hotter impact.', stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'split',   name: 'Splitfire',  desc: 'Chance to split into 2 children on impact.', stat: 'splitChance', perPoint: 0.20 },
+      { id: 'quick',   name: 'Quick Cast', desc: 'Faster cooldown.', stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
       { id: 'ignite',  name: 'Ignite',
@@ -3218,9 +3232,9 @@ const ABILITIES = {
     cooldown: 0.9, damage: 22,
     cast: (game, caster, mods) => SPELLS.lightning_bolt.cast(game, caster, mods),
     dumps: [
-      { id: 'voltage',  name: 'Voltage',  desc: '+12% damage per point.',                  stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'forking',  name: 'Forking',  desc: '+1 chain target per point (max +5).',     stat: 'chainBonus', perPoint: 1.0 },
-      { id: 'quick',    name: 'Quickdraw', desc: '−5% cooldown per point.',                stat: 'cdMult',     perPoint: -0.05 },
+      { id: 'voltage',  name: 'Voltage',  desc: 'Sharper bolts.',          stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'forking',  name: 'Forking',  desc: 'More chain targets.',     stat: 'chainBonus', perPoint: 1.0 },
+      { id: 'quick',    name: 'Quickdraw', desc: 'Faster cooldown.',       stat: 'cdMult',     perPoint: -0.05 },
     ],
     specs: [
       { id: 'pinpoint', name: 'Pinpoint',
@@ -3243,10 +3257,9 @@ const ABILITIES = {
     cooldown: 1.7, damage: 36, damageNote: 'dps', radius: 80, duration: 1.4,
     cast: (game, caster, mods) => SPELLS.gravity_bolt.cast(game, caster, mods),
     dumps: [
-      { id: 'crush',  name: 'Crushing Force', desc: '+12% damage per point.',  stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'wider',  name: 'Wider Pull',     desc: '+8% radius per point.',   stat: 'radiusMult', perPoint: 0.08 },
-      { id: 'siphon', name: 'Void Siphon',    desc: 'Each enemy that dies in the well heals you (+0.4 HP / kill).',
-                                                                                stat: 'lifesteal',  perPoint: 0.4 },
+      { id: 'crush',  name: 'Crushing Force', desc: 'Heavier pull damage.',  stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'wider',  name: 'Wider Pull',     desc: 'Larger well.',          stat: 'radiusMult', perPoint: 0.08 },
+      { id: 'siphon', name: 'Void Siphon',    desc: 'Heals on kills inside the well.', stat: 'lifesteal',  perPoint: 0.4 },
     ],
     specs: [
       { id: 'annihilation', name: 'Annihilation',
@@ -3269,10 +3282,9 @@ const ABILITIES = {
     cooldown: 1.0, damage: 16,
     cast: (game, caster, mods) => SPELLS.frost_spike.cast(game, caster, mods),
     dumps: [
-      { id: 'cold',   name: 'Cold Bite',  desc: '+12% damage per point.',              stat: 'dmgMult',     perPoint: 0.12 },
-      { id: 'pierce', name: 'Multi-Spike', desc: '+1 pierce per point (max +5).',      stat: 'pierceBonus', perPoint: 1.0 },
-      { id: 'cull',   name: 'Cold-Blooded', desc: '+10% damage per point against slowed or frozen enemies.',
-                                                                                       stat: 'chillExecute', perPoint: 0.10 },
+      { id: 'cold',   name: 'Cold Bite',   desc: 'Sharper bolts.',                    stat: 'dmgMult',     perPoint: 0.12 },
+      { id: 'pierce', name: 'Multi-Spike', desc: 'More pierces.',                     stat: 'pierceBonus', perPoint: 1.0 },
+      { id: 'cull',   name: 'Cold-Blooded', desc: 'Bonus damage vs slowed or frozen.', stat: 'chillExecute', perPoint: 0.10 },
     ],
     specs: [
       { id: 'glacial',  name: 'Glacial',
@@ -3328,9 +3340,9 @@ const ABILITIES = {
       game.addShake(0.08);
     },
     dumps: [
-      { id: 'fortify', name: 'Fortify',     desc: '+20 wall HP and +10% chip damage per dump.', stat: 'shieldHpPair', perPoint: 20 },
-      { id: 'wider',   name: 'Wider Rim',   desc: '+12u chill-rim distance per dump.',           stat: 'rimBonus',     perPoint: 12 },
-      { id: 'longer',  name: 'Quick Reform', desc: '−1.0s recharge per dump (floor 3s).',        stat: 'rechargeReduce', perPoint: 1.0, invertedDuration: true, base: 8 },
+      { id: 'fortify', name: 'Fortify',     desc: 'Tougher walls and stronger chip.', stat: 'shieldHpPair', perPoint: 20 },
+      { id: 'wider',   name: 'Wider Rim',   desc: 'Wider chill aura.',                stat: 'rimBonus',     perPoint: 12 },
+      { id: 'longer',  name: 'Quick Reform', desc: 'Faster recharge.',                stat: 'rechargeReduce', perPoint: 1.0, invertedDuration: true, base: 8 },
     ],
     specs: [
       { id: 'permafrost', name: 'Permafrost',
@@ -3375,11 +3387,11 @@ const ABILITIES = {
       game.addShake(0.10);
     },
     dumps: [
-      { id: 'forge',    name: 'Forge',     desc: '+25 shield HP and +10% perimeter damage per dump.',
+      { id: 'forge',    name: 'Forge',     desc: 'Tougher walls and hotter burn.',
                                             stat: 'firewallForge',    perPoint: 25 },
-      { id: 'wider',    name: 'Wider Ring', desc: '+12% palisade radius per dump.',
+      { id: 'wider',    name: 'Wider Ring', desc: 'Larger palisade.',
                                             stat: 'firewallLength',   perPoint: 0.12 },
-      { id: 'rekindle', name: 'Rekindle',  desc: '−0.6s recharge time per dump (floor 3s).',
+      { id: 'rekindle', name: 'Rekindle',  desc: 'Faster recharge.',
                                             stat: 'firewallRekindle', perPoint: 0.6, invertedDuration: true, base: 8 },
     ],
     specs: [
@@ -3411,9 +3423,9 @@ const ABILITIES = {
     cooldown: 14.0, damage: 14, damageNote: '/strike', radius: 100, duration: 5.5,
     cast: (game, caster, mods) => SPELLS.storm_cloud.cast(game, caster, mods),
     dumps: [
-      { id: 'voltage',  name: 'Voltage',   desc: '+14% strike damage per point.', stat: 'dmgMult',     perPoint: 0.14 },
-      { id: 'wider',    name: 'Stormfront', desc: '+10% radius per point.',       stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'longer',   name: 'Lingering', desc: '+12% duration per point.',     stat: 'durationMult', perPoint: 0.12 },
+      { id: 'voltage',  name: 'Voltage',   desc: 'Heavier strikes.',  stat: 'dmgMult',     perPoint: 0.14 },
+      { id: 'wider',    name: 'Stormfront', desc: 'Larger cloud.',     stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'longer',   name: 'Lingering', desc: 'Cloud lasts longer.', stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'hurricane', name: 'Hurricane',
@@ -3447,9 +3459,9 @@ const ABILITIES = {
       }));
     },
     dumps: [
-      { id: 'damage',  name: 'Spatial Tear', desc: '+14% damage per point.',    stat: 'dmgMult',     perPoint: 0.14 },
-      { id: 'mouth',   name: 'Wider Mouth',  desc: '+10% radius per point.',    stat: 'radiusMult',   perPoint: 0.10 },
-      { id: 'longer',  name: 'Stable Tear',  desc: '+12% duration per point.',  stat: 'durationMult', perPoint: 0.12 },
+      { id: 'damage',  name: 'Spatial Tear', desc: 'Heavier transit damage.', stat: 'dmgMult',     perPoint: 0.14 },
+      { id: 'mouth',   name: 'Wider Mouth',  desc: 'Larger portal mouth.',    stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'longer',  name: 'Stable Tear',  desc: 'Portals last longer.',    stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'singularity', name: 'Singularity',
@@ -3512,9 +3524,9 @@ const ABILITIES = {
       }
     },
     dumps: [
-      { id: 'mass',    name: 'Mass',     desc: '+16% damage per point.',  stat: 'dmgMult',     perPoint: 0.16 },
-      { id: 'crater',  name: 'Crater',   desc: '+10% radius per point.',  stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'cycle',   name: 'Cycle',    desc: '−6% cooldown per point.', stat: 'cdMult',      perPoint: -0.06 },
+      { id: 'mass',    name: 'Mass',     desc: 'Heavier impact.',   stat: 'dmgMult',     perPoint: 0.16 },
+      { id: 'crater',  name: 'Crater',   desc: 'Wider crater.',     stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'cycle',   name: 'Cycle',    desc: 'Faster cooldown.',  stat: 'cdMult',      perPoint: -0.06 },
     ],
     specs: [
       { id: 'cosmic_storm', name: 'Cosmic Storm',
@@ -3552,9 +3564,9 @@ const ABILITIES = {
       game.addShake(0.20);
     },
     dumps: [
-      { id: 'cold',    name: 'Cold Front', desc: '+13% damage per point.',    stat: 'dmgMult',      perPoint: 0.13 },
-      { id: 'wider',   name: 'Wider',      desc: '+8% radius per point.',     stat: 'radiusMult',   perPoint: 0.08 },
-      { id: 'longer',  name: 'Lingering',  desc: '+12% duration per point.',  stat: 'durationMult', perPoint: 0.12 },
+      { id: 'cold',    name: 'Cold Front', desc: 'Sharper tick damage.', stat: 'dmgMult',      perPoint: 0.13 },
+      { id: 'wider',   name: 'Wider',      desc: 'Larger blizzard.',     stat: 'radiusMult',   perPoint: 0.08 },
+      { id: 'longer',  name: 'Lingering',  desc: 'Storm lasts longer.',  stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'ice_age',     name: 'Ice Age',
@@ -3632,10 +3644,9 @@ const ABILITIES = {
       });
     },
     dumps: [
-      { id: 'heat',    name: 'Heat',    desc: '+12% damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'spread',  name: 'Spread',  desc: '+10% beam reach per point.', stat: 'radiusMult', perPoint: 0.10 },
-      { id: 'refract', name: 'Refraction', desc: '+0.5 extra beams per point (rounds down: 0/1/1/2/2).',
-                                          stat: 'refractBeams', perPoint: 0.5 },
+      { id: 'heat',    name: 'Heat',    desc: 'Brighter burst.',        stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'spread',  name: 'Spread',  desc: 'Longer beam reach.',     stat: 'radiusMult', perPoint: 0.10 },
+      { id: 'refract', name: 'Refraction', desc: 'More refracted beams.', stat: 'refractBeams', perPoint: 0.5 },
     ],
     specs: [
       { id: 'spectrum',    name: 'Spectrum',
@@ -3658,11 +3669,11 @@ const ABILITIES = {
     cooldown: 0.5, damage: 32, damageNote: 'dps',
     cast: (game, caster, mods) => SPELLS.focused_beam.cast(game, caster, mods),
     dumps: [
-      { id: 'concentrate', name: 'Concentrate', desc: '+12% beam DPS per dump (applies through the whole ramp).',
+      { id: 'concentrate', name: 'Concentrate', desc: 'Increases damage.',
         stat: 'dmgMult', perPoint: 0.12, ramps: { start: 0.3, end: 2.0 } },
-      { id: 'snap',        name: 'Snap Focus',  desc: '−10% time to peak per dump — the ramp climbs faster, so chunkier hits arrive sooner.',
+      { id: 'snap',        name: 'Snap Focus',  desc: 'Faster ramp to peak.',
         stat: 'beamSnap', perPoint: 0.10 },
-      { id: 'wide_lens',   name: 'Wide Lens',   desc: '+1 grace re-target per dump (when a target dies, the next pick keeps most of the ramp — −0.4s instead of full reset). Max +5.',
+      { id: 'wide_lens',   name: 'Wide Lens',   desc: 'Keeps most of the ramp when a target dies.',
         stat: 'beamGrace', perPoint: 1.0 },
     ],
     specs: [
@@ -3704,9 +3715,9 @@ const ABILITIES = {
       game.spawnExplosion(target.x, target.y, 24, '#ffd66a');
     },
     dumps: [
-      { id: 'heat',    name: 'Heat',    stat: 'dmgMult',     perPoint: 0.12, ramps: { start: 0.5, end: 1.5 } },
-      { id: 'wider',   name: 'Wider',   desc: '+8% radius per point.',   stat: 'radiusMult',  perPoint: 0.08 },
-      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+      { id: 'heat',    name: 'Heat',    desc: 'Increases damage.', stat: 'dmgMult',     perPoint: 0.12, ramps: { start: 0.5, end: 1.5 } },
+      { id: 'wider',   name: 'Wider',   desc: 'Larger lens.',      stat: 'radiusMult',  perPoint: 0.08 },
+      { id: 'lasting', name: 'Lasting', desc: 'Lens lasts longer.', stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'greenhouse',  name: 'Greenhouse',
@@ -3771,9 +3782,9 @@ const ABILITIES = {
       }
     },
     dumps: [
-      { id: 'cold_light', name: 'Cold Light', desc: '+12% damage per point.', stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'pierce',     name: 'Pierce',     desc: '+1 pierce per point (max +5).', stat: 'pierceBonus', perPoint: 1.0 },
-      { id: 'quick',      name: 'Quick',      desc: '−5% cooldown per point.', stat: 'cdMult',    perPoint: -0.05 },
+      { id: 'cold_light', name: 'Cold Light', desc: 'Sharper beam.',    stat: 'dmgMult',    perPoint: 0.12 },
+      { id: 'pierce',     name: 'Pierce',     desc: 'More pierces.',    stat: 'pierceBonus', perPoint: 1.0 },
+      { id: 'quick',      name: 'Quick',      desc: 'Faster cooldown.', stat: 'cdMult',    perPoint: -0.05 },
     ],
     specs: [
       { id: 'bouncing',     name: 'Bouncing',
@@ -3831,11 +3842,11 @@ const ABILITIES = {
       game.spawnExplosion(caster.x, caster.y, standoff * 0.5, '#dcecff');
     },
     dumps: [
-      { id: 'polish',    name: 'Polish',    desc: '+30 shield HP and +10% reflect per dump.',
+      { id: 'polish',    name: 'Polish',    desc: 'Tougher shield and stronger reflect.',
                                             stat: 'mirrorPolishHp', perPoint: 30 },
-      { id: 'pane',      name: 'Wider Pane', desc: '+12u confuse-aura radius per dump.',
+      { id: 'pane',      name: 'Wider Pane', desc: 'Wider confuse aura.',
                                             stat: 'mirrorAuraBonus', perPoint: 12 },
-      { id: 'realign',   name: 'Realign',   desc: '−1.0s array recharge per dump (floor 4s).',
+      { id: 'realign',   name: 'Realign',   desc: 'Faster recharge.',
                                             stat: 'mirrorRealign',  perPoint: 1.0, invertedDuration: true, base: 10 },
     ],
     specs: [
@@ -3910,11 +3921,11 @@ const ABILITIES = {
       game.addShake(0.10);
     },
     dumps: [
-      { id: 'reinforce', name: 'Reinforce', desc: '+30 shield HP and +13% beam damage per dump.',
+      { id: 'reinforce', name: 'Reinforce', desc: 'Tougher shield and brighter beams.',
                                             stat: 'towerReinforce', perPoint: 30 },
-      { id: 'reach',     name: 'Reach',     desc: '+10% beam range per dump.',
+      { id: 'reach',     name: 'Reach',     desc: 'Longer beam range.',
                                             stat: 'radiusMult',     perPoint: 0.10 },
-      { id: 'tempo',     name: 'Tempo',     desc: '+12% beam tick rate per dump.',
+      { id: 'tempo',     name: 'Tempo',     desc: 'Faster beam ticks.',
                                             stat: 'attackRateMult', perPoint: 0.12 },
     ],
     specs: [
@@ -3962,9 +3973,9 @@ const ABILITIES = {
       game.addShake(0.30);
     },
     dumps: [
-      { id: 'heat',    name: 'Heat',    stat: 'dmgMult',      perPoint: 0.14, ramps: { start: 0.5, end: 2.0 } },
-      { id: 'wider',   name: 'Wider',   desc: '+10% radius per point.',  stat: 'radiusMult',   perPoint: 0.10 },
-      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+      { id: 'heat',    name: 'Heat',    desc: 'Increases damage.', stat: 'dmgMult',      perPoint: 0.14, ramps: { start: 0.5, end: 2.0 } },
+      { id: 'wider',   name: 'Wider',   desc: 'Larger eclipse.',   stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'lasting', name: 'Lasting', desc: 'Eclipse lasts longer.', stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'total_eclipse', name: 'Total Eclipse',
@@ -4005,9 +4016,9 @@ const ABILITIES = {
       game.spawnExplosion(caster.x, caster.y, 60, '#dcecff');
     },
     dumps: [
-      { id: 'polish',  name: 'Polish',  desc: '+14% beam damage per point.', stat: 'dmgMult',      perPoint: 0.14 },
-      { id: 'lattice', name: 'Lattice', desc: '+10% mirror spacing per point.', stat: 'radiusMult',  perPoint: 0.10 },
-      { id: 'lasting', name: 'Lasting', desc: '+12% duration per point.', stat: 'durationMult', perPoint: 0.12 },
+      { id: 'polish',  name: 'Polish',  desc: 'Sharper beams.',    stat: 'dmgMult',      perPoint: 0.14 },
+      { id: 'lattice', name: 'Lattice', desc: 'Wider lattice.',    stat: 'radiusMult',  perPoint: 0.10 },
+      { id: 'lasting', name: 'Lasting', desc: 'Maze lasts longer.', stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'hexagonal_cage', name: 'Hexagonal Cage',
@@ -4046,9 +4057,9 @@ const ABILITIES = {
       });
     },
     dumps: [
-      { id: 'mass',   name: 'Mass',   desc: '+16% damage per point.', stat: 'dmgMult',     perPoint: 0.16 },
-      { id: 'crater', name: 'Crater', desc: '+10% impact radius per point.', stat: 'radiusMult', perPoint: 0.10 },
-      { id: 'cycle',  name: 'Cycle',  desc: '−6% cooldown per point.', stat: 'cdMult',     perPoint: -0.06 },
+      { id: 'mass',   name: 'Mass',   desc: 'Heavier impact.',  stat: 'dmgMult',     perPoint: 0.16 },
+      { id: 'crater', name: 'Crater', desc: 'Wider crater.',    stat: 'radiusMult', perPoint: 0.10 },
+      { id: 'cycle',  name: 'Cycle',  desc: 'Faster cooldown.', stat: 'cdMult',     perPoint: -0.06 },
     ],
     specs: [
       { id: 'collateral',    name: 'Collateral',
@@ -4103,9 +4114,9 @@ const ABILITIES = {
       Camera.shake('medium');  // per handoff: medium once at age 0
     },
     dumps: [
-      { id: 'brightness', name: 'Brightness', desc: '+14% damage per point.', stat: 'dmgMult',      perPoint: 0.14 },
-      { id: 'wider',      name: 'Wider',      desc: '+10% radius per point.', stat: 'radiusMult',   perPoint: 0.10 },
-      { id: 'glare',      name: 'Glare',      desc: '+12% blind duration per point.', stat: 'durationMult', perPoint: 0.12 },
+      { id: 'brightness', name: 'Brightness', desc: 'Sharper flash.',         stat: 'dmgMult',      perPoint: 0.14 },
+      { id: 'wider',      name: 'Wider',      desc: 'Larger flash.',          stat: 'radiusMult',   perPoint: 0.10 },
+      { id: 'glare',      name: 'Glare',      desc: 'Longer blind.',          stat: 'durationMult', perPoint: 0.12 },
     ],
     specs: [
       { id: 'searing_flash',   name: 'Searing Flash',
@@ -4358,9 +4369,9 @@ const MINIONS = {
     description: 'Threads 3 nearby enemies together. Damage bleeds to all linked at 20% share. Range 240px. Relinks every 1.5s.',
     flavor: 'utility · damage redirection',
     dumps: [
-      { id: 'share', name: 'Bleedover', stat: 'shareBonus',     perPoint: 0.15, base: 0.20 },
-      { id: 'reach', name: 'Reach',     stat: 'rangeMult',      perPoint: 0.25, base: 240 },
-      { id: 'count', name: 'Web',       stat: 'linkCountBonus', perPoint: 1.0,  base: 3   },
+      { id: 'share', name: 'Bleedover', desc: 'Larger damage share.',   stat: 'shareBonus',     perPoint: 0.15, base: 0.20 },
+      { id: 'reach', name: 'Reach',     desc: 'Wider thread reach.',    stat: 'rangeMult',      perPoint: 0.25, base: 240 },
+      { id: 'count', name: 'Web',       desc: 'Threads more enemies.',  stat: 'linkCountBonus', perPoint: 1.0,  base: 3   },
     ],
     specs: [
       { id: 'echo',     name: 'Echo',     desc: 'Linked enemies slow for 0.7s when struck.',
@@ -4383,8 +4394,8 @@ const MINIONS = {
     description: '120 HP decoy. Enemies within 260px target it instead of you. On death: AoE explosion, then respawns in 6s.',
     flavor: 'utility · taunt',
     dumps: [
-      { id: 'sturdy',   name: 'Sturdy',   stat: 'hpBonus',  perPoint: 50,   base: 120 },
-      { id: 'volatile', name: 'Volatile', stat: 'boomMult', perPoint: 0.35, base: 60  },
+      { id: 'sturdy',   name: 'Sturdy',   desc: 'Tougher decoy.',     stat: 'hpBonus',  perPoint: 50,   base: 120 },
+      { id: 'volatile', name: 'Volatile', desc: 'Bigger explosion.',  stat: 'boomMult', perPoint: 0.35, base: 60  },
     ],
     specs: [
       { id: 'iron_effigy', name: 'Iron Effigy',
@@ -4414,8 +4425,8 @@ const MINIONS = {
     description: 'Hovers at your shoulder and heals you. 6 HP every 5s. Resurgence spec saves you from death once per run.',
     flavor: 'utility · healing',
     dumps: [
-      { id: 'flow',  name: 'Healing Flow', stat: 'healBonus',   perPoint: 3,   base: 6 },
-      { id: 'tempo', name: 'Tempo',        stat: 'pulseFaster', perPoint: 0.5, base: 5 },
+      { id: 'flow',  name: 'Healing Flow', desc: 'Heals harder.',    stat: 'healBonus',   perPoint: 3,   base: 6 },
+      { id: 'tempo', name: 'Tempo',        desc: 'Heals faster.',    stat: 'pulseFaster', perPoint: 0.5, base: 5 },
     ],
     specs: [
       { id: 'cleanse',   name: 'Cleansing Pulse',
@@ -4440,8 +4451,8 @@ const MINIONS = {
     description: 'Cycles auras every 2s: Vigor (+15% dmg), Ward (−15% dmg taken), Haste (−15% cd). Aura applies to you in range.',
     flavor: 'utility · cycling auras',
     dumps: [
-      { id: 'might', name: 'Might', stat: 'auraStrengthBonus', perPoint: 0.05, base: 0.12 },
-      { id: 'reach', name: 'Reach', stat: 'auraRangeMult',     perPoint: 0.20, base: 60   },
+      { id: 'might', name: 'Might', desc: 'Stronger auras.',  stat: 'auraStrengthBonus', perPoint: 0.05, base: 0.12 },
+      { id: 'reach', name: 'Reach', desc: 'Wider aura.',      stat: 'auraRangeMult',     perPoint: 0.20, base: 60   },
     ],
     specs: [
       { id: 'triple_time', name: 'Triple Time',
@@ -13637,7 +13648,18 @@ function formatDumpAt(dump, ab, pts) {
       break;
     }
     case 'dmgMult':
-      if (ab && ab.damage) return `${Math.round(ab.damage * (1 + total))} ${ab.damageNote || 'dmg'}`;
+      if (ab && ab.damage) {
+        const unit = ab.damageNote || 'dmg';
+        // Ramping stats (Focused Beam Concentrate, Burning Lens Heat,
+        // Solar Eclipse Heat) read min/max from dump.ramps. Single number
+        // would hide the floor/ceiling; show the band.
+        if (dump.ramps) {
+          const lo = Math.round(ab.damage * (1 + total) * dump.ramps.start);
+          const hi = Math.round(ab.damage * (1 + total) * dump.ramps.end);
+          return `${lo}-${hi} ${unit}`;
+        }
+        return `${Math.round(ab.damage * (1 + total))} ${unit}`;
+      }
       break;
     // Stats with a per-dump base (no ability stat block to lean on)
     case 'shareBonus':
@@ -14038,36 +14060,43 @@ const UI = {
           ${abBaseStats ? `<div class="lu-base-stats" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-mid);margin-top:2px;">${abBaseStats}</div>` : ''}
         </div>
       `;
-      // Three dump rows
+      // Three dump rows — values-first layout
+      //   Row 1: NAME | + button | LEVEL/MAX | CURRENT → NEXT
+      //   Row 2: italic terse desc
       const dumpsEl = document.createElement('div');
       dumpsEl.className = 'lu-dumps';
+      const MAX_DUMP = 5;
       for (let i = 0; i < ab.dumps.length; i++) {
         const dump = ab.dumps[i];
         const filled = pts.dumps[i] || 0;
-        const progress = (filled === 0)
-          ? `<span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, ab, 1)}</b></span>`
-          : (filled >= 5
-            ? `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, ab, filled)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
-            : `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, ab, filled)}</b></span> &middot; <span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, ab, filled + 1)}</b></span>`);
+        const atMax = filled >= MAX_DUMP;
+        const canInvest = (ps.unspentPoints || 0) > 0 && !atMax;
+        // Compose CURRENT → NEXT or current · MAX
+        let valueLine;
+        if (atMax) {
+          valueLine = `<b>${formatDumpAt(dump, ab, filled)}</b> <span class="max">MAX</span>`;
+        } else if (filled === 0) {
+          valueLine = `<span class="arrow">→</span><b>${formatDumpAt(dump, ab, 1)}</b>`;
+        } else {
+          valueLine = `<b>${formatDumpAt(dump, ab, filled)}</b><span class="arrow">→</span><b>${formatDumpAt(dump, ab, filled + 1)}</b>`;
+        }
         const row = document.createElement('div');
         row.className = 'lu-dump-row';
         row.innerHTML = `
-          <div class="lu-dump-name">${dump.name}</div>
-          <div class="lu-dump-pips" data-dump-idx="${i}"></div>
-          <div class="lu-dump-desc">${formatDumpPerPoint(dump, ab)}<div class="lu-dump-progress">${progress}</div></div>
+          <div class="lu-dump-line">
+            <div class="lu-dump-name">${dump.name}</div>
+            <button class="lu-dump-btn" type="button" ${canInvest ? '' : 'disabled'} ${atMax ? 'data-state="max"' : ''}>${atMax ? '✓' : '+'}</button>
+            <div class="lu-dump-level">${filled}/${MAX_DUMP}</div>
+            <div class="lu-dump-progress">${valueLine}</div>
+          </div>
+          ${dump.desc ? `<div class="lu-dump-desc">${dump.desc}</div>` : ''}
         `;
-        const pips = row.querySelector('.lu-dump-pips');
-        for (let j = 0; j < 5; j++) {
-          const pip = document.createElement('span');
-          pip.className = 'lu-pip' + (j < filled ? ' filled' : '');
-          if (j === filled && (ps.unspentPoints || 0) > 0 && filled < 5) {
-            pip.classList.add('clickable');
-            pip.addEventListener('click', () => {
-              this.game.investPoint(id, i);
-              this.renderLevelUpBody(this.game.playerState);
-            });
-          }
-          pips.appendChild(pip);
+        const btn = row.querySelector('.lu-dump-btn');
+        if (btn && canInvest) {
+          btn.addEventListener('click', () => {
+            this.game.investPoint(id, i);
+            this.renderLevelUpBody(this.game.playerState);
+          });
         }
         dumpsEl.appendChild(row);
       }
@@ -14131,33 +14160,37 @@ const UI = {
         `;
         const dumpsEl = document.createElement('div');
         dumpsEl.className = 'lu-dumps';
+        const MAX_MINION_DUMP = 3;
         for (let i = 0; i < def.dumps.length; i++) {
           const dump = def.dumps[i];
           const filled = mpts.dumps[i] || 0;
-          const progress = (filled === 0)
-            ? `<span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, null, 1)}</b></span>`
-            : (filled >= 3
-              ? `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, null, filled)}</b></span> &middot; <span class="lu-dump-max">MAX</span>`
-              : `<span class="lu-dump-now">Now: <b>${formatDumpAt(dump, null, filled)}</b></span> &middot; <span class="lu-dump-next">+1 pt → <b>${formatDumpAt(dump, null, filled + 1)}</b></span>`);
+          const atMax = filled >= MAX_MINION_DUMP;
+          const canInvest = (ps.unspentPoints || 0) > 0 && !atMax;
+          let valueLine;
+          if (atMax) {
+            valueLine = `<b>${formatDumpAt(dump, null, filled)}</b> <span class="max">MAX</span>`;
+          } else if (filled === 0) {
+            valueLine = `<span class="arrow">→</span><b>${formatDumpAt(dump, null, 1)}</b>`;
+          } else {
+            valueLine = `<b>${formatDumpAt(dump, null, filled)}</b><span class="arrow">→</span><b>${formatDumpAt(dump, null, filled + 1)}</b>`;
+          }
           const row = document.createElement('div');
           row.className = 'lu-dump-row';
           row.innerHTML = `
-            <div class="lu-dump-name">${dump.name}</div>
-            <div class="lu-dump-pips" data-dump-idx="${i}"></div>
-            <div class="lu-dump-desc">${formatDumpPerPoint(dump, null)}<div class="lu-dump-progress">${progress}</div></div>
+            <div class="lu-dump-line">
+              <div class="lu-dump-name">${dump.name}</div>
+              <button class="lu-dump-btn" type="button" ${canInvest ? '' : 'disabled'} ${atMax ? 'data-state="max"' : ''}>${atMax ? '✓' : '+'}</button>
+              <div class="lu-dump-level">${filled}/${MAX_MINION_DUMP}</div>
+              <div class="lu-dump-progress">${valueLine}</div>
+            </div>
+            ${dump.desc ? `<div class="lu-dump-desc">${dump.desc}</div>` : ''}
           `;
-          const pips = row.querySelector('.lu-dump-pips');
-          for (let j = 0; j < 3; j++) {
-            const pip = document.createElement('span');
-            pip.className = 'lu-pip' + (j < filled ? ' filled' : '');
-            if (j === filled && (ps.unspentPoints || 0) > 0 && filled < 3) {
-              pip.classList.add('clickable');
-              pip.addEventListener('click', () => {
-                this.game.investMinionPoint(i);
-                this.renderLevelUpBody(this.game.playerState);
-              });
-            }
-            pips.appendChild(pip);
+          const btn = row.querySelector('.lu-dump-btn');
+          if (btn && canInvest) {
+            btn.addEventListener('click', () => {
+              this.game.investMinionPoint(i);
+              this.renderLevelUpBody(this.game.playerState);
+            });
           }
           dumpsEl.appendChild(row);
         }
