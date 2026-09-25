@@ -1,0 +1,43 @@
+name: Deploy to gravewave.okface.se
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-okface
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # Skips itself until the DEPLOY_* repo variables are set.
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax-check the inline scripts
+        run: |
+          node -e "
+            const h = require('fs').readFileSync('index.html', 'utf8');
+            const scripts = [...h.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
+            scripts.forEach(m => new Function(m[1]));
+            console.log('OK:', scripts.length, 'inline script(s)');
+          "
+      - name: Assemble site
+        run: |
+          mkdir site && cp index.html site/
+          printf 'commit: %s\nbuilt: %s\n' "$GITHUB_SHA" "$(date -u +%FT%TZ)" > site/version.txt
+      - name: Rsync to okface
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes" \
+            site/ "${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}:${{ vars.DEPLOY_PATH }}/"
