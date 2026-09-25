@@ -4,7 +4,7 @@ A single-file HTML5 wave-defense roguelite. Auto-cast abilities, tiered ability 
 
 The whole game lives in `index.html`. Open it in a browser. There is no build step.
 
-Live build: <https://okface.github.io/gravewave/>
+Live build: <https://gravewave.okface.se> (deployed on every push to `main`)
 
 ## Running
 
