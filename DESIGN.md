@@ -1,5 +1,10 @@
 # Gravewave — Design
 
+**North star:** *A phone-first wave-defense roguelite for hard-roguelite
+players. The caster fights on its own; every decision happens between
+waves, and every decision can be wrong. When you die, you can say which
+wave beat which choice.*
+
 > **Canonical doc.** Forget any prior docs (build_map, fusion notes,
 > atlas, rank-picker, constellation, etc.) — this is the new ground.
 
@@ -9,8 +14,11 @@
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
 3. Pick a **Companion** (1 of 4 minions). Stays with you the whole run.
 4. Fight wave 1.
-5. Wave clear → **+1 level → +1 unspent point** (single shared pool —
-   spend on abilities OR your companion).
+5. Wave clear → **full heal** (`CONFIG.waves.waveClearHeal`) **+1 level →
+   +1 unspent point** (single shared pool — spend on abilities OR your
+   companion). Full heal makes every wave its own test: a death belongs
+   to one wave, and the Fallen screen shows that wave's enemy mix, what
+   took your HP and what each pick dealt.
 6. Levels **1 / 4 / 9** open a **tier picker** — pick 1 of 4 from the
    next tier. So by level 9 you have exactly **3 abilities**
    (one per tier).

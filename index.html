@@ -1616,6 +1616,78 @@
   #gameover-stats .stat-row .k { color: var(--ink-mid); letter-spacing: 0.08em; }
   #gameover-stats .stat-row .v { color: var(--ink); font-weight: 700; }
 
+  /* Death recap — the wave that killed you, as plain facts. Full-width
+     label/value rows so the lists wrap cleanly on a phone. */
+  #gameover-recap {
+    max-width: 520px;
+    margin: 0 auto 24px;
+    text-align: left;
+  }
+  #gameover-recap:empty { display: none; }
+  #gameover-recap .recap-head {
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(29, 21, 12, 0.45);
+  }
+  #gameover-recap .recap-row {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(29, 21, 12, 0.2);
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.45;
+  }
+  #gameover-recap .recap-row .k { font-size: 11px; color: var(--ink-mid); letter-spacing: 0.08em; padding-top: 2px; }
+  #gameover-recap .recap-row .v { font-size: 14px; color: var(--ink); }
+  #gameover-recap .recap-item { white-space: nowrap; }
+  .gameover-actions, .report-actions {
+    display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  }
+  .btn-report { min-height: 44px; }
+
+  /* Report sheet — sits above the level-up / game-over overlays. */
+  #overlay-report { z-index: 30; }
+  .report-inner { max-width: 420px; }
+  .report-rate { display: flex; gap: 12px; justify-content: center; margin-bottom: 14px; }
+  .report-rate-btn {
+    flex: 1; max-width: 120px; min-height: 52px;
+    font-size: 24px;
+    background: rgba(255, 250, 230, 0.6);
+    border: 1px solid rgba(29, 21, 12, 0.45);
+    border-radius: 1px;
+    cursor: pointer;
+  }
+  .report-rate-btn[aria-pressed="true"] {
+    border: 2px solid var(--vermilion);
+    background: rgba(182, 51, 42, 0.12);
+  }
+  #report-note {
+    display: block;
+    width: 100%; min-height: 110px;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font: 16px/1.4 'Spectral', serif;
+    color: var(--ink);
+    background: rgba(255, 250, 230, 0.75);
+    border: 1px solid rgba(29, 21, 12, 0.45);
+    border-radius: 1px;
+    resize: vertical;
+  }
+  .report-actions button { min-height: 44px; }
+  #btn-report-send:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .report-msg {
+    min-height: 20px; margin-top: 10px;
+    font-family: 'Spectral', serif; font-style: italic; font-size: 14px;
+    color: var(--ink-mid);
+  }
+
   /* ============================================================
      PATH ATLAS — the build map. Static layout of every card the
      player can take in their path, plus a universal rail. Click
@@ -2101,6 +2173,15 @@
     font-family: 'JetBrains Mono', monospace;
     color: var(--ink);
   }
+  /* What the wave just cleared cost you — facts, no advice. */
+  .lu-lastwave {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink);
+    margin-top: 6px;
+  }
+  .lu-lastwave:empty { display: none; }
+  .lu-actions { display: flex; gap: 10px; align-items: center; }
   .lu-choices {
     display: flex;
     flex-direction: column;
@@ -2388,8 +2469,12 @@
           <div class="lu-summary">
             Unspent points: <b id="lu-points">0</b>. Spend on abilities or your companion. Specs unlock at 6 (ability) / 4 (companion).
           </div>
+          <div class="lu-lastwave" id="lu-lastwave"></div>
         </div>
-        <button class="btn-primary" id="btn-lu-continue">Continue</button>
+        <div class="lu-actions">
+          <button class="btn-ghost btn-report" type="button" data-report>Report</button>
+          <button class="btn-primary" id="btn-lu-continue">Continue</button>
+        </div>
       </div>
       <div class="lu-choices" id="lu-choices"></div>
     </div>
@@ -2401,7 +2486,29 @@
       <h1>Fallen</h1>
       <div class="subtitle">The void took you.</div>
       <div id="gameover-stats"></div>
-      <button class="btn-primary" id="btn-restart">Try Again</button>
+      <div id="gameover-recap"></div>
+      <div class="gameover-actions">
+        <button class="btn-ghost btn-report" type="button" data-report>Report</button>
+        <button class="btn-primary" id="btn-restart">Try Again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report — 👍/👎 + note, sent with the current run's state -->
+  <div class="overlay" id="overlay-report">
+    <div class="overlay-inner report-inner">
+      <h1>Report</h1>
+      <div class="subtitle">Your current run is sent along with it.</div>
+      <div class="report-rate">
+        <button type="button" class="report-rate-btn" data-rate="up" aria-pressed="false" aria-label="Good">👍</button>
+        <button type="button" class="report-rate-btn" data-rate="down" aria-pressed="false" aria-label="Bad">👎</button>
+      </div>
+      <textarea id="report-note" maxlength="2000" placeholder="Note (optional)"></textarea>
+      <div class="report-actions">
+        <button class="btn-ghost" type="button" id="btn-report-close">Close</button>
+        <button class="btn-primary" type="button" id="btn-report-send" disabled>Send</button>
+      </div>
+      <div class="report-msg" id="report-msg"></div>
     </div>
   </div>
 </div>
@@ -2476,6 +2583,19 @@ const CONFIG = {
     itemEvery: 5,
     longAxisSpawnOnly: true,
     clusterSpread: 38,
+    // Fraction of max HP restored on every wave clear. 1.0 = full heal:
+    // each wave is a self-contained test, so a death belongs to one wave
+    // instead of ten waves of chip damage. (Was a hard-coded 0.18.)
+    waveClearHeal: 1.0,
+  },
+
+  // Run log + in-game reports → v2's feedback service on okface
+  // (POST {rating, text, context}; appends to feedback.jsonl). Only sent
+  // from the live host so local testing doesn't pollute the log.
+  telemetry: {
+    endpoint: '/api/feedback',
+    hosts: ['gravewave.okface.se'],
+    maxContext: 7800,        // service rejects context > 8000 chars
   },
 
   spawn: {
@@ -2545,6 +2665,54 @@ const Logger = {
       firstWave: this.events.find(e => e.name === 'wave_start')?.wave,
       lastWave: [...this.events].reverse().find(e => e.name === 'wave_start')?.wave,
     };
+  },
+};
+
+/* Telemetry — run logs + Report sheet → CONFIG.telemetry.endpoint.
+ * Tags every post with the deployed commit (version.txt) and a random
+ * per-browser id, so runs can be grouped by build and by player. */
+const Telemetry = {
+  version: 'local',
+  device: 'anon',
+  enabled: false,
+
+  init() {
+    const t = CONFIG.telemetry;
+    this.enabled = !!t && t.hosts.includes(location.hostname);
+    try {
+      let id = localStorage.getItem('gw_device');
+      if (!id) {
+        id = Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('gw_device', id);
+      }
+      this.device = id;
+    } catch (e) { /* storage blocked: stays 'anon' */ }
+    fetch('version.txt', { cache: 'no-store' })
+      .then(r => (r.ok ? r.text() : ''))
+      .then(txt => {
+        const m = /commit:\s*([0-9a-f]{7})/.exec(txt || '');
+        if (m) this.version = m[1];
+      })
+      .catch(() => {});
+  },
+
+  // Resolves to null when sent, or a short reason string when not.
+  send({ rating = null, text = '', context }) {
+    if (!this.enabled) return Promise.resolve('only sent from the live site');
+    let ctx = context;
+    // Stay under the service's context cap: drop the oldest wave rows first.
+    while (JSON.stringify(ctx).length > CONFIG.telemetry.maxContext && ctx.waves?.length) {
+      ctx = { ...ctx, waves: ctx.waves.slice(1), wavesDropped: (ctx.wavesDropped || 0) + 1 };
+    }
+    // keepalive lets the post finish even if the tab is closing.
+    return fetch(CONFIG.telemetry.endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rating, text, context: ctx }),
+      keepalive: true,
+    })
+      .then(r => (r.ok ? null : `HTTP ${r.status}`))
+      .catch(e => (e && e.message) || 'network error');
   },
 };
 
@@ -4207,6 +4375,28 @@ function spellDamageType(spellId) {
   return SPELL_DAMAGE_TYPES[base] || 'physical';
 }
 
+// Wave-log key for a damage source: the player's pick it belongs to.
+// Some abilities tag damage with their SPELLS body id, so alias those.
+const DEALT_ALIASES = {
+  lightning_bolt: 'chain_lightning',
+  gravity_bolt:   'black_hole',
+  frost_spike:    'frost_bolt',
+  flame_patch:    'meteor',          // Lingering Crater spec
+};
+function dealtKey(spellId) {
+  if (!spellId) return 'other';
+  if (spellId.endsWith(':link')) return 'linker';   // Sigil Linker propagation
+  const base = spellId.split(':')[0];
+  return DEALT_ALIASES[base] || base;
+}
+function dealtLabel(key) {
+  if (key === 'ignite') return 'Burn';
+  return ABILITIES[key]?.name || MINIONS[key]?.name || SPELLS[key]?.name || key;
+}
+function enemyLabel(id) {
+  return ENEMIES[id]?.name || id;
+}
+
 
 /* --- Paths -------------------------------------------------------------
  * A path is a single-card head start: pick character → pick path →
@@ -4676,6 +4866,7 @@ class Player {
       const absorbed = Math.min(dmg, shield.shieldHp);
       shield.shieldHp -= absorbed;
       dmg -= absorbed;
+      if (game?.waveLog) game.waveLog.absorbed += absorbed;
       // Per-shield on-absorb hook (e.g. Mirror Wall reflect at attacker).
       if (shield._onAbsorb) shield._onAbsorb(absorbed, attacker, this, game);
       if (game) {
@@ -4744,6 +4935,14 @@ class Player {
       }
       this.iframes = CONFIG.player.iframes * 0.6;
       return;
+    }
+    // Wave log: HP actually lost (capped at what was left), per enemy type.
+    // With full heal between waves, a death's `hurt` sums to max HP.
+    const log = game?.waveLog;
+    if (log && dmg > 0) {
+      const who = attacker?.def?.id || 'other';
+      log.hurt[who] = (log.hurt[who] || 0) + Math.min(dmg, Math.max(0, this.hp));
+      log.hits[who] = (log.hits[who] || 0) + 1;
     }
     this.hp -= dmg;
     this.iframes = CONFIG.player.iframes;
@@ -4865,6 +5064,11 @@ class Enemy {
     if (this.statuses.shock) {
       actual *= this.statuses.shock.multiplier || 1.5;
       delete this.statuses.shock;
+    }
+    const waveLog = this.game?.waveLog;
+    if (waveLog && actual > 0) {
+      const key = dealtKey(source?.spell);
+      waveLog.dealt[key] = (waveLog.dealt[key] || 0) + Math.min(actual, Math.max(0, this.hp));
     }
     this.hp -= actual;
     this.flash = 0.12;
@@ -5394,6 +5598,12 @@ class WaveManager {
     if (this.game.mirrorWalls) for (const W of this.game.mirrorWalls) resetShield(W);
     if (this.game.lighthouses) for (const L of this.game.lighthouses) resetShield(L);
     this.game.waveStartT = this.game.runElapsed; // renderer uses for chevron pulse boost
+    // Per-wave facts for the level-up line, the death recap and the run log.
+    // Filled by spawnEnemy / Player.takeDamage / Enemy.takeDamage.
+    this.game.waveLog = {
+      wave: n, startT: this.game.runElapsed,
+      spawned: {}, hurt: {}, hits: {}, absorbed: 0, dealt: {},
+    };
     Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
   }
 
@@ -5487,6 +5697,8 @@ class WaveManager {
       enemy.game = this.game;
       this.game.enemies.push(enemy);
     }
+    const log = this.game.waveLog;
+    if (log) log.spawned[def.id] = (log.spawned[def.id] || 0) + n;
     Logger.event('enemy_spawn', { type: def.id, wave: this.wave, count: n });
     return n;
   }
@@ -5641,6 +5853,11 @@ class Game {
     this.shake = 0;
     this.kills = 0;
     this.totalDamageDealt = 0;
+    this.waveLog = null;         // current wave's facts (WaveManager.startWave)
+    this.lastWaveLog = null;     // previous wave, for the level-up line
+    this.runWaves = [];          // [wave, hpLost, absorbed, secs] per cleared wave
+    this.runReported = false;    // run log sent on death (tab-hide sends don't count)
+    this.runId = Math.random().toString(36).slice(2, 10);
     this.waveMgr = new WaveManager(this);
     this.runStart = performance.now();
     this.runElapsed = 0;
@@ -5825,6 +6042,7 @@ class Game {
       this.state = 'gameover';
       UI.showGameOver(this.statsSnapshot());
       Logger.event('run_end', this.statsSnapshot());
+      this.reportRun('died');
     }
   }
 
@@ -7695,9 +7913,16 @@ class Game {
     ps.level = (ps.level || 0) + 1;
     ps.unspentPoints = (ps.unspentPoints || 0) + 1;
     Logger.event('level_up', { level: ps.level });
-    // Wave-end heal — light and predictable so the run doesn't snowball
-    // on free heals. 18% of max HP each wave.
-    const heal = Math.floor(this.player.maxHp * 0.18);
+    // Wave-end heal (CONFIG.waves.waveClearHeal; 1.0 = full). Full heal
+    // makes every wave its own test: a death belongs to one wave.
+    const log = this.waveLog;
+    if (log) {
+      const hpLost = Object.values(log.hurt).reduce((a, b) => a + b, 0);
+      this.runWaves.push([wave, Math.round(hpLost), Math.round(log.absorbed),
+                          Math.round(this.runElapsed - log.startT)]);
+      this.lastWaveLog = log;
+    }
+    const heal = Math.floor(this.player.maxHp * CONFIG.waves.waveClearHeal);
     this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
     // Reset per-wave flags
     if (this.activeSpells) {
@@ -7731,6 +7956,7 @@ class Game {
       const total = (slot.dumps || []).reduce((a, b) => a + b, 0);
       buildBits.push(`T${t}:${ab?.name || id} (${total}p${slot.spec ? ' ★' + slot.spec : ''})`);
     }
+    const log = this.waveLog;
     return {
       level:     ps.level || 0,
       wave:      this.waveMgr.wave,
@@ -7739,7 +7965,54 @@ class Game {
       time:      Math.round(this.runElapsed),
       character: ps.charDef?.id,
       build:     buildBits.join(' / ') || '—',
+      waveLog:   log,
+      fellAt:    log ? Math.round(this.runElapsed - log.startT) : 0,
+      left:      (this.enemies || []).filter(e => e.alive).length + (this.waveMgr.toSpawn || 0),
     };
+  }
+
+  /* Compact run record for the run log and Report context (see Telemetry).
+   * Kept small: the feedback service caps context at 8000 chars. */
+  runRecord(extra = {}) {
+    const ps = this.playerState || {};
+    const build = {};
+    for (const t of [1, 2, 3]) {
+      const id = ps.tiers?.[t];
+      if (!id) continue;
+      const slot = ps.points?.[id] || { dumps: [0, 0, 0], spec: null };
+      build['T' + t] = { id, dumps: slot.dumps, spec: slot.spec || null };
+    }
+    if (ps.minion) {
+      build.minion = { id: ps.minion, dumps: ps.minionPoints?.dumps, spec: ps.minionPoints?.spec || null };
+    }
+    const s = this.statsSnapshot();
+    const log = s.waveLog;
+    const rounded = (m) => Object.fromEntries(Object.entries(m || {}).map(([k, v]) => [k, Math.round(v)]));
+    return {
+      run: this.runId, v: Telemetry.version, device: Telemetry.device,
+      char: s.character, wave: s.wave, level: s.level, kills: s.kills, time: s.time,
+      hp: Math.max(0, Math.round(this.player?.hp || 0)), unspent: ps.unspentPoints || 0,
+      build,
+      thisWave: log ? {
+        wave: log.wave, secs: s.fellAt, left: s.left,
+        spawned: log.spawned, hurt: rounded(log.hurt), hits: log.hits,
+        absorbed: Math.round(log.absorbed), dealt: rounded(log.dealt),
+      } : null,
+      waves: this.runWaves || [],
+      ...extra,
+    };
+  }
+
+  /* Send the run log once the run is over or the tab goes away. A later
+   * record with the same `run` id supersedes an earlier one. */
+  reportRun(ended) {
+    if (!this.playerState || !this.runId) return;
+    if (ended === 'died') this.runReported = true;
+    const s = this.statsSnapshot();
+    Telemetry.send({
+      text: `run ${s.character} w${s.wave} ${ended}`,
+      context: { kind: 'run', ended, ...this.runRecord() },
+    });
   }
 
   tickSpells(dt) {
@@ -13915,6 +14188,54 @@ const UI = {
         this.$('overlay-start').classList.add('active');
       });
     }
+    this.initReport();
+  },
+
+  // Report sheet: opened by any [data-report] button (level-up, Fallen).
+  // Sends 👍/👎 + note with the current run record attached.
+  initReport() {
+    const overlay = this.$('overlay-report');
+    if (!overlay) return;
+    const note = this.$('report-note');
+    const send = this.$('btn-report-send');
+    const msg  = this.$('report-msg');
+    const rateBtns = overlay.querySelectorAll('.report-rate-btn');
+    let rating = null;
+    const refresh = () => {
+      rateBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.rate === rating)));
+      send.disabled = !rating && !note.value.trim();
+    };
+    const close = () => overlay.classList.remove('active');
+    document.querySelectorAll('[data-report]').forEach(btn => btn.addEventListener('click', () => {
+      rating = null;
+      note.value = '';
+      msg.textContent = '';
+      refresh();
+      overlay.classList.add('active');
+    }));
+    rateBtns.forEach(b => b.addEventListener('click', () => {
+      rating = rating === b.dataset.rate ? null : b.dataset.rate;
+      refresh();
+    }));
+    note.addEventListener('input', refresh);
+    this.$('btn-report-close').addEventListener('click', close);
+    send.addEventListener('click', () => {
+      send.disabled = true;
+      msg.textContent = 'Sending…';
+      const g = this.game;
+      Telemetry.send({
+        rating,
+        text: note.value.trim(),
+        context: {
+          kind: 'report', state: g.state, screen: `${innerWidth}x${innerHeight}`,
+          ...(g.playerState ? g.runRecord() : { v: Telemetry.version, device: Telemetry.device }),
+        },
+      }).then(err => {
+        if (err) { msg.textContent = `Not sent (${err})`; refresh(); return; }
+        msg.textContent = 'Sent.';
+        setTimeout(close, 700);
+      });
+    });
   },
 
   hideAllOverlays() {
@@ -14022,6 +14343,8 @@ const UI = {
     const overlay = this.$('overlay-levelup');
     if (!overlay) return;
     this.$('lu-title').textContent = `Level ${ps.level}`;
+    const lastEl = this.$('lu-lastwave');
+    if (lastEl) lastEl.textContent = lastWaveLine(this.game.lastWaveLog);
     this.renderLevelUpBody(ps);
     const btn = this.$('btn-lu-continue');
     if (btn) {
@@ -14262,6 +14585,25 @@ const UI = {
         cont.appendChild(row);
       }
     }
+    // The wave that killed you: what was in it, what took your HP, what
+    // your picks dealt. Facts only.
+    const recap = this.$('gameover-recap');
+    if (recap) {
+      recap.innerHTML = '';
+      const log = stats.waveLog;
+      if (log) {
+        const hits = log.hits || {};
+        const rows = [
+          ['Enemies',  recapListHtml(log.spawned, enemyLabel)],
+          ['Hurt you', recapListHtml(log.hurt, enemyLabel, k => ` (${hits[k]} hit${hits[k] === 1 ? '' : 's'})`)],
+          ['Shield',   log.absorbed >= 1 ? `${Math.round(log.absorbed)} absorbed` : ''],
+          ['Dealt',    recapListHtml(log.dealt, dealtLabel)],
+        ].filter(([, v]) => v);
+        recap.innerHTML =
+          `<div class="recap-head">Wave ${log.wave} · fell at ${formatTime(stats.fellAt)} · ${stats.left} left</div>` +
+          rows.map(([k, v]) => `<div class="recap-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+      }
+    }
     this.$('overlay-gameover').classList.add('active');
   },
 
@@ -14287,6 +14629,33 @@ function formatTime(s) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60).toString().padStart(2, '0');
   return `${m}:${sec}`;
+}
+
+// ["41 Husk", "38 Bulwark", "19 Shade"] — biggest first, zeros dropped.
+function recapItems(map, label, suffix) {
+  return Object.entries(map || {})
+    .filter(([, v]) => v >= 1)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${Math.round(v).toLocaleString('en-US')} ${label(k)}${suffix ? suffix(k) : ''}`);
+}
+function recapList(map, label, suffix) {
+  return recapItems(map, label, suffix).join(' · ');
+}
+// Same, as HTML with each item kept on one line (number + name together).
+function recapListHtml(map, label, suffix) {
+  return recapItems(map, label, suffix).map(t => `<span class="recap-item">${t}</span>`).join(' · ');
+}
+
+// Level-up header line: what the wave just cleared cost you.
+function lastWaveLine(log) {
+  if (!log) return '';
+  const hpLost = Object.values(log.hurt).reduce((a, b) => a + b, 0);
+  const absorbed = Math.round(log.absorbed);
+  if (hpLost < 1 && absorbed < 1) return `Wave ${log.wave} · no damage taken`;
+  let line = `Wave ${log.wave} · −${Math.round(hpLost)} HP`;
+  if (hpLost >= 1) line += `: ${recapList(log.hurt, enemyLabel)}`;
+  if (absorbed >= 1) line += ` · shield absorbed ${absorbed}`;
+  return line;
 }
 
 
@@ -14329,6 +14698,18 @@ function main() {
   const canvas = document.getElementById('game-canvas');
   const game = new Game(canvas);
   UI.init(game);
+  Telemetry.init();
+
+  // Run log when the tab is hidden mid-run (phone app switch or close);
+  // death sends its own. Once per wave so app-switching doesn't spam.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (game.runReported || !game.playerState || !game.runId) return;
+    const key = `${game.runId}:${game.waveMgr.wave}`;
+    if (game._hiddenSentKey === key) return;
+    game._hiddenSentKey = key;
+    game.reportRun('left');
+  });
 
   let last = performance.now();
   function loop(now) {
