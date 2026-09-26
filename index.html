@@ -2209,6 +2209,7 @@
   }
   .lu-panel-head {
     display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap;
     border-bottom: 1px dashed rgba(29,21,12,0.28);
     padding-bottom: 8px;
     margin-bottom: 10px;
@@ -2227,8 +2228,27 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.16em;
-    color: var(--accent, var(--ink-mid));
+    color: var(--ink-mid);     /* the pastel accent was unreadable on parchment */
   }
+  /* Current numbers for the ability — changes as you invest. */
+  .lu-now {
+    flex-basis: 100%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin-top: 2px;
+  }
+  .lu-now .val { white-space: nowrap; }
+  .card-stats {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--ink-mid);
+    margin-top: 8px;
+  }
+  .card-stats b { color: var(--ink); }
+  .card-stats .val { white-space: nowrap; }
 
   .lu-dumps {
     display: flex;
@@ -2247,9 +2267,9 @@
   }
   .lu-dump-line {
     display: grid;
-    grid-template-columns: 130px 32px 44px 1fr;
+    grid-template-columns: 96px 30px 34px 1fr;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
   .lu-dump-name {
     font-family: 'JetBrains Mono', monospace;
@@ -2295,15 +2315,18 @@
     letter-spacing: 0.06em;
     text-align: left;
   }
+  /* Values wrap inside their column rather than being cut off — every
+     number you're buying has to be readable on a 375px phone. */
   .lu-dump-progress {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11.5px;
+    line-height: 1.35;
     color: var(--ink);
     letter-spacing: 0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
+  .lu-dump-progress .val { white-space: normal; }
   .lu-dump-progress .arrow { color: var(--vermilion); padding: 0 4px; font-weight: 700; }
   .lu-dump-progress .unit  { color: var(--ink-mid); padding-left: 4px; }
   .lu-dump-progress .max   {
@@ -2320,7 +2343,7 @@
     color: var(--ink-mid);
     font-style: italic;
     line-height: 1.3;
-    padding-left: 130px;     /* align under the name column */
+    padding-left: 104px;     /* align under the + button (name col + gap) */
   }
 
   .lu-spec-wrap {
@@ -3836,6 +3859,17 @@ const ABILITIES = {
     damageType: 'elemental',
     cooldown: 0.5, damage: 32, damageNote: 'dps',
     cast: (game, caster, mods) => SPELLS.focused_beam.cast(game, caster, mods),
+    // Mirrors tickFocusedBeam: 32 × dmgMult × ramp(0.30 → peak), tau from Snap Focus.
+    stats(mods) {
+      const b = mods.behavior || {};
+      const peak = b.beamMagnifier ? 2.8 : 2.0;
+      const tau = Math.max(0.20, (b.beamMagnifier ? 1.0 : 0.6) * (1 - (b.beamSnap || 0)));
+      return [
+        `${fmt.n(32 * mods.dmgMult * 0.3)}–${fmt.n(32 * mods.dmgMult * peak)} dps`,
+        `${fmt.s(tau * 2.3)} to 90% ramp`,
+        `${Math.floor(mods.beamGrace || 0)} grace`,
+      ];
+    },
     dumps: [
       { id: 'concentrate', name: 'Concentrate', desc: 'Increases damage.',
         stat: 'dmgMult', perPoint: 0.12, ramps: { start: 0.3, end: 2.0 } },
@@ -3863,6 +3897,18 @@ const ABILITIES = {
     description: 'A lens forms at the densest cluster, focusing sunlight. 18 dps RAMPING 50% → 150% over 1.8s.',
     damageType: 'elemental',
     cooldown: 1.8, damage: 18, damageNote: 'dps', radius: 90, duration: 1.8,
+    stats(mods, cd) {
+      const b = mods.behavior || {};
+      const curve = b.greenhouse ? { start: 0.85, end: 1.20 } : { start: 0.5, end: 1.5 };
+      const dps = 18 * mods.dmgMult;
+      const life = 1.8 * (mods.durationMult || 1) * (b.greenhouse ? 2 : 1);
+      return [
+        `${fmt.n(dps * curve.start)}–${fmt.n(dps * curve.end)} dps`,
+        `${fmt.n(90 * (mods.radiusMult || 1))}px`,
+        `lasts ${fmt.s(life)}`,
+        `every ${fmt.s(cd)}`,
+      ];
+    },
     cast(game, caster, mods) {
       const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster);
       if (!target) return;
@@ -3906,6 +3952,16 @@ const ABILITIES = {
     description: 'Beam projectile. 14 dmg per hit, blinds, pierces 2 — bends ±15° on each pierce.',
     damageType: 'elemental',
     cooldown: 0.9, damage: 14,
+    stats(mods, cd) {
+      const b = mods.behavior || {};
+      const pierce = 2 + (mods.pierceBonus || 0) + (b.bouncing ? 2 : 0);
+      return [
+        `${fmt.n(14 * mods.dmgMult)} dmg${b.mirrorImage ? ' ×2 bolts' : ''}`,
+        `every ${fmt.s(cd)}`,
+        `pierces ${pierce}`,
+        `blind ${fmt.s(b.mirrorImage ? 3.5 : 1.5)}`,
+      ];
+    },
     cast(game, caster, mods) {
       const target = game.findFarthestEnemy(caster) || game.findNearestEnemy(caster);
       if (!target) return;
@@ -3951,7 +4007,7 @@ const ABILITIES = {
     },
     dumps: [
       { id: 'cold_light', name: 'Cold Light', desc: 'Sharper beam.',    stat: 'dmgMult',    perPoint: 0.12 },
-      { id: 'pierce',     name: 'Pierce',     desc: 'More pierces.',    stat: 'pierceBonus', perPoint: 1.0 },
+      { id: 'pierce',     name: 'Pierce',     desc: 'More pierces.',    stat: 'pierceBonus', perPoint: 1.0, base: 2 },
       { id: 'quick',      name: 'Quick',      desc: 'Faster cooldown.', stat: 'cdMult',    perPoint: -0.05 },
     ],
     specs: [
@@ -3976,6 +4032,17 @@ const ABILITIES = {
     description: '4 standing mirrors at N/S/E/W around you with 280 shield HP — absorbs damage to you. When the shield absorbs a hit, 40% is reflected back at the attacker. Confuse aura around each mirror makes nearby enemies walk away. Recharges in 10s when broken.',
     damageType: 'arcane',
     cooldown: 8.0, damage: 40, damageNote: '%-reflect', radius: 100,
+    stats(mods) {
+      const b = mods.behavior || {};
+      const shield = Math.round((280 + (b.mirrorHpBonus || 0)) * (mods.dmgMult || 1) * (b.hallOfMirrors ? 1.15 : 1));
+      const out = [
+        `${shield} shield`,
+        `${fmt.pct(0.40 + (b.mirrorReflectBonus || 0))} reflect`,
+      ];
+      if (!b.opticalWall) out.push(`${fmt.n(60 + (b.confuseRadiusBonus || 0))}u confuse`);
+      out.push(`${fmt.s(Math.max(4, 10 - (b.mirrorRechargeReduce || 0)))} re-form`);
+      return out;
+    },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const opticalWall = !!beh.opticalWall;
@@ -4041,6 +4108,19 @@ const ABILITIES = {
     description: '4 lanterns at N/S/E/W around you with 280 shield HP — absorbs damage to you. Each lantern fires a beam outward at the nearest enemy in its quadrant (combined ~24 dps). Recharges in 10s when broken.',
     damageType: 'elemental',
     cooldown: 10.0, damage: 24, damageNote: 'dps total', radius: 220, duration: 999,
+    stats(mods) {
+      const b = mods.behavior || {};
+      const dmgMult = mods.dmgMult || 1;
+      const shield = Math.round((280 + (b.towerHpBonus || 0)) * (b.twinLights ? 0.75 : 1) * (b.beacon ? 1.2 : 1) * dmgMult);
+      const out = [
+        `${fmt.n(24 * dmgMult)} dps total`,
+        `${fmt.n(220 * (mods.radiusMult || 1))}px`,
+        `${shield} shield`,
+        `10s re-form`,
+      ];
+      if (b.beacon) out.push('heals 2 HP/s');
+      return out;
+    },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const dmgMult = (mods.dmgMult || 1);
@@ -4118,6 +4198,21 @@ const ABILITIES = {
     description: 'Massive light disk. 22 dps RAMPING 50% → 200% over 8s. Blinds everything inside.',
     damageType: 'elemental',
     cooldown: 18.0, damage: 22, damageNote: 'dps', radius: 240, duration: 8,
+    castWithin: (mods) => 240 * (mods.radiusMult || 1) * (mods.behavior?.penumbra ? 0.6 : 1) * 0.8,
+    stats(mods, cd) {
+      const b = mods.behavior || {};
+      let radius = 240 * (mods.radiusMult || 1), dps = 22 * mods.dmgMult, curve = { start: 0.5, end: 2.0 };
+      if (b.totalEclipse) { radius *= 1.5; curve = { start: 0.8, end: 2.5 }; }
+      else if (b.penumbra) { radius *= 0.6; dps *= 2; }
+      else if (b.darkness) { dps = 0; }
+      return [
+        dps > 0 ? `${fmt.n(dps * curve.start)}–${fmt.n(dps * curve.end)} dps` : 'no damage',
+        `${fmt.n(radius)}px`,
+        `lasts ${fmt.s(8 * (mods.durationMult || 1))}`,
+        b.totalEclipse ? 'no blind' : 'blinds inside',
+        `every ${fmt.s(cd)}`,
+      ];
+    },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       let radius = 240 * (mods.radiusMult || 1);
@@ -4207,6 +4302,16 @@ const ABILITIES = {
     description: 'Concentrated beam from above. 220 impact damage in 80px crater + 4s blind in a 200px radius.',
     damageType: 'elemental',
     cooldown: 14.0, damage: 220, radius: 80,
+    stats(mods, cd) {
+      const b = mods.behavior || {};
+      const r = mods.radiusMult || 1;
+      return [
+        `${fmt.n(220 * mods.dmgMult)} dmg`,
+        `${fmt.n(80 * r)}px`,
+        `blind ${fmt.n((b.searingGlare ? 350 : 200) * r)}px for ${fmt.s(b.searingGlare ? 8 : 4)}`,
+        `every ${fmt.s(cd)}`,
+      ];
+    },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster) || caster;
@@ -4248,6 +4353,17 @@ const ABILITIES = {
     description: 'Massive flashbang. 100 initial damage + 6s blind to all enemies in 320px.',
     damageType: 'elemental',
     cooldown: 16.0, damage: 100, radius: 320, duration: 6,
+    castWithin: (mods) => 320 * (mods.radiusMult || 1) * 0.8,
+    stats(mods, cd) {
+      const b = mods.behavior || {};
+      const dmg = 100 * mods.dmgMult * (b.eternalGlare ? 0.5 : 1) * (b.searingFlash ? 1.8 : 1);
+      return [
+        `${fmt.n(dmg)} dmg`,
+        `${fmt.n(320 * (mods.radiusMult || 1))}px`,
+        `blind ${fmt.s((b.eternalGlare ? 12 : 6) * (mods.durationMult || 1))}`,
+        `every ${fmt.s(cd)}`,
+      ];
+    },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
       const radius   = 320 * (mods.radiusMult || 1);
@@ -4558,6 +4674,12 @@ const MINIONS = {
     color: '#a07cff',
     description: 'Threads 3 nearby enemies together. Damage bleeds to all linked at 20% share. Range 240px. Relinks every 1.5s.',
     flavor: 'utility · damage redirection',
+    stats: (mods) => [
+      `${fmt.pct(Math.min(0.50, 0.20 + (mods.shareBonus || 0)))} shared`,
+      `${3 + Math.floor(mods.linkCountBonus || 0)} linked`,
+      `${fmt.n(240 * mods.rangeMult)}px`,
+      'relinks every 1.5s',
+    ],
     dumps: [
       { id: 'share', name: 'Bleedover', desc: 'Larger damage share.',   stat: 'shareBonus',     perPoint: 0.15, base: 0.20 },
       { id: 'reach', name: 'Reach',     desc: 'Wider thread reach.',    stat: 'rangeMult',      perPoint: 0.25, base: 240 },
@@ -4583,6 +4705,15 @@ const MINIONS = {
     color: '#c89aff',
     description: '120 HP decoy. Enemies within 260px target it instead of you. On death: AoE explosion, then respawns in 6s.',
     flavor: 'utility · taunt',
+    stats: (mods) => {
+      const iron = !!mods.behavior?.ironEffigy;
+      return [
+        `${fmt.n((120 + mods.hpBonus) * (iron ? 2 : 1))} HP`,
+        `taunts 260px`,
+        `boom ${fmt.n(60 * mods.boomMult * (iron ? 0.5 : 1))} dmg in 140px`,
+        `back in 6s`,
+      ];
+    },
     dumps: [
       { id: 'sturdy',   name: 'Sturdy',   desc: 'Tougher decoy.',     stat: 'hpBonus',  perPoint: 50,   base: 120 },
       { id: 'volatile', name: 'Volatile', desc: 'Bigger explosion.',  stat: 'boomMult', perPoint: 0.35, base: 60  },
@@ -4614,6 +4745,11 @@ const MINIONS = {
     color: '#9af0c8',
     description: 'Hovers at your shoulder and heals you. 6 HP every 5s. Resurgence spec saves you from death once per run.',
     flavor: 'utility · healing',
+    stats: (mods) => {
+      const heal = 6 + mods.healBonus;
+      const every = Math.max(2.0, 5.0 - mods.pulseFaster);
+      return [`${fmt.n(heal)} HP every ${fmt.s(every)}`, `${(heal / every).toFixed(1)} HP/s`];
+    },
     dumps: [
       { id: 'flow',  name: 'Healing Flow', desc: 'Heals harder.',    stat: 'healBonus',   perPoint: 3,   base: 6 },
       { id: 'tempo', name: 'Tempo',        desc: 'Heals faster.',    stat: 'pulseFaster', perPoint: 0.5, base: 5 },
@@ -5584,19 +5720,17 @@ class WaveManager {
         s.cdAcc = cd;
       }
     }
-    // Reset T2 defensive shield state at every wave start so the player
-    // is fully fortified going in. Without this, a shield broken at the
-    // end of one wave would still be recharging when the next wave begins.
-    const resetShield = (entity) => {
-      if (!entity) return;
-      entity.shieldHp = entity.shieldMaxHp;
-      entity.recharging = false;
-      entity.rechargeAcc = 0;
-    };
-    if (this.game.snowForts) for (const f of this.game.snowForts) { if (!f._permafrostPatch) resetShield(f); }
-    if (this.game.firewalls) for (const w of this.game.firewalls) resetShield(w);
-    if (this.game.mirrorWalls) for (const W of this.game.mirrorWalls) resetShield(W);
-    if (this.game.lighthouses) for (const L of this.game.lighthouses) resetShield(L);
+    // Rebuild T2 defensive structures at every wave start. Their cast()
+    // bails while one exists, so without this the structure kept the
+    // numbers from its FIRST cast forever: later dump points and the spec
+    // never applied. Clearing them lets cast() respawn a full-HP structure
+    // on frame 1 (cdAcc is primed above) with the current points + spec.
+    const g = this.game;
+    if (g.snowForts)   g.snowForts   = g.snowForts.filter(f => f._permafrostPatch);
+    if (g.firewalls)   g.firewalls   = [];
+    if (g.mirrorWalls) g.mirrorWalls = [];
+    if (g.lighthouses) g.lighthouses = [];
+    if (g.player) { g.player._defenseShield = null; g.player._mirrorWall = null; }
     this.game.waveStartT = this.game.runElapsed; // renderer uses for chevron pulse boost
     // Per-wave facts for the level-up line, the death recap and the run log.
     // Filled by spawnEnemy / Player.takeDamage / Enemy.takeDamage.
@@ -5953,7 +6087,9 @@ class Game {
     return true;
   }
 
-  computeMinionMods() {
+  // forId: when given and it isn't the owned companion, return base mods
+  // (picker cards show each companion's own 0-point numbers).
+  computeMinionMods(forId) {
     const base = {
       shareBonus: 0, rangeMult: 1,
       hpBonus: 0,    boomMult: 1,
@@ -5963,7 +6099,7 @@ class Game {
       behavior: {},
     };
     const ps = this.playerState;
-    if (!ps?.minion) return base;
+    if (!ps?.minion || (forId && forId !== ps.minion)) return base;
     const def = MINIONS[ps.minion];
     if (!def) return base;
     const slot = ps.minionPoints || { dumps: [0, 0], spec: null };
@@ -8029,9 +8165,17 @@ class Game {
       // enemy was in range. Hold the cooldown at threshold so the spell
       // fires on the very next frame an enemy walks into range.
       const needsTarget = NEEDS_TARGET_ABILITIES.has(ab.id);
-      if (needsTarget && !this.findNearestEnemy(this.player)) {
+      const nearest = (needsTarget || ab.castWithin) ? this.findNearestEnemy(this.player) : null;
+      if (needsTarget && !nearest) {
         s.cdAcc = cd;        // pinned: retry every frame, no spam waste
         continue;
+      }
+      // Self-centred ultimates (Eclipse, Flash) hold until something is
+      // inside their radius — otherwise the first cast of every wave went
+      // off on an empty screen.
+      if (ab.castWithin) {
+        const reach = ab.castWithin(this.computeAbilityMods(s.id));
+        if (!nearest || Vec.dist(nearest, this.player) > reach) { s.cdAcc = cd; continue; }
       }
       s.cdAcc = 0;
       const mods = this.computeAbilityMods(s.id);
@@ -13879,6 +14023,33 @@ function formatStat(stat, total) {
   }
 }
 
+// Current numbers for an ability, from the same mods its cast() reads —
+// so they change with every point and with the spec. Abilities declare
+// `stats(mods, cd)`; anything without one falls back to its base line.
+function abilityNowStats(game, id) {
+  const ab = ABILITIES[id];
+  if (!ab) return [];
+  if (ab.stats && game) return ab.stats(game.computeAbilityMods(id), game.computeAbilityCooldown(id));
+  const line = abilityBaseStatLine(ab);
+  return line ? line.split(' · ') : [];
+}
+// "a · b · c" with each item kept on one line.
+function statsHtml(items) {
+  return items.map(s => `<span class="val">${s}</span>`).join(' · ');
+}
+// Dump row value: NOW → NEXT (NOW = base at 0 points), or NOW · MAX.
+function dumpValueLine(dump, ab, filled, atMax) {
+  const now = `<b class="val">${formatDumpAt(dump, ab, filled)}</b>`;
+  if (atMax) return `${now} <span class="max">MAX</span>`;
+  return `${now}<span class="arrow">→</span><b class="val">${formatDumpAt(dump, ab, filled + 1)}</b>`;
+}
+// Small number formatters for stats() lines.
+const fmt = {
+  n:   (v) => String(Math.round(v)),
+  s:   (v) => `${(+v).toFixed(v < 10 ? 1 : 0)}s`,
+  pct: (v) => `${Math.round(v * 100)}%`,
+};
+
 // Returns a compact line of base stats for the ability card header.
 function abilityBaseStatLine(ab) {
   const parts = [];
@@ -13948,7 +14119,10 @@ function formatDumpAt(dump, ab, pts) {
       if (dump.base !== undefined) return `${Math.floor((dump.base || 0) + total)} chains`;
       return `+${Math.floor(total)} chain`;
     case 'beamGrace':
-      return `${Math.floor(total)} grace re-targets`;
+      return `${Math.floor(total)} grace`;
+    case 'beamSnap':
+      // Time for the ramp to reach 90% of its peak (tickFocusedBeam's tau × 2.3).
+      return `${(2.3 * Math.max(0.20, 0.6 * (1 - total))).toFixed(1)}s ramp`;
     case 'linkCountBonus':
       if (dump.base !== undefined) return `${Math.floor((dump.base || 0) + total)} linked`;
       return `+${Math.floor(total)} linked`;
@@ -13998,14 +14172,16 @@ function formatDumpAt(dump, ab, pts) {
       if (dump.base !== undefined) return `${Math.max(2.5, dump.base - total).toFixed(1)}s rekindle`;
       break;
     case 'mirrorPolishHp':
-      return `${Math.round(80 + total)} HP/mirror`;
+      // Mirror Wall cast: shield 280 + bonus, reflect 40% + 10%/pt.
+      return `${Math.round(280 + total)} shield · ${40 + 10 * pts}%`;
     case 'mirrorAuraBonus':
-      return `${Math.round(60 + total)}u aura`;
+      return `${Math.round(60 + total)}u confuse`;
     case 'mirrorRealign':
-      if (dump.base !== undefined) return `${Math.max(4, dump.base - total).toFixed(1)}s recharge`;
+      if (dump.base !== undefined) return `${Math.max(4, dump.base - total).toFixed(1)}s re-form`;
       break;
     case 'towerReinforce':
-      return `${Math.round(250 + total)} tower HP`;
+      // Lantern Ring cast: shield 280 + bonus, +13% beam dmg per pt.
+      return `${Math.round(280 + total)} shield · +${13 * pts}%`;
   }
   return formatStat(dump.stat, total);
 }
@@ -14267,14 +14443,14 @@ const UI = {
       card.className = 'card';
       card.style.animationDelay = `${ci * 0.06}s`;
       card.style.setProperty('--accent', ab.color || 'var(--vermilion)');
-      const baseStats = abilityBaseStatLine(ab);
+      const baseStats = abilityNowStats(this.game, ab.id);
       card.innerHTML = `
         <div class="card-tier">T${ab.tier}</div>
         <div class="card-tag">${ab.icon || '◇'} ${(ab.tag || 'Ability').toUpperCase()}</div>
         <div class="card-name">${ab.name}</div>
         <div class="card-desc">${ab.description || ''}</div>
-        <div class="card-detail" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mid); margin-top: 8px;">
-          ${baseStats ? `<b>${baseStats}</b><br>` : ''}Dumps: ${ab.dumps.map(d => d.name).join(' · ')}<br>
+        <div class="card-detail card-stats">
+          ${baseStats.length ? `<b>${statsHtml(baseStats)}</b><br>` : ''}Dumps: ${ab.dumps.map(d => d.name).join(' · ')}<br>
           Specs (at 6 pts): ${ab.specs.map(s => s.name).join(' / ')}
         </div>
       `;
@@ -14324,8 +14500,8 @@ const UI = {
         <div class="card-tag">${def.icon || '◇'} COMPANION</div>
         <div class="card-name">${def.name}</div>
         <div class="card-desc">${def.description || ''}</div>
-        <div class="card-detail" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mid); margin-top: 8px;">
-          Dumps: ${def.dumps.map(d => d.name).join(' · ')}<br>
+        <div class="card-detail card-stats">
+          ${def.stats ? `<b>${statsHtml(def.stats(this.game.computeMinionMods(def.id)))}</b><br>` : ''}Dumps: ${def.dumps.map(d => d.name).join(' · ')}<br>
           Specs (at 4 pts): ${def.specs.map(s => s.name).join(' / ')}
         </div>
       `;
@@ -14374,13 +14550,13 @@ const UI = {
       panel.className = 'lu-panel';
       panel.style.setProperty('--accent', ab.color || 'var(--vermilion)');
       const tag = `T${ab.tier} · ${(ab.tag || 'ability').toUpperCase()}`;
-      const abBaseStats = abilityBaseStatLine(ab);
+      const nowStats = abilityNowStats(this.game, id);
       panel.innerHTML = `
         <div class="lu-panel-head">
           <div class="lu-icon">${ab.icon || '◇'}</div>
           <div class="lu-name">${ab.name}</div>
           <div class="lu-tag">${tag}</div>
-          ${abBaseStats ? `<div class="lu-base-stats" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-mid);margin-top:2px;">${abBaseStats}</div>` : ''}
+          ${nowStats.length ? `<div class="lu-now">${statsHtml(nowStats)}</div>` : ''}
         </div>
       `;
       // Three dump rows — values-first layout
@@ -14394,15 +14570,8 @@ const UI = {
         const filled = pts.dumps[i] || 0;
         const atMax = filled >= MAX_DUMP;
         const canInvest = (ps.unspentPoints || 0) > 0 && !atMax;
-        // Compose CURRENT → NEXT or current · MAX
-        let valueLine;
-        if (atMax) {
-          valueLine = `<b>${formatDumpAt(dump, ab, filled)}</b> <span class="max">MAX</span>`;
-        } else if (filled === 0) {
-          valueLine = `<span class="arrow">→</span><b>${formatDumpAt(dump, ab, 1)}</b>`;
-        } else {
-          valueLine = `<b>${formatDumpAt(dump, ab, filled)}</b><span class="arrow">→</span><b>${formatDumpAt(dump, ab, filled + 1)}</b>`;
-        }
+        // NOW → NEXT (at 0 points NOW is the base value), or NOW · MAX
+        const valueLine = dumpValueLine(dump, ab, filled, atMax);
         const row = document.createElement('div');
         row.className = 'lu-dump-row';
         row.innerHTML = `
@@ -14474,11 +14643,13 @@ const UI = {
         const panel = document.createElement('div');
         panel.className = 'lu-panel';
         panel.style.setProperty('--accent', def.color || 'var(--gold)');
+        const minionStats = def.stats ? def.stats(this.game.computeMinionMods()) : [];
         panel.innerHTML = `
           <div class="lu-panel-head">
             <div class="lu-icon">${def.icon || '◇'}</div>
             <div class="lu-name">${def.name}</div>
             <div class="lu-tag">COMPANION</div>
+            ${minionStats.length ? `<div class="lu-now">${statsHtml(minionStats)}</div>` : ''}
           </div>
         `;
         const dumpsEl = document.createElement('div');
@@ -14489,14 +14660,7 @@ const UI = {
           const filled = mpts.dumps[i] || 0;
           const atMax = filled >= MAX_MINION_DUMP;
           const canInvest = (ps.unspentPoints || 0) > 0 && !atMax;
-          let valueLine;
-          if (atMax) {
-            valueLine = `<b>${formatDumpAt(dump, null, filled)}</b> <span class="max">MAX</span>`;
-          } else if (filled === 0) {
-            valueLine = `<span class="arrow">→</span><b>${formatDumpAt(dump, null, 1)}</b>`;
-          } else {
-            valueLine = `<b>${formatDumpAt(dump, null, filled)}</b><span class="arrow">→</span><b>${formatDumpAt(dump, null, filled + 1)}</b>`;
-          }
+          const valueLine = dumpValueLine(dump, null, filled, atMax);
           const row = document.createElement('div');
           row.className = 'lu-dump-row';
           row.innerHTML = `
