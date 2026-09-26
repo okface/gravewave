@@ -2928,7 +2928,9 @@ const CHARACTERS = {
     color: '#a07cff',
     accent: '#5ae5ff',
     stats: { maxHp: 100, moveSpeed: 0 },
-    available: true,
+    // Hidden 2026-09-26 while the Optician is reworked against the new
+    // enemy roster. Code stays; it comes back reworked.
+    available: false,
   },
   optician: {
     id: 'optician',
@@ -3353,16 +3355,8 @@ const SPELLS = {
           caster._beamSpec = mods.behavior || {};
           return;
         }
-        // Grace re-target (Wide Lens dump): cost one grace charge for a
-        // soft hand-off (-0.4s ramp) instead of a hard reset to 0.
-        const grace = Math.floor(mods.beamGrace || 0);
-        if (cur?.alive === false && (caster._beamGraceLeft || 0) > 0) {
-          caster._beamGraceLeft -= 1;
-          caster._beamTOT = Math.max(0, (caster._beamTOT || 0) - 0.4);
-        } else {
-          caster._beamTOT = 0;
-          caster._beamGraceLeft = grace;
-        }
+        // Target switch keeps only part of the ramp (Wide Lens raises it).
+        game.beamHandoff(caster, mods);
         caster._beamTarget = next;
       }
       // Refresh beam validity. Cleared in tickFocusedBeam if cast() stops firing.
@@ -3781,6 +3775,7 @@ const ABILITIES = {
   // ============================================================
   prism_burst: {
     id: 'prism_burst', name: 'Prism Burst', tier: 1, classId: 'optician',
+    retired: true,   // 2026-09-26: same job as Burning Lens; rays only hit what's on the line
     icon: '✦', tag: 'attack', color: '#ffd66a',
     description: 'Slow projectile. Splits into 3 RGB beams on impact, each beam fans through enemies in its path. 22 direct + 14 per beam.',
     damageType: 'elemental',
@@ -3867,7 +3862,7 @@ const ABILITIES = {
       return [
         `${fmt.n(32 * mods.dmgMult * 0.3)}–${fmt.n(32 * mods.dmgMult * peak)} dps`,
         `${fmt.s(tau * 2.3)} to 90% ramp`,
-        `${Math.floor(mods.beamGrace || 0)} grace`,
+        `keeps ${fmt.pct(Math.min(0.9, 0.15 + (mods.beamGrace || 0)))} ramp on switch`,
       ];
     },
     dumps: [
@@ -3875,15 +3870,15 @@ const ABILITIES = {
         stat: 'dmgMult', perPoint: 0.12, ramps: { start: 0.3, end: 2.0 } },
       { id: 'snap',        name: 'Snap Focus',  desc: 'Faster ramp to peak.',
         stat: 'beamSnap', perPoint: 0.10 },
-      { id: 'wide_lens',   name: 'Wide Lens',   desc: 'Keeps most of the ramp when a target dies.',
-        stat: 'beamGrace', perPoint: 1.0 },
+      { id: 'wide_lens',   name: 'Wide Lens',   desc: 'Keeps more of the ramp when the beam switches target.',
+        stat: 'beamGrace', perPoint: 0.12 },
     ],
     specs: [
       { id: 'magnifier',  name: 'Magnifier',
         desc: 'Plateau rises to 280% (up from 200%). Ramp climbs slower so it pays off on durable targets — boss-killer.',
         behavior: { beamMagnifier: true } },
       { id: 'burnthrough', name: 'Burnthrough',
-        desc: 'While the beam is at 50%+ intensity, it continuously chains 60% damage to one nearby enemy. Scales with the ramp.',
+        desc: 'While the beam is at 50%+ intensity, it continuously chains 90% damage to one nearby enemy. Scales with the ramp.',
         behavior: { beamBurnthrough: true } },
       { id: 'prism_lens', name: 'Prism Lens',
         desc: 'While the beam is at 50%+ intensity, three smaller side-beams continuously strike nearby enemies for 40% damage each.',
@@ -3940,8 +3935,8 @@ const ABILITIES = {
       { id: 'solar_forge', name: 'Solar Forge',
         desc: 'At peak DPS, the lens explodes for 200% of total damage in 1.5× radius.',
         behavior: { solarForge: true } },
-      { id: 'refractor',   name: 'Refractor',
-        desc: 'When the lens dies, leaves 3 small lenses that each burn for 1s at 40% DPS.',
+      { id: 'refractor',   name: 'Scorch Trail',
+        desc: 'When a lens ends, the ground keeps burning for 2s at 40% of its DPS.',
         behavior: { refractor: true } },
     ],
   },
@@ -4113,7 +4108,7 @@ const ABILITIES = {
       const dmgMult = mods.dmgMult || 1;
       const shield = Math.round((280 + (b.towerHpBonus || 0)) * (b.twinLights ? 0.75 : 1) * (b.beacon ? 1.2 : 1) * dmgMult);
       const out = [
-        `${fmt.n(24 * dmgMult)} dps total`,
+        `${fmt.n(24 * dmgMult * (b.twinLights ? 2 : 1) * (mods.attackRateMult || 1))} dps total`,
         `${fmt.n(220 * (mods.radiusMult || 1))}px`,
         `${shield} shield`,
         `10s re-form`,
@@ -4129,8 +4124,9 @@ const ABILITIES = {
       const lanternCount = 4;
       // Combined DPS spread across lanterns. Twin Lights = 2 beams per
       // lantern (output ×2 at cost of -25% shield HP).
+      // Twin Lights: 2 full-strength beams per lantern (double DPS, −25% shield).
       const beamsPerLantern = twin ? 2 : 1;
-      const dpsPerBeam = (24 * dmgMult) / (lanternCount * beamsPerLantern);
+      const dpsPerBeam = (24 * dmgMult) / lanternCount;
       const range = 220 * (mods.radiusMult || 1);
       const attackRate = (mods.attackRateMult || 1);          // tick rate scalar
       const shieldHpBase = 280 + (beh.towerHpBonus || 0);
@@ -4173,7 +4169,7 @@ const ABILITIES = {
                                             stat: 'towerReinforce', perPoint: 30 },
       { id: 'reach',     name: 'Reach',     desc: 'Longer beam range.',
                                             stat: 'radiusMult',     perPoint: 0.10 },
-      { id: 'tempo',     name: 'Tempo',     desc: 'Faster beam ticks.',
+      { id: 'tempo',     name: 'Tempo',     desc: 'Faster beam ticks (more DPS).',
                                             stat: 'attackRateMult', perPoint: 0.12 },
     ],
     specs: [
@@ -4204,14 +4200,16 @@ const ABILITIES = {
       let radius = 240 * (mods.radiusMult || 1), dps = 22 * mods.dmgMult, curve = { start: 0.5, end: 2.0 };
       if (b.totalEclipse) { radius *= 1.5; curve = { start: 0.8, end: 2.5 }; }
       else if (b.penumbra) { radius *= 0.6; dps *= 2; }
-      else if (b.darkness) { dps = 0; }
-      return [
-        dps > 0 ? `${fmt.n(dps * curve.start)}–${fmt.n(dps * curve.end)} dps` : 'no damage',
+      else if (b.umbra) { dps *= 0.75; }
+      const out = [
+        `${fmt.n(dps * curve.start)}–${fmt.n(dps * curve.end)} dps`,
         `${fmt.n(radius)}px`,
         `lasts ${fmt.s(8 * (mods.durationMult || 1))}`,
         b.totalEclipse ? 'no blind' : 'blinds inside',
-        `every ${fmt.s(cd)}`,
       ];
+      if (b.umbra) out.push('40% slow inside');
+      out.push(`every ${fmt.s(cd)}`);
+      return out;
     },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
@@ -4224,15 +4222,17 @@ const ABILITIES = {
       // it matches the other specs' total damage even without lockdown.
       if (beh.totalEclipse) { radius *= 1.5; blind = false; dpsCurve = { start: 0.8, end: 2.5 }; }
       else if (beh.penumbra) { radius *= 0.6; dps *= 2; }
-      else if (beh.darkness) { dps = 0; blind = true; life = life; }
+      else if (beh.umbra) { dps *= 0.75; }       // Umbra: 40% slow inside, −25% dps
       game.solarEclipses = game.solarEclipses || [];
-      game.solarEclipses.push(new SolarEclipse({
+      const E = new SolarEclipse({
         x: caster.x, y: caster.y, radius, dps, life,
         blind, dpsCurve,
         penumbra: !!beh.penumbra,
-        darkness: !!beh.darkness,
+        darkness: false,
         spec: beh,
-      }));
+      });
+      E.umbra = !!beh.umbra;
+      game.solarEclipses.push(E);
       game.addShake(0.30);
     },
     dumps: [
@@ -4247,14 +4247,15 @@ const ABILITIES = {
       { id: 'penumbra',      name: 'Penumbra',
         desc: 'Radius ×0.6, ×2 DPS. Outer ring slows enemies that approach.',
         behavior: { penumbra: true } },
-      { id: 'darkness',      name: 'Darkness',
-        desc: 'Flips to shadow mode: no damage, but blinds enemies for the full duration.',
-        behavior: { darkness: true } },
+      { id: 'umbra',         name: 'Umbra',
+        desc: 'Enemies inside move 40% slower. DPS −25%.',
+        behavior: { umbra: true } },
     ],
   },
 
   mirror_maze: {
     id: 'mirror_maze', name: 'Mirror Maze', tier: 3, classId: 'optician',
+    retired: true,   // 2026-09-26: ~0.4 dps in practice; Crystal Cage shoved enemies at you
     icon: '⬡', tag: 'ultimate', color: '#dcecff',
     description: '6 mirrors form a hexagon around you. Beams between them form a kill mesh. 8 dps per beam edge × 6s.',
     damageType: 'arcane',
@@ -4299,7 +4300,7 @@ const ABILITIES = {
   prism_strike: {
     id: 'prism_strike', name: 'Prism Strike', tier: 3, classId: 'optician',
     icon: '✷', tag: 'ultimate', color: '#fff7d6',
-    description: 'Concentrated beam from above. 220 impact damage in 80px crater + 4s blind in a 200px radius.',
+    description: 'Concentrated beam from above, aimed at the enemy with the most HP left. 220 impact damage in 80px crater + 4s blind in a 200px radius.',
     damageType: 'elemental',
     cooldown: 14.0, damage: 220, radius: 80,
     stats(mods, cd) {
@@ -4314,7 +4315,15 @@ const ABILITIES = {
     },
     cast(game, caster, mods) {
       const beh = mods.behavior || {};
-      const target = game.findEnemyCluster(caster) || game.findNearestEnemy(caster) || caster;
+      // Aims at the enemy with the most HP left in the ring — the nuke for
+      // the one thing your other spells can't chew through (Brute, boss).
+      const cap = game.combatRadius();
+      let target = null;
+      for (const e of game.enemies) {
+        if (!e.alive || Vec.dist(caster, e) > cap) continue;
+        if (!target || e.hp > target.hp) target = e;
+      }
+      target = target || caster;
       const tx = target.x, ty = target.y;
       const radius   = 80 * (mods.radiusMult || 1);
       const damage   = 220 * mods.dmgMult;
@@ -4675,7 +4684,7 @@ const MINIONS = {
     description: 'Threads 3 nearby enemies together. Damage bleeds to all linked at 20% share. Range 240px. Relinks every 1.5s.',
     flavor: 'utility · damage redirection',
     stats: (mods) => [
-      `${fmt.pct(Math.min(0.50, 0.20 + (mods.shareBonus || 0)))} shared`,
+      `${fmt.pct(Math.min(0.65, 0.20 + (mods.shareBonus || 0)))} shared`,
       `${3 + Math.floor(mods.linkCountBonus || 0)} linked`,
       `${fmt.n(240 * mods.rangeMult)}px`,
       'relinks every 1.5s',
@@ -4748,16 +4757,18 @@ const MINIONS = {
     stats: (mods) => {
       const heal = 6 + mods.healBonus;
       const every = Math.max(2.0, 5.0 - mods.pulseFaster);
-      return [`${fmt.n(heal)} HP every ${fmt.s(every)}`, `${(heal / every).toFixed(1)} HP/s`];
+      const out = [`${fmt.n(heal)} HP every ${fmt.s(every)}`, `${(heal / every).toFixed(1)} HP/s`];
+      if (mods.behavior?.steady) out.push(`${fmt.n(heal * 1.5)} below half HP`);
+      return out;
     },
     dumps: [
       { id: 'flow',  name: 'Healing Flow', desc: 'Heals harder.',    stat: 'healBonus',   perPoint: 3,   base: 6 },
       { id: 'tempo', name: 'Tempo',        desc: 'Heals faster.',    stat: 'pulseFaster', perPoint: 0.5, base: 5 },
     ],
     specs: [
-      { id: 'cleanse',   name: 'Cleansing Pulse',
-        desc: 'Each heal also clears your slow / hex statuses.',
-        behavior: { cleanse: true } },
+      { id: 'steady',    name: 'Steady Hand',
+        desc: 'Heals 50% more while you are below half HP.',
+        behavior: { steady: true } },
       { id: 'resurgence', name: 'Resurgence',
         desc: 'Once per run, save you from a fatal hit and full-heal.',
         behavior: { resurgence: true } },
@@ -4773,6 +4784,7 @@ const MINIONS = {
 
   drummer: {
     id: 'drummer', name: 'War Drummer', icon: '⌬',
+    retired: true,   // 2026-09-26: ~+4% average effect; Reach row never read
     color: '#d7a648',
     description: 'Cycles auras every 2s: Vigor (+15% dmg), Ward (−15% dmg taken), Haste (−15% cd). Aura applies to you in range.',
     flavor: 'utility · cycling auras',
@@ -5232,7 +5244,9 @@ class Enemy {
           if (!peer || peer === this || !peer.alive) continue;
           peer.takeDamage(propagated, { spell: (source?.spell || '') + ':link', viaLink: true });
           if (grp.slow > 0) {
-            peer.applyStatus('slow', { duration: grp.slow, factor: 0.55 }, peer._linkRunElapsed || 0);
+            // Echo spec. (Used `peer._linkRunElapsed`, which was never set,
+            // so the slow expired the moment it landed.)
+            peer.applyStatus('slow', { duration: grp.slow, factor: 0.55 }, this.game?.runElapsed || 0);
           }
           if (grp.spread && this.statuses) {
             for (const k of ['ignite','freeze','shock']) {
@@ -7014,21 +7028,17 @@ class Game {
       const L = this.burningLenses[i];
       L.t += dt;
       if (L.t >= L.life) {
-        // Refractor spec — drop 3 mini-lenses on expire.
+        // Scorch Trail spec (flag kept as `refractor`) — the ground keeps
+        // burning for 2s at 40% of the lens's base DPS, same spot, same size.
         if (L.refractor) {
-          for (let k = 0; k < 3; k++) {
-            const a = (k / 3) * TAU;
-            const off = L.radius * 0.45;
-            this.spawnBurningLens({
-              x: L.x + Math.cos(a) * off,
-              y: L.y + Math.sin(a) * off,
-              radius: L.radius * 0.45,
-              dps: L.dps * 0.4,
-              life: 1.0,
-              dpsCurve: { start: 1.0, end: 1.0 },
-              spell: 'burning_lens:refractor',
-            });
-          }
+          this.spawnBurningLens({
+            x: L.x, y: L.y,
+            radius: L.radius,
+            dps: L.dps * 0.4,
+            life: 2.0,
+            dpsCurve: { start: 1.0, end: 1.0 },
+            spell: 'burning_lens:scorch',
+          });
         }
         this.burningLenses.splice(i, 1);
         continue;
@@ -7394,11 +7404,14 @@ class Game {
 
       // ── Per-lantern beam targeting + damage ─────────────────────
       L.dmgAcc = (L.dmgAcc || 0) + dt;
+      // Tempo (attackRate) shortens the interval while each tick keeps its
+      // base size, so DPS scales with the rate. (It used to scale the tick
+      // down too, which made Tempo do nothing.)
       const tickIv = 0.15 / Math.max(0.5, L.attackRate || 1);
       const wantTick = L.dmgAcc >= tickIv;
       if (wantTick) L.dmgAcc = 0;
       const quadHalf = Math.PI / n;        // 90° each for 4 lanterns
-      const tickDmg = L.dpsPerBeam * tickIv;
+      const tickDmg = L.dpsPerBeam * 0.15;
 
       for (const lt of L.lanterns) {
         // Find nearest enemy in this lantern's quadrant within beam range.
@@ -7475,6 +7488,18 @@ class Game {
     }
   }
 
+  /* Focused Beam target switch (kill or lost target): keep a fraction of
+   * the ramp. 15% base, Wide Lens +12%/pt (max 75%). Time-on-target is
+   * capped at 5·tau first, so a long burn on a tank doesn't carry a full
+   * ramp into the next enemy. This is what makes the beam a tank-killer
+   * that struggles with swarms — unless you build Wide Lens / a spec. */
+  beamHandoff(p, mods) {
+    const b = mods.behavior || {};
+    const tau = Math.max(0.20, (b.beamMagnifier ? 1.0 : 0.6) * (1 - (b.beamSnap || 0)));
+    const keep = Math.min(0.9, 0.15 + (mods.beamGrace || 0));
+    p._beamTOT = Math.min(p._beamTOT || 0, 5 * tau) * keep;
+  }
+
   tickSolarEclipses(dt) {
     if (!this.solarEclipses?.length) return;
     for (let i = this.solarEclipses.length - 1; i >= 0; i--) {
@@ -7504,6 +7529,7 @@ class Game {
           const dur = E.darkness ? Math.max(2, E.life - E.t) : 1.5;
           e.applyStatus('blind', { duration: dur }, this.runElapsed);
         }
+        if (E.umbra) e.applyStatus('slow', { duration: 0.5, factor: 0.60 }, this.runElapsed);
         if (wantTick) {
           const a = e.takeDamage(tickDmg, { spell: 'solar_eclipse' });
           this.totalDamageDealt += a;
@@ -7600,7 +7626,7 @@ class Game {
         if (d < blindR + e.radius) {
           e.applyStatus('blind', { duration: blindDur }, this.runElapsed);
           // Chained Solar: instakill enemies under 25% HP in the blind radius.
-          if (P.chainedSolar && e.alive && e.hp / (e.def?.hp || e.hp) < 0.25) {
+          if (P.chainedSolar && e.alive && e.hp / (e.maxHp || e.hp) < 0.25) {
             const k = e.takeDamage(e.hp + 1, { spell: 'prism_strike:chained' });
             this.totalDamageDealt += k;
           }
@@ -7729,8 +7755,7 @@ class Game {
         // gap before lapse kicks in.
         return;
       }
-      // Soft hand-off: drop TOT 0.6s on auto re-acquire.
-      p._beamTOT = Math.max(0, (p._beamTOT || 0) - 0.6);
+      this.beamHandoff(p, p._beamMods || {});
       p._beamTarget = next;
       tgt = next;
     }
@@ -7783,7 +7808,7 @@ class Game {
           if (d < nextD) { next = e; nextD = d; }
         }
         if (next) {
-          const c = next.takeDamage(dmg * 0.6, { spell: 'focused_beam' });
+          const c = next.takeDamage(dmg * 0.9, { spell: 'focused_beam' });
           this.totalDamageDealt += c;
           // Light visual chain echo
           if (Math.random() < 0.4) {
@@ -7872,7 +7897,7 @@ class Game {
     // 6 linked) that's 5 peers × 65% = +325% damage propagation per hit.
     // Caps the runaway. Player still gets a meaningful 50% share even
     // at min investment; the dump still pays.
-    const share = Math.min(0.50, 0.20 + (mods.shareBonus || 0));
+    const share = Math.min(0.65, 0.20 + (mods.shareBonus || 0));   // cap = max Bleedover, so point 3 counts
     const beh = mods.behavior || {};
     const group = {
       members: candidates,
@@ -7995,14 +8020,11 @@ class Game {
     m.pulseAcc += dt;
     if (m.pulseAcc < pulseIv) return;
     m.pulseAcc = 0;
-    const heal = 6 + mods.healBonus;
+    let heal = 6 + mods.healBonus;
+    if (beh.steady && this.player.hp < this.player.maxHp * 0.5) heal = Math.round(heal * 1.5);
     if (this.player.hp < this.player.maxHp) {
       this.healPlayer(heal);
       this.spawnDamageNumber(this.player.x, this.player.y - 30, '+' + heal, false, { verdict: 'heal' });
-    }
-    if (beh.cleanse && this.player) {
-      delete this.player.hex;
-      // status fields may live elsewhere — best-effort
     }
   }
 
@@ -8220,7 +8242,7 @@ class Game {
         case 'attackRateMult': base.attackRateMult += total; break;
         case 'shieldMult':     base.shieldMult    += total; break;
         case 'slowMult':       base.slowMult      += total; break;
-        case 'beamGrace':      base.beamGrace     += Math.floor(total); break;
+        case 'beamGrace':      base.beamGrace     += total; break;   // Wide Lens: ramp kept on switch
         // Focused Beam Snap Focus — accumulates a tau reduction. Read by
         // tickFocusedBeam as base.behavior.beamSnap (used to scale tau).
         case 'beamSnap':       base.behavior.beamSnap = (base.behavior.beamSnap || 0) + total; break;
@@ -14072,7 +14094,7 @@ function formatDumpAt(dump, ab, pts) {
       if (ab && ab.cooldown) return `${(ab.cooldown * Math.max(0.25, 1 + total)).toFixed(2)}s`;
       break;
     case 'attackRateMult':
-      return `×${(1 + total).toFixed(2)}`;
+      return `×${(1 + total).toFixed(2)} rate`;
     case 'radiusMult':
     case 'sizeMult': {
       const base = (ab && (ab.radius || ab.size)) || (dump.base || 0);
@@ -14119,7 +14141,8 @@ function formatDumpAt(dump, ab, pts) {
       if (dump.base !== undefined) return `${Math.floor((dump.base || 0) + total)} chains`;
       return `+${Math.floor(total)} chain`;
     case 'beamGrace':
-      return `${Math.floor(total)} grace`;
+      // Wide Lens: share of the ramp kept when the beam switches target.
+      return `${Math.round(Math.min(0.9, 0.15 + total) * 100)}% kept`;
     case 'beamSnap':
       // Time for the ramp to reach 90% of its peak (tickFocusedBeam's tau × 2.3).
       return `${(2.3 * Math.max(0.20, 0.6 * (1 - total))).toFixed(1)}s ramp`;
@@ -14436,7 +14459,7 @@ const UI = {
     this.$('tier-subtitle').textContent = c.subtitle;
     const cont = this.$('tier-choices');
     cont.innerHTML = '';
-    const options = Object.values(ABILITIES).filter(a => a.tier === tier && a.classId === charId);
+    const options = Object.values(ABILITIES).filter(a => a.tier === tier && a.classId === charId && !a.retired);
     for (let ci = 0; ci < options.length; ci++) {
       const ab = options[ci];
       const card = document.createElement('div');
@@ -14488,7 +14511,7 @@ const UI = {
     this.$('tier-subtitle').textContent = '— A minion that follows you all run. Lighter investment, big personality. —';
     const cont = this.$('tier-choices');
     cont.innerHTML = '';
-    const minionDefs = Object.values(MINIONS);
+    const minionDefs = Object.values(MINIONS).filter(m => !m.retired);
     for (let ci = 0; ci < minionDefs.length; ci++) {
       const def = minionDefs[ci];
       const card = document.createElement('div');
