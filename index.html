@@ -2181,6 +2181,15 @@
     margin-top: 6px;
   }
   .lu-lastwave:empty { display: none; }
+  .lu-preview { color: var(--ink-mid); }
+  .tier-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-mid);
+    margin: -14px auto 18px;
+    max-width: 520px;
+  }
+  .tier-preview:empty { display: none; }
   .lu-actions { display: flex; gap: 10px; align-items: center; }
   .lu-choices {
     display: flex;
@@ -2478,6 +2487,7 @@
     <div class="overlay-inner">
       <div class="subtitle" id="tier-subtitle">— Pick one —</div>
       <h1 id="tier-title">Choose Your First Spell</h1>
+      <div class="tier-preview" id="tier-preview"></div>
       <div class="choices" id="tier-choices"></div>
     </div>
   </div>
@@ -2493,6 +2503,7 @@
             Unspent points: <b id="lu-points">0</b>. Spend on abilities or your companion. Specs unlock at 6 (ability) / 4 (companion).
           </div>
           <div class="lu-lastwave" id="lu-lastwave"></div>
+          <div class="lu-lastwave lu-preview" id="lu-preview"></div>
         </div>
         <div class="lu-actions">
           <button class="btn-ghost btn-report" type="button" data-report>Report</button>
@@ -2610,7 +2621,28 @@ const CONFIG = {
     // each wave is a self-contained test, so a death belongs to one wave
     // instead of ten waves of chip damage. (Was a hard-coded 0.18.)
     waveClearHeal: 1.0,
+
+    // ---- 2026-09-26 roster: budgeted waves, themes, bosses, a win ----
+    finalWave: 20,               // clearing this wave wins the run
+    budgetBase: 16,              // threat budget = base + perWave × wave
+    budgetPerWave: 4,            //   (grunt 1 · archer 1.6 · caster 2 · brute 4)
+    squadGapBase: 1.4,           // seconds between squads at wave 1…
+    squadGapDecay: 0.05,         // …minus this per wave…
+    squadGapMin: 0.5,            // …never below this
+    themeShare: 0.45,            // theme enemy's share of the budget (≤ 0.5)
+    baseMix: { grunt: 0.45, archer: 0.25, caster: 0.10, brute: 0.20 },
+    damageScale: 0.04,           // enemy shot / slam damage +4% per wave
+    bossWaves: { 10: 'warden', 20: 'cinder_king' },
+    bossBudgetMult: 0.5,         // regular enemies on a boss wave
   },
+
+  // Brute / boss armour. Area hits deal areaFrac while armour holds; any
+  // single-target hit cracks it for crackSecs (then everything hits full).
+  armour: { areaFrac: 0.35, crackSecs: 3 },
+
+  // Mirror Wall vs shots: a shot the shield absorbs goes back at its
+  // shooter for absorbed × reflect% × this.
+  mirrorShotReflectMult: 5,
 
   // Run log + in-game reports → v2's feedback service on okface
   // (POST {rating, text, context}; appends to feedback.jsonl). Only sent
@@ -3944,7 +3976,7 @@ const ABILITIES = {
   refraction_bolt: {
     id: 'refraction_bolt', name: 'Refraction Bolt', tier: 1, classId: 'optician',
     icon: '↯', tag: 'attack', color: '#9af0e6',
-    description: 'Beam projectile. 14 dmg per hit, blinds, pierces 2 — bends ±15° on each pierce.',
+    description: 'Beam projectile aimed at the farthest enemy holding position to shoot (else the farthest enemy). 14 dmg per hit, blinds, pierces 2 — bends ±15° on each pierce.',
     damageType: 'elemental',
     cooldown: 0.9, damage: 14,
     stats(mods, cd) {
@@ -3958,7 +3990,16 @@ const ABILITIES = {
       ];
     },
     cast(game, caster, mods) {
-      const target = game.findFarthestEnemy(caster) || game.findNearestEnemy(caster);
+      // Hunts the back line: the farthest enemy that's holding position to
+      // shoot (archer / caster), else the farthest enemy in the ring.
+      const cap = game.combatRadius();
+      let target = null, best = -1;
+      for (const e of game.enemies) {
+        if (!e.alive || !e.def.ranged || e._stalled || !(e._holdT > 0)) continue;
+        const d = Vec.dist(caster, e);
+        if (d < cap && d > best) { best = d; target = e; }
+      }
+      target = target || game.findFarthestEnemy(caster) || game.findNearestEnemy(caster);
       if (!target) return;
       const dir = Vec.norm(Vec.sub(target, caster));
       const b = mods.behavior || {};
@@ -4362,7 +4403,7 @@ const ABILITIES = {
     description: 'Massive flashbang. 100 initial damage + 6s blind to all enemies in 320px.',
     damageType: 'elemental',
     cooldown: 16.0, damage: 100, radius: 320, duration: 6,
-    castWithin: (mods) => 320 * (mods.radiusMult || 1) * 0.8,
+    castWithin: (mods) => 320 * (mods.radiusMult || 1),   // full radius: catches archers holding at 300
     stats(mods, cd) {
       const b = mods.behavior || {};
       const dmg = 100 * mods.dmgMult * (b.eternalGlare ? 0.5 : 1) * (b.searingFlash ? 1.8 : 1);
@@ -4811,153 +4852,88 @@ const MINIONS = {
 };
 
 
-/* --- Enemies ------------------------------------------------------------ */
+/* --- Enemies ------------------------------------------------------------
+ * 2026-09-26 roster. Each enemy asks ONE question, so a build that lacks
+ * the answer loses a specific wave (v2's D-048 lesson: if every ability
+ * answers every threat, missing an answer costs nothing).
+ *   Grunt   — packs that walk in and explode  → "can you hit many at once?"
+ *   Archer  — holds at range, flat arrows      → "can you reach the back, or block?"
+ *   Caster  — holds far back, lobbed fireballs → "can you kill or blind the back line?"
+ *             that land on you and pass over shields
+ *   Brute   — slow, armoured, huge hit         → "can you crack armour?"
+ * Melee still uses the kamikaze model: contact = round(0.6·damage + 0.08·hp).
+ * `ranged` enemies stop at holdAt, shoot every `every`s (tell = warning
+ * before the shot) and walk in after `stallAfter`s of holding.
+ * Shot / slam damage scales with CONFIG.waves.damageScale per wave.
+ * `shape` reuses existing art; overlays (aim line, glow, armour ring) are
+ * drawn in Renderer.drawEnemies.
+ * ----------------------------------------------------------------------- */
 const ENEMIES = {
-  // Kamikaze model: each enemy = one decisive hit on contact, then dies.
-  // Damage values reflect the single-hit total (not per-frame chip).
-  // Bosses (boss: true) move slower since they're now genuine kill
-  // priorities — slow + tanky + big damage on contact.
-  // ---- Resistance design ----
-  //
-  // Each enemy has `resists: { physical, elemental, arcane }`. 1.0× is
-  // neutral, <1.0× is resistant, >1.0× is vulnerable. We keep the
-  // baseline "fodder" mobs neutral and concentrate matchup pressure
-  // on the three new archetypes (Bulwark/Wraith/Hexer) — that way
-  // every wave still fights well with anything, but mid-late waves
-  // start punishing single-type builds.
-  shade: {
-    id: 'shade',
-    name: 'Shade',
-    radius: 14,
-    hp: 18,
-    speed: 70,
-    damage: 11,
-    color: '#8a82ad',
-    shape: 'shade',
-    weight: 1.0,
-    minWave: 1,
-    resists: { physical: 1.0, elemental: 1.0, arcane: 1.0 },
+  grunt: {
+    id: 'grunt', name: 'Grunt',
+    radius: 14, hp: 20, speed: 62, damage: 10,
+    color: '#8a82ad', shape: 'shade',
+    weight: 1, minWave: 1, pack: { min: 3, max: 5 },
+    fact: 'Walks in and explodes on contact. Comes in packs.',
   },
-  husk: {
-    id: 'husk',
-    name: 'Husk',
-    radius: 20,
-    hp: 48,
-    speed: 50,
-    damage: 17,
-    color: '#5e6e8a',
-    shape: 'husk',
-    weight: 0.6,
-    minWave: 2,
-    resists: { physical: 1.0, elemental: 1.0, arcane: 1.0 },
+  archer: {
+    id: 'archer', name: 'Archer',
+    radius: 16, hp: 26, speed: 55, damage: 6,
+    color: '#5e6e8a', shape: 'husk',
+    weight: 1.6, minWave: 1, pack: { min: 2, max: 3 },
+    ranged: { kind: 'arrow', holdAt: 300, every: 2.2, tell: 0.45, speed: 420, damage: 4, stallAfter: 12 },
+    fact: 'Stops at range and fires arrows that fly flat. Walks in after 12s.',
   },
-  swarmling: {
-    id: 'swarmling',
-    name: 'Swarmling',
-    radius: 8,
-    hp: 8,
-    speed: 90,
-    damage: 5,
-    color: '#cfa3ff',
-    shape: 'swarmling',
-    weight: 0.9,
-    minWave: 2,
-    group: { min: 4, max: 6 },
-    resists: { physical: 1.0, elemental: 1.0, arcane: 1.0 },
+  caster: {
+    id: 'caster', name: 'Fire-caster',
+    radius: 13, hp: 34, speed: 42, damage: 8,
+    color: '#d8624c', shape: 'hexer',
+    weight: 2, minWave: 2, pack: { min: 1, max: 2 },
+    ranged: { kind: 'fireball', holdAt: 340, every: 3.4, tell: 0.8, flight: 1.1, splash: 36, damage: 9, stallAfter: 12 },
+    fact: 'Stops far back and lobs fireballs that land where you stand. Fire passes over shields.',
   },
-  wisp: {
-    id: 'wisp',
-    name: 'Wisp',
-    radius: 10,
-    hp: 14,
-    speed: 130,
-    damage: 8,
-    color: '#cfa3ff',
-    shape: 'wisp',
-    weight: 0.4,
-    minWave: 3,
-    resists: { physical: 1.0, elemental: 1.0, arcane: 1.0 },
+  brute: {
+    id: 'brute', name: 'Brute',
+    radius: 26, hp: 150, speed: 30, damage: 22,
+    color: '#3a4a6a', shape: 'bulwark',
+    weight: 4, minWave: 3, pack: { min: 1, max: 1 },
+    armour: true,
+    fact: 'Armoured: area damage deals 35% until a single-target hit cracks it for 3s.',
   },
-  // ---- ARMORED archetype: Bulwark ----
-  // Plated tank. Physical hits glance off (×0.55) but it cooks under
-  // elemental pressure (×1.30). Arcane is neutral. Forces ninjas to
-  // mix in a smoke bomb / fireball companion or grind through.
-  bulwark: {
-    id: 'bulwark',
-    name: 'Bulwark',
-    radius: 28,
-    hp: 240,
-    speed: 26,
-    damage: 24,
-    color: '#3a4a6a',
-    shape: 'bulwark',
-    weight: 0.18,
-    minWave: 4,
-    resists: { physical: 0.55, elemental: 1.30, arcane: 1.0 },
+  // ---- Bosses: armoured, never explode — they stand and slam. ----
+  warden: {
+    id: 'warden', name: 'Warden',
+    radius: 32, hp: 450, speed: 22, damage: 30,
+    color: '#7c3aed', shape: 'goliath', boss: true, armour: true,
+    slam: { every: 2.5, damage: 12 },
+    ranged: { kind: 'boulder', holdAt: 0, every: 6, tell: 1.0, speed: 300, damage: 14 },
+    fact: 'Boss. Armoured. Throws boulders that fly flat; slams when it reaches you.',
   },
-  // ---- SPECTRAL archetype: Wraith ----
-  // Phases through projectiles (handled in tickProjectiles). AoE and
-  // melee/cleave still hit normally. Weak to elemental (1.30×), strong
-  // vs physical projectiles via the dodge mechanic on top of neutral
-  // resist. Caster's nightmare for single-target snipe builds.
-  wraith: {
-    id: 'wraith',
-    name: 'Wraith',
-    radius: 12,
-    hp: 36,
-    speed: 100,
-    damage: 12,
-    color: '#a89cd0',
-    shape: 'wraith',
-    weight: 0.55,
-    minWave: 5,
-    resists: { physical: 1.0, elemental: 1.30, arcane: 1.0 },
-    dodgeChance: 0.30,    // Projectile-only dodge — read in tickProjectiles
+  cinder_king: {
+    id: 'cinder_king', name: 'Cinder King',
+    radius: 34, hp: 520, speed: 20, damage: 34,
+    color: '#c0392b', shape: 'goliath', boss: true, armour: true,
+    slam: { every: 2.5, damage: 14 },
+    ring: { every: 5, tell: 1.0, count: 8, radius: 30, splash: 26, damage: 3 },
+    addsAt: [0.75, 0.50, 0.25],
+    fact: 'Boss. Armoured. Rains a ring of fire on you; calls reinforcements as it weakens.',
   },
-  // ---- HEXER archetype: ranged caster ----
-  // The first ranged enemy. Maintains kiting distance ~220u and lobs
-  // hex bolts that apply a 4s damage-down debuff to the player. Low
-  // HP, but you HAVE to deal with them or your dps cratters. Weak to
-  // arcane (1.4×) — finally a reason to take the gravity tree.
-  hexer: {
-    id: 'hexer',
-    name: 'Hexer',
-    radius: 13,
-    hp: 42,
-    speed: 38,            // slow, kites by trying to stay at range
-    damage: 14,
-    color: '#b86a3a',
-    shape: 'hexer',
-    weight: 0.40,
-    minWave: 6,
-    resists: { physical: 1.0, elemental: 1.0, arcane: 1.40 },
-    kind: 'ranged',
-    rangedAttack: {
-      keepDistance: 220,
-      cooldown: 3.5,
-      hexDuration: 4.0,
-      hexDmgReduction: 0.30,
-      projectileSpeed: 240,
-      projectileDamage: 0,    // hex itself isn't a damage hit — it's a debuff
-    },
-  },
-  goliath: {
-    id: 'goliath',
-    name: 'Goliath',
-    radius: 32,
-    hp: 320,
-    speed: 24,
-    damage: 30,
-    color: '#7c3aed',
-    shape: 'goliath',
-    weight: 0.15,
-    minWave: 5,
-    boss: true,
-    // Status-vulnerable boss — armor at baseline, but melts under any
-    // status (shocked / frozen / ignited). Read in Enemy.takeDamage.
-    resists: { physical: 0.90, elemental: 0.90, arcane: 0.90 },
-    statusVulnerable: 1.5,
-  },
+};
+
+// Wave themes: a theme's enemy takes CONFIG.waves.themeShare of the budget
+// for a 3-wave block. Previewed on the level-up screen.
+const THEMES = {
+  swarm:  { id: 'swarm',  name: 'Swarm',  enemy: 'grunt',  packBonus: 3 },
+  volley: { id: 'volley', name: 'Volley', enemy: 'archer', packBonus: 1 },
+  pyre:   { id: 'pyre',   name: 'Pyre',   enemy: 'caster', packBonus: 1 },
+  iron:   { id: 'iron',   name: 'Iron',   enemy: 'brute',  packBonus: 0 },
+};
+
+// Hit class per damage source (dealtKey) for armour: 'single' cracks it,
+// everything else counts as area and bounces off (CONFIG.armour).
+const HIT_CLASS = {
+  focused_beam: 'single', refraction_bolt: 'single',
+  prism_strike: 'single', mirror_wall: 'single',
 };
 
 
@@ -4998,8 +4974,11 @@ class Player {
    * are installed on the entity as `_onAbsorb(absorbed, attacker, ...)`
    * and `_onBreak(player, game)` to keep flavor logic local.
    */
-  takeDamage(dmg, attacker = null, game = null) {
-    if (this.iframes > 0 || !this.alive) return;
+  // opts.shot: an enemy projectile — ignores i-frames and grants none, so
+  //   arrows neither get swallowed nor shield you from the next melee hit.
+  // opts.overShield: lobbed fire — passes over the T2 shield entirely.
+  takeDamage(dmg, attacker = null, game = null, opts = {}) {
+    if (!this.alive || (this.iframes > 0 && !opts.shot)) return;
     // Blind: an attacker with the blind status hits us for half damage —
     // they're swinging where we *were*. Optician's class-defining debuff.
     if (attacker?.statuses?.blind) {
@@ -5010,13 +4989,13 @@ class Player {
     // _defenseShield ref each frame. We don't enumerate every shield
     // type here — the entity reports its own HP / flavor via hooks.
     const shield = this._defenseShield;
-    if (shield && !shield.recharging && shield.shieldHp > 0 && dmg > 0) {
+    if (shield && !opts.overShield && !shield.recharging && shield.shieldHp > 0 && dmg > 0) {
       const absorbed = Math.min(dmg, shield.shieldHp);
       shield.shieldHp -= absorbed;
       dmg -= absorbed;
       if (game?.waveLog) game.waveLog.absorbed += absorbed;
       // Per-shield on-absorb hook (e.g. Mirror Wall reflect at attacker).
-      if (shield._onAbsorb) shield._onAbsorb(absorbed, attacker, this, game);
+      if (shield._onAbsorb) shield._onAbsorb(absorbed, attacker, this, game, opts);
       if (game) {
         const tag = shield._absorbTag || 'SHIELD';
         const col = shield._absorbColor || '#bce8ff';
@@ -5037,7 +5016,7 @@ class Player {
         // Clear the ref so we don't keep absorbing through a broken wall.
         this._defenseShield = null;
       }
-      if (dmg <= 0) { this.iframes = CONFIG.player.iframes * 0.4; return; }
+      if (dmg <= 0) { if (!opts.shot) this.iframes = CONFIG.player.iframes * 0.4; return; }
     }
     // Drummer Ward aura — flat % damage reduction while active.
     if (this._drummerAura?.ward) {
@@ -5093,7 +5072,7 @@ class Player {
       log.hits[who] = (log.hits[who] || 0) + 1;
     }
     this.hp -= dmg;
-    this.iframes = CONFIG.player.iframes;
+    if (!opts.shot) this.iframes = CONFIG.player.iframes;
     Logger.event('player_hit', { dmg, hp: this.hp });
     // Mender Resurgence — once per run, save the player from a fatal hit.
     if (this.hp <= 0 && this._resurgence && game?.minion?.kind === 'mender') {
@@ -5149,6 +5128,17 @@ class Enemy {
      */
     this.statuses = {};
     this.spawnedAt = performance.now() / 1000; // for renderer spawn telegraph
+    // Ranged / boss state (see ENEMIES header). Shot timers start
+    // staggered so a squad doesn't volley in perfect sync.
+    const rg = def.ranged;
+    this._shotAcc = rg ? Math.random() * rg.every * 0.5 : 0;
+    this._holdT = 0;              // seconds spent holding position
+    this._stalled = false;        // held too long → walks in to melee
+    this._slamAcc = 0;
+    this._ringAcc = 0;
+    this._addsDone = 0;
+    this.crackedUntil = 0;        // armour cracked until this runElapsed
+    this.dmgMult = 1;             // shot/slam damage scale, set on spawn
   }
   /*
    * Apply (or refresh) a status. Stronger/longer values win — if you
@@ -5207,6 +5197,18 @@ class Enemy {
       }
     }
     actual *= resistMult;
+    // ---- Armour (Brute, bosses) ----
+    // Single-target hits land in full and crack the armour for a few
+    // seconds; area hits deal CONFIG.armour.areaFrac while it holds.
+    if (this.def.armour && actual > 0) {
+      const now = this.game?.runElapsed || 0;
+      if (HIT_CLASS[dealtKey(source?.spell)] === 'single') {
+        this.crackedUntil = now + CONFIG.armour.crackSecs;
+      } else if (!(this.crackedUntil > now)) {
+        actual *= CONFIG.armour.areaFrac;
+        resistMult *= CONFIG.armour.areaFrac;   // → RESIST floater + shimmer below
+      }
+    }
     // Consume shock buff: next hit deals +50% (or whatever multiplier).
     // The buff is single-use — it amplifies one strike then dissipates.
     if (this.statuses.shock) {
@@ -5708,16 +5710,72 @@ class WaveManager {
     this.spawnAcc = 0;
     this.spawnInterval = 0;
     this.toSpawn = 0;
+    this.queue = [];             // squads still to spawn: { id, count }
     this.alive = false;
     this.elapsed = 0;
+    this.themes = this.rollThemes();
+  }
+
+  /* ---- Themes: one per 3-wave block, rolled at run start ----
+   * Blocks: W1–3, 4–6, 7–9, 10–12, 13–15, 16–18, 19–20. Each theme shows
+   * up 1–2 times, never twice in a row, and block 1 is Swarm or Volley
+   * (no armour or fire before the build has a second ability). */
+  rollThemes() {
+    const ids = Object.keys(THEMES);
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const bag = [...ids, ...ids].sort(() => Math.random() - 0.5).slice(0, 7);
+      if (!['swarm', 'volley'].includes(bag[0])) continue;
+      if (bag.some((t, i) => i > 0 && t === bag[i - 1])) continue;
+      return bag;
+    }
+    return ['swarm', 'volley', 'iron', 'pyre', 'swarm', 'iron', 'volley'];
+  }
+  blockOf(n) { return Math.min(6, Math.floor((n - 1) / 3)); }
+  blockRange(b) { const a = b * 3 + 1; return b === 6 ? [19, 20] : [a, a + 2]; }
+  themeFor(n) { return THEMES[this.themes[this.blockOf(n)]]; }
+  bossFor(n) { return CONFIG.waves.bossWaves[n] || null; }
+
+  /* Build the wave's squads from its threat budget. The theme enemy gets
+   * themeShare of the budget; the other unlocked types split the rest by
+   * baseMix, at least one body each. */
+  buildSquads(n) {
+    const cfg = CONFIG.waves;
+    const theme = this.themeFor(n);
+    let budget = cfg.budgetBase + cfg.budgetPerWave * n;
+    if (this.bossFor(n)) budget *= cfg.bossBudgetMult;
+    const types = Object.keys(cfg.baseMix).filter(id => ENEMIES[id].minWave <= n || id === theme.enemy);
+    const others = types.filter(id => id !== theme.enemy);
+    const mixSum = others.reduce((a, id) => a + cfg.baseMix[id], 0) || 1;
+    const counts = {};
+    counts[theme.enemy] = Math.max(1, Math.round(budget * cfg.themeShare / ENEMIES[theme.enemy].weight));
+    for (const id of others) {
+      const share = budget * (1 - cfg.themeShare) * cfg.baseMix[id] / mixSum;
+      counts[id] = Math.max(1, Math.round(share / ENEMIES[id].weight));
+    }
+    const squads = [];
+    for (const [id, total] of Object.entries(counts)) {
+      const def = ENEMIES[id];
+      const bonus = id === theme.enemy ? (theme.packBonus || 0) : 0;
+      let left = total;
+      while (left > 0) {
+        const size = Math.min(left, randi(def.pack.min, def.pack.max + bonus));
+        squads.push({ id, count: size });
+        left -= size;
+      }
+    }
+    squads.sort(() => Math.random() - 0.5);
+    const boss = this.bossFor(n);
+    if (boss) squads.splice(Math.floor(squads.length * 0.4), 0, { id: boss, count: 1 });
+    return squads;
   }
 
   startWave(n) {
     this.wave = n;
     const cfg = CONFIG.waves;
-    this.toSpawn = cfg.baseEnemies + cfg.perWaveEnemies * (n - 1);
-    this.spawnInterval = Math.max(cfg.minSpawnInterval, cfg.baseSpawnInterval - cfg.spawnIntervalDecay * (n - 1));
-    this.spawnAcc = 0;
+    this.queue = this.buildSquads(n);
+    this.toSpawn = this.queue.reduce((a, q) => a + q.count, 0);
+    this.spawnInterval = Math.max(cfg.squadGapMin, cfg.squadGapBase - cfg.squadGapDecay * (n - 1));
+    this.spawnAcc = this.spawnInterval;     // first squad right away
     this.elapsed = 0;
     this.alive = true;
     // Reset per-wave item flags (Abyssal Mantle "spared once" cooldown).
@@ -5745,110 +5803,88 @@ class WaveManager {
     if (g.mirrorWalls) g.mirrorWalls = [];
     if (g.lighthouses) g.lighthouses = [];
     if (g.player) { g.player._defenseShield = null; g.player._mirrorWall = null; }
+    g.enemyShots = [];
     this.game.waveStartT = this.game.runElapsed; // renderer uses for chevron pulse boost
     // Per-wave facts for the level-up line, the death recap and the run log.
-    // Filled by spawnEnemy / Player.takeDamage / Enemy.takeDamage.
+    // Filled by spawnSquad / Player.takeDamage / Enemy.takeDamage.
     this.game.waveLog = {
-      wave: n, startT: this.game.runElapsed,
+      wave: n, theme: this.themeFor(n).id, startT: this.game.runElapsed,
       spawned: {}, hurt: {}, hits: {}, absorbed: 0, dealt: {},
     };
-    Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, spawnInterval: this.spawnInterval });
+    Logger.event('wave_start', { wave: n, toSpawn: this.toSpawn, theme: this.themeFor(n).id });
   }
 
   update(dt) {
     if (!this.alive) return;
     this.elapsed += dt;
     this.spawnAcc += dt;
-    while (this.spawnAcc >= this.spawnInterval && this.toSpawn > 0) {
+    while (this.spawnAcc >= this.spawnInterval && this.queue.length > 0) {
       this.spawnAcc -= this.spawnInterval;
-      // spawnEnemy returns the count actually spawned (groups can spawn
-      // multiple at once). toSpawn decrements by that count.
-      const n = this.spawnEnemy();
+      const q = this.queue.shift();
+      const n = this.spawnSquad(q.id, q.count);
       this.toSpawn = Math.max(0, this.toSpawn - n);
     }
-    if (this.toSpawn === 0 && this.game.enemies.length === 0) {
+    if (this.queue.length === 0 && this.game.enemies.length === 0) {
+      this.toSpawn = 0;
       this.alive = false;
       Logger.event('wave_clear', { wave: this.wave, elapsed: this.elapsed });
       this.game.onWaveCleared(this.wave);
     }
   }
 
-  pickEnemyType() {
-    const eligible = Object.values(ENEMIES).filter(e => e.minWave <= this.wave);
-    // Boss waves: heavily weight goliath
-    const isBoss = this.wave % CONFIG.waves.bossEvery === 0 && this.wave > 0;
-    if (isBoss && this.toSpawn === Math.max(1, Math.floor((CONFIG.waves.baseEnemies + CONFIG.waves.perWaveEnemies * (this.wave - 1)) * 0.15))) {
-      const boss = eligible.find(e => e.boss);
-      if (boss) return boss;
+  /* Spawn `count` of one enemy type as a squad at a random point on the
+   * top or bottom edge (portrait-first lanes). `at` overrides the spot
+   * (boss reinforcements). Returns how many spawned. */
+  spawnSquad(id, count, at = null) {
+    const def = ENEMIES[id];
+    if (!def) return 0;
+    const g = this.game;
+    const pad = CONFIG.spawn.edgePadding;
+    let bx, by;
+    if (at) { bx = at.x; by = at.y; }
+    else {
+      const fromTop = Math.random() < 0.5;
+      bx = rand(pad, g.width - pad);
+      by = fromTop ? -pad : g.height + pad;
     }
-    // Weighted sample (excluding bosses from regular pool)
-    const weighted = eligible.filter(e => !e.boss);
-    const total = weighted.reduce((s, e) => s + e.weight, 0);
-    let r = Math.random() * total;
-    for (const e of weighted) { r -= e.weight; if (r <= 0) return e; }
-    return weighted[0];
+    const w = this.wave;
+    const hpMult = 1 + CONFIG.waves.healthScale * (w - 1);
+    const speedMult = Math.min(CONFIG.waves.speedCap, 1 + CONFIG.waves.speedScale * (w - 1));
+    const spread = CONFIG.waves.clusterSpread || 36;
+    for (let i = 0; i < count; i++) {
+      const ox = count === 1 ? 0 : rand(-spread, spread);
+      const oy = count === 1 ? 0 : rand(-spread * 0.5, spread * 0.5);
+      const enemy = new Enemy(def, bx + ox, by + oy, hpMult, speedMult);
+      enemy.game = g;
+      enemy.dmgMult = 1 + CONFIG.waves.damageScale * (w - 1);
+      g.enemies.push(enemy);
+    }
+    const log = g.waveLog;
+    if (log) log.spawned[id] = (log.spawned[id] || 0) + count;
+    Logger.event('enemy_spawn', { type: id, wave: w, count });
+    return count;
   }
 
-  /*
-   * Spawns one enemy or a group, depending on the picked enemy type.
-   * Returns how many enemies were spawned (for toSpawn accounting).
-   *
-   * Spawn placement: from the two longest opposite edges (top/bottom
-   * in portrait, left/right in landscape). Funnels enemies into lanes
-   * so AOE/control vs single-target becomes a meaningful axis.
-   */
-  spawnEnemy() {
-    const def = this.pickEnemyType();
-    const w = this.game.width, h = this.game.height;
-    const pad = CONFIG.spawn.edgePadding;
-    // Always spawn from top/bottom edges. Game is portrait-first; on
-    // wider viewports we still funnel enemies vertically so the lane-
-    // based difficulty (and Wall of Flame's horizontal behavior) reads
-    // consistently on every device.
-    const useVertical = true;
+  // Cinder King reinforcements: a squad of the block's theme enemy at the boss.
+  spawnAdds(boss) {
+    const theme = this.themeFor(this.wave);
+    const def = ENEMIES[theme.enemy];
+    this.spawnSquad(theme.enemy, def.pack.max + (theme.packBonus || 0), { x: boss.x, y: boss.y });
+    this.game.spawnExplosion(boss.x, boss.y, 70, '#ff7733', 'fire');
+  }
 
-    // Pick a base position on a long edge
-    let bx, by;
-    if (useVertical) {
-      const fromTop = Math.random() < 0.5;
-      bx = rand(pad, w - pad);
-      by = fromTop ? -pad : h + pad;
-    } else if (CONFIG.waves.longAxisSpawnOnly) {
-      // Landscape: spawn from left/right
-      const fromLeft = Math.random() < 0.5;
-      bx = fromLeft ? -pad : w + pad;
-      by = rand(pad, h - pad);
-    } else {
-      // Fallback (all edges) — currently unused
-      const side = randi(0, 3);
-      if (side === 0)      { bx = -pad;    by = rand(0, h); }
-      else if (side === 1) { bx = w + pad; by = rand(0, h); }
-      else if (side === 2) { bx = rand(0, w); by = -pad; }
-      else                 { bx = rand(0, w); by = h + pad; }
-    }
-
-    const hpMult = 1 + CONFIG.waves.healthScale * (this.wave - 1);
-    const speedMult = Math.min(CONFIG.waves.speedCap, 1 + CONFIG.waves.speedScale * (this.wave - 1));
-
-    // Group spawn (e.g., swarmlings): 4-6 spawn together near base position
-    let n = 1;
-    if (def.group) {
-      n = randi(def.group.min, def.group.max);
-    }
-
-    const spread = CONFIG.waves.clusterSpread || 36;
-    for (let i = 0; i < n; i++) {
-      // Small offsets clustered around base point
-      const ox = n === 1 ? 0 : rand(-spread, spread);
-      const oy = n === 1 ? 0 : rand(-spread * 0.5, spread * 0.5);
-      const enemy = new Enemy(def, bx + ox, by + oy, hpMult, speedMult);
-      enemy.game = this.game;
-      this.game.enemies.push(enemy);
-    }
-    const log = this.game.waveLog;
-    if (log) log.spawned[def.id] = (log.spawned[def.id] || 0) + n;
-    Logger.event('enemy_spawn', { type: def.id, wave: this.wave, count: n });
-    return n;
+  // "This block: Volley (W4–6) · Next: Iron (W7–9)" — facts only.
+  previewLine(nextWave) {
+    const b = this.blockOf(nextWave);
+    const part = (bi) => {
+      const [a, z] = this.blockRange(bi);
+      return `${THEMES[this.themes[bi]].name} (W${a}–${z})`;
+    };
+    let line = `This block: ${part(b)}`;
+    if (b < 6) line += ` · Next: ${part(b + 1)}`;
+    const boss = Object.entries(CONFIG.waves.bossWaves).find(([w]) => +w >= nextWave);
+    if (boss) line += ` · Boss W${boss[0]}: ${ENEMIES[boss[1]].name}`;
+    return line;
   }
 }
 
@@ -5903,6 +5939,7 @@ class Game {
     this.kills = 0;
     this.damageDealt = 0;
     this.totalDamageDealt = 0;
+    this.enemyShots = [];
 
     this.waveMgr = new WaveManager(this);
     this.state = 'menu';         // 'menu' | 'playing' | 'upgrade' | 'item' | 'gameover'
@@ -6001,6 +6038,7 @@ class Game {
     this.shake = 0;
     this.kills = 0;
     this.totalDamageDealt = 0;
+    this.enemyShots = [];        // arrows / boulders / fireballs (tickEnemyShots)
     this.waveLog = null;         // current wave's facts (WaveManager.startWave)
     this.lastWaveLog = null;     // previous wave, for the level-up line
     this.runWaves = [];          // [wave, hpLost, absorbed, secs] per cleared wave
@@ -6158,6 +6196,7 @@ class Game {
     this.tickSnowForts(dt);
     this.tickSpells(dt);
     this.tickEnemies(dt);
+    this.tickEnemyShots(dt);
     this.tickProjectiles(dt);
     this.tickWells(dt);
     this.tickPullFields(dt);
@@ -7181,13 +7220,19 @@ class Game {
       W._absorbColor = '#dcecff';
       W._breakRadius = W.standoff;
       if (!W._onAbsorb) {
-        W._onAbsorb = (absorbed, attacker, pl, game) => {
+        W._onAbsorb = (absorbed, attacker, pl, game, opts = {}) => {
           if (!game || !attacker?.alive) return;
-          const reflected = absorbed * (W.reflectFrac || 0.4);
+          // Shots go back at the shooter much harder than melee reflect —
+          // this is Mirror Wall's answer to archers and boulders.
+          const shotMult = opts.shot ? CONFIG.mirrorShotReflectMult : 1;
+          const reflected = absorbed * (W.reflectFrac || 0.4) * shotMult;
           if (reflected > 0) {
             const a = attacker.takeDamage(reflected, { spell: 'mirror_wall' });
             game.totalDamageDealt += a;
             game.spawnDamageNumber(attacker.x, attacker.y - attacker.radius - 6, a, true, attacker);
+            if (opts.shot) {
+              game.lightnings.push({ from: { x: pl.x, y: pl.y }, to: { x: attacker.x, y: attacker.y }, t: 0, life: 0.22 });
+            }
           }
           if (W.spec?.spectrumMirror) {
             for (const e of game.enemies) {
@@ -8077,8 +8122,16 @@ class Game {
     if (log) {
       const hpLost = Object.values(log.hurt).reduce((a, b) => a + b, 0);
       this.runWaves.push([wave, Math.round(hpLost), Math.round(log.absorbed),
-                          Math.round(this.runElapsed - log.startT)]);
+                          Math.round(this.runElapsed - log.startT), log.theme || '']);
       this.lastWaveLog = log;
+    }
+    // Clearing the final wave wins the run.
+    if (wave >= CONFIG.waves.finalWave) {
+      this.state = 'victory';
+      UI.showGameOver(this.statsSnapshot(), { won: true });
+      Logger.event('run_end', { ...this.statsSnapshot(), won: true });
+      this.reportRun('won');
+      return;
     }
     const heal = Math.floor(this.player.maxHp * CONFIG.waves.waveClearHeal);
     this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
@@ -8165,7 +8218,7 @@ class Game {
    * record with the same `run` id supersedes an earlier one. */
   reportRun(ended) {
     if (!this.playerState || !this.runId) return;
-    if (ended === 'died') this.runReported = true;
+    if (ended === 'died' || ended === 'won') this.runReported = true;
     const s = this.statsSnapshot();
     Telemetry.send({
       text: `run ${s.character} w${s.wave} ${ended}`,
@@ -8311,6 +8364,67 @@ class Game {
    * targets the player; on contact the enemy detonates, dealing one
    * decisive hit and dying.
    */
+  /* ---- Enemy shots -------------------------------------------------
+   * Flat shots (arrow, boulder) fly straight at where you stood and hit
+   * the first thing they reach — you; your T2 shield absorbs them.
+   * Lobbed fire (fireball, Cinder ring) lands where you stood after
+   * `life` seconds and passes over the shield. Blinded shooters deal
+   * half (Player.takeDamage). */
+  fireEnemyShot(e, rg) {
+    const p = this.player;
+    if (!p) return;
+    const dmg = rg.damage * (e.dmgMult || 1);
+    if (rg.kind === 'fireball') {
+      this.enemyShots.push({ kind: 'fireball', x0: e.x, y0: e.y, x: e.x, y: e.y, tx: p.x, ty: p.y,
+        t: 0, life: rg.flight, dmg, splash: rg.splash, src: e });
+    } else {
+      const dir = Vec.norm(Vec.sub(p, e));
+      this.enemyShots.push({ kind: rg.kind, x: e.x, y: e.y, vx: dir.x * rg.speed, vy: dir.y * rg.speed,
+        t: 0, life: 3.0, dmg, r: rg.kind === 'boulder' ? 9 : 3, src: e });
+    }
+  }
+  fireEnemyRing(e, ring) {
+    const p = this.player;
+    if (!p) return;
+    const dmg = ring.damage * (e.dmgMult || 1);
+    for (let k = 0; k < ring.count; k++) {
+      const a = (k / ring.count) * TAU;
+      const tx = p.x + Math.cos(a) * ring.radius, ty = p.y + Math.sin(a) * ring.radius;
+      // Each fireball falls from above its landing spot (ring.tell = warning).
+      this.enemyShots.push({ kind: 'fireball', x0: tx, y0: ty - 220, x: tx, y: ty - 220, tx, ty,
+        t: 0, life: ring.tell, dmg, splash: ring.splash, src: e });
+    }
+  }
+  tickEnemyShots(dt) {
+    const p = this.player;
+    for (let i = this.enemyShots.length - 1; i >= 0; i--) {
+      const s = this.enemyShots[i];
+      s.t += dt;
+      if (s.kind === 'fireball') {
+        const k = Math.min(1, s.t / s.life);
+        s.x = s.x0 + (s.tx - s.x0) * k;
+        s.y = s.y0 + (s.ty - s.y0) * k;
+        if (s.t >= s.life) {
+          if (p?.alive && Vec.dist(p, { x: s.tx, y: s.ty }) < s.splash + p.radius) {
+            p.takeDamage(s.dmg, s.src, this, { shot: true, overShield: true });
+          }
+          this.spawnExplosion(s.tx, s.ty, s.splash, '#ff7733', 'fire');
+          this.enemyShots.splice(i, 1);
+        }
+        continue;
+      }
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      if (p?.alive && Vec.dist(p, s) < p.radius + s.r) {
+        p.takeDamage(s.dmg, s.src, this, { shot: true });
+        this.spawnHitParticles(s.x, s.y, s.kind === 'boulder' ? '#6a604f' : '#1a1612', s.kind === 'boulder' ? 10 : 4);
+        this.enemyShots.splice(i, 1);
+        continue;
+      }
+      if (s.t >= s.life) this.enemyShots.splice(i, 1);
+    }
+  }
+
   tickEnemies(dt) {
     const player = this.player;
     const elapsed = this.runElapsed;
@@ -8373,9 +8487,57 @@ class Game {
       // Lighthouse taunt is also threaded through _tauntTarget (see
       // tickLighthouses); enemies prefer attacking the lit tower over the
       // player while within its aura.
+      // Ranged enemies ignore the decoy until they stall and walk in;
+      // bosses always come for you.
       const taunt = e._tauntTarget;
-      const target = (taunt && taunt.alive) ? taunt : player;
-      let dir = Vec.norm(Vec.sub(target, e));
+      const rg = e.def.ranged;
+      const shooter = !!rg && !e._stalled;
+      const target = (taunt && taunt.alive && !shooter && !e.boss) ? taunt : player;
+      const tRadius = target === player ? player.radius : 22;
+      const dP = Vec.dist(player, e);
+      // ---- Ranged: hold at range, shoot, stall after too long ----
+      let holding = false;
+      if (shooter) {
+        if (rg.holdAt > 0 && dP <= rg.holdAt) {
+          holding = true;
+          // First shot comes soon after arriving (just the tell + a little
+          // jitter), so a shooter that reaches its spot always gets one off.
+          if (e._holdT === 0) e._shotAcc = Math.max(e._shotAcc, rg.every - rg.tell - Math.random() * 0.8);
+          e._holdT += dt;
+          if (rg.stallAfter && e._holdT >= rg.stallAfter) e._stalled = true;
+        }
+        // Holders shoot once in position; advancing shooters (Warden) once
+        // they're inside the engagement ring.
+        const canShoot = rg.holdAt > 0 ? holding : dP <= this.combatRadius();
+        if (canShoot && !e.statuses.freeze) {
+          e._shotAcc += dt;
+          if (e._shotAcc >= rg.every) { e._shotAcc = 0; this.fireEnemyShot(e, rg); }
+        }
+      }
+      // ---- Cinder King: fire ring + reinforcements ----
+      if (e.def.ring && dP <= this.combatRadius()) {
+        e._ringAcc += dt;
+        if (e._ringAcc >= e.def.ring.every) { e._ringAcc = 0; this.fireEnemyRing(e, e.def.ring); }
+      }
+      if (e.def.addsAt) {
+        while (e._addsDone < e.def.addsAt.length && e.hp / e.maxHp <= e.def.addsAt[e._addsDone]) {
+          e._addsDone++;
+          this.waveMgr.spawnAdds(e);
+        }
+      }
+      // ---- Bosses stand and slam instead of exploding ----
+      const inContact = Vec.dist(target, e) < tRadius + e.radius;
+      if (e.def.slam && target === player && inContact) {
+        e._slamAcc += dt;
+        if (e._slamAcc >= e.def.slam.every) {
+          e._slamAcc = 0;
+          player.takeDamage(Math.round(e.def.slam.damage * e.dmgMult), e, this);
+          this.spawnExplosion(player.x, player.y, 40, '#c89aff');
+          this.addShake(0.25);
+        }
+        holding = true;
+      }
+      let dir = holding ? { x: 0, y: 0 } : Vec.norm(Vec.sub(target, e));
       // Confused: rotate the steering vector. Mirror Wall sets dirRot in
       // [2.1, π] (≈120-180°) so enemies walk wrong way; resets when status
       // expires (1.5s).
@@ -8390,10 +8552,9 @@ class Game {
       e.x += vx * dt;
       e.y += vy * dt;
       e.pvx *= 0.88; e.pvy *= 0.88;
-      // Contact with the chosen target.
-      const tRadius = target === player ? player.radius : 22;
+      // Contact with the chosen target (kamikaze; bosses slam above instead).
       const d = Vec.dist(target, e);
-      if (d < tRadius + e.radius) {
+      if (d < tRadius + e.radius && !e.def.slam) {
         const baseDmg = e.damage * 0.6;
         const hpDmg = e.hp * 0.08;
         const contactDmg = Math.max(1, Math.round(baseDmg + hpDmg));
@@ -9300,7 +9461,8 @@ const Renderer = {
     this.drawAegisMirrors(ctx, game.aegisMirrors, game.player, game.runElapsed);
     this.drawPullFields(ctx, game.pullFields);
     this.drawWells(ctx, game.wells, game.player);
-    this.drawEnemies(ctx, game.enemies);
+    this.drawEnemies(ctx, game.enemies, game);
+    this.drawEnemyShots(ctx, game.enemyShots || []);
     this.drawProjectiles(ctx, game.projectiles);
     this.drawStormClouds(ctx, game.stormClouds, game.runElapsed);
     this.drawLightnings(ctx, game.lightnings);
@@ -9834,7 +9996,94 @@ const Renderer = {
     ctx.fill();
   },
 
-  drawEnemies(ctx, enemies) {
+  /* 2026-09-26 roster overlays: the warning before a shot (aim line for
+   * flat shots, a growing glow for lobbed fire) and the armour ring
+   * (solid = holding; broken + red = cracked, everything hits full). */
+  drawEnemyOverlays(ctx, e, game) {
+    const p = game?.player;
+    const rg = e.def?.ranged;
+    if (rg && p && !e._stalled && (e._holdT > 0 || rg.holdAt === 0)) {
+      const left = rg.every - (e._shotAcc || 0);
+      if (left <= rg.tell) {
+        const k = 1 - Math.max(0, left) / rg.tell;          // 0 → 1 as the shot nears
+        ctx.save();
+        if (rg.kind === 'fireball') {
+          const gr = 4 + 6 * k;
+          ctx.fillStyle = `rgba(255,120,50,${0.35 + 0.5 * k})`;
+          ctx.beginPath(); ctx.arc(e.x, e.y - e.radius - 10, gr, 0, TAU); ctx.fill();
+          ctx.strokeStyle = `rgba(168,58,44,${0.6 * k})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(e.x, e.y - e.radius - 10, gr + 3, 0, TAU); ctx.stroke();
+        } else {
+          ctx.strokeStyle = rg.kind === 'boulder' ? `rgba(58,50,42,${0.25 + 0.55 * k})` : `rgba(168,58,44,${0.20 + 0.6 * k})`;
+          ctx.lineWidth = rg.kind === 'boulder' ? 3 : 1.2;
+          ctx.setLineDash([6, 5]);
+          ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
+    }
+    if (e.def?.armour) {
+      const cracked = (e.crackedUntil || 0) > (game?.runElapsed || 0);
+      const R = e.radius + 5;
+      ctx.save();
+      ctx.lineWidth = 3;
+      if (!cracked) {
+        ctx.strokeStyle = 'rgba(58,74,106,0.85)';
+        ctx.beginPath(); ctx.arc(e.x, e.y, R, 0, TAU); ctx.stroke();
+      } else {
+        ctx.strokeStyle = 'rgba(168,58,44,0.85)';
+        for (let i = 0; i < 6; i++) {
+          const a0 = (i / 6) * TAU + 0.12, a1 = a0 + TAU / 6 - 0.45;
+          ctx.beginPath(); ctx.arc(e.x, e.y, R, a0, a1); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  },
+
+  drawEnemyShots(ctx, shots) {
+    for (const s of shots) {
+      ctx.save();
+      if (s.kind === 'fireball') {
+        const k = Math.min(1, s.t / s.life);
+        // Landing shadow grows as the fireball comes down.
+        ctx.fillStyle = `rgba(168,58,44,${0.10 + 0.30 * k})`;
+        ctx.beginPath(); ctx.arc(s.tx, s.ty, s.splash * (0.4 + 0.6 * k), 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(168,58,44,${0.35 + 0.4 * k})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(s.tx, s.ty, s.splash, 0, TAU); ctx.stroke();
+        // Thrown fireballs arc; ring fireballs fall straight down.
+        const lift = s.y0 < s.ty - 200 ? 0 : Math.sin(Math.PI * k) * 70;
+        const bx = s.x, by = s.y - lift;
+        const glow = ctx.createRadialGradient(bx, by, 0, bx, by, 11);
+        glow.addColorStop(0, 'rgba(255,243,200,0.95)');
+        glow.addColorStop(0.45, 'rgba(255,140,50,0.9)');
+        glow.addColorStop(1, 'rgba(168,58,44,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(bx, by, 11, 0, TAU); ctx.fill();
+      } else if (s.kind === 'boulder') {
+        ctx.fillStyle = PAL.inkMid;
+        ctx.strokeStyle = PAL.ink;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); ctx.stroke();
+      } else {
+        // Arrow: short ink shaft with a head, pointing along its flight.
+        const a = Math.atan2(s.vy, s.vx);
+        ctx.translate(s.x, s.y);
+        ctx.rotate(a);
+        ctx.strokeStyle = PAL.ink;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(4, 0); ctx.stroke();
+        ctx.fillStyle = PAL.red;
+        ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(1, -3); ctx.lineTo(1, 3); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+  },
+
+  drawEnemies(ctx, enemies, game) {
     const tNow = performance.now() / 1000;
     for (const e of enemies) {
       const ageS = tNow - (e.spawnedAt || tNow);
@@ -9898,6 +10147,7 @@ const Renderer = {
       // be specific to the shape.
       const state = e.flash > 0 ? 'hit' : 'walk';
       this.drawEnemyShape(ctx, e, tNow, state);
+      this.drawEnemyOverlays(ctx, e, game);
 
       // Resist shimmer — pearlescent iridescent overlay
       if (e.resistShimmer > 0) {
@@ -10443,8 +10693,8 @@ const Renderer = {
       // Stooped ranged caster — robed body with a glowing hex sigil
       // floating above the head. Pulses brighter as the cast cooldown
       // approaches readiness.
-      const cfg = e.def?.rangedAttack || {};
-      const cdRatio = cfg.cooldown ? Math.min(1, (e._castAcc || 0) / cfg.cooldown) : 0;
+      const cfg = e.def?.ranged || {};
+      const cdRatio = cfg.every ? Math.min(1, (e._shotAcc || 0) / cfg.every) : 0;
       ctx.save();
       ctx.translate(x, y);
       // Robe / body
@@ -14457,6 +14707,8 @@ const UI = {
     const c = tierCopy[tier] || { title: 'Choose', subtitle: '' };
     this.$('tier-title').textContent = c.title;
     this.$('tier-subtitle').textContent = c.subtitle;
+    const tp = this.$('tier-preview');
+    if (tp) tp.textContent = this.game.waveMgr.previewLine(this.game.waveMgr.wave + 1);
     const cont = this.$('tier-choices');
     cont.innerHTML = '';
     const options = Object.values(ABILITIES).filter(a => a.tier === tier && a.classId === charId && !a.retired);
@@ -14544,6 +14796,8 @@ const UI = {
     this.$('lu-title').textContent = `Level ${ps.level}`;
     const lastEl = this.$('lu-lastwave');
     if (lastEl) lastEl.textContent = lastWaveLine(this.game.lastWaveLog);
+    const prevEl = this.$('lu-preview');
+    if (prevEl) prevEl.textContent = this.game.waveMgr.previewLine(this.game.waveMgr.wave + 1);
     this.renderLevelUpBody(ps);
     const btn = this.$('btn-lu-continue');
     if (btn) {
@@ -14747,13 +15001,22 @@ const UI = {
     const el = this.$('wave-banner');
     if (!el) return;
     this.$('wave-banner-num').textContent = String(n);
-    this.$('wave-banner-label').textContent = (n % CONFIG.waves.bossEvery === 0) ? 'Boss Wave' : 'Wave';
+    const wm = this.game.waveMgr;
+    const boss = wm.bossFor(n);
+    this.$('wave-banner-label').textContent = boss
+      ? `Boss · ${ENEMIES[boss].name}`
+      : `Wave · ${wm.themeFor(n).name}`;
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
   },
 
-  showGameOver(stats) {
+  showGameOver(stats, opts = {}) {
+    const ov = this.$('overlay-gameover');
+    ov.querySelector('h1').textContent = opts.won ? 'Victorious' : 'Fallen';
+    ov.querySelector('.subtitle').textContent = opts.won
+      ? `All ${CONFIG.waves.finalWave} waves cleared.`
+      : 'The void took you.';
     const cont = this.$('gameover-stats');
     if (cont) {
       cont.innerHTML = '';
@@ -14777,7 +15040,7 @@ const UI = {
     const recap = this.$('gameover-recap');
     if (recap) {
       recap.innerHTML = '';
-      const log = stats.waveLog;
+      const log = opts.won ? null : stats.waveLog;
       if (log) {
         const hits = log.hits || {};
         const rows = [
@@ -14787,7 +15050,7 @@ const UI = {
           ['Dealt',    recapListHtml(log.dealt, dealtLabel)],
         ].filter(([, v]) => v);
         recap.innerHTML =
-          `<div class="recap-head">Wave ${log.wave} · fell at ${formatTime(stats.fellAt)} · ${stats.left} left</div>` +
+          `<div class="recap-head">Wave ${log.wave}${log.theme ? ' · ' + THEMES[log.theme].name : ''} · fell at ${formatTime(stats.fellAt)} · ${stats.left} left</div>` +
           rows.map(([k, v]) => `<div class="recap-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
       }
     }
@@ -14796,7 +15059,7 @@ const UI = {
 
   updateHud(game) {
     if (!game.player) return;
-    this.$('hud-wave').textContent = game.waveMgr.wave || '—';
+    this.$('hud-wave').textContent = game.waveMgr.wave ? `${game.waveMgr.wave}/${CONFIG.waves.finalWave}` : '—';
     this.$('hud-hp').textContent = `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`;
     this.$('hud-time').textContent = formatTime(game.runElapsed);
     const ps = game.playerState;

@@ -10,7 +10,8 @@ wave beat which choice.*
 
 ## Core loop
 
-1. Pick a **class** at run start (**Wizard** or **Optician**).
+1. Pick a **class** at run start (**Optician**; the Wizard is hidden
+   until it's reworked against the 2026-09-26 enemy roster).
 2. Pick a **Tier 1 ability** (1 of 4). You start with this and only this.
 3. Pick a **Companion** (1 of 4 minions). Stays with you the whole run.
 4. Fight wave 1.
@@ -24,7 +25,33 @@ wave beat which choice.*
    (one per tier).
 7. Spend points freely on any owned ability or on your companion.
    Points carry over.
-8. Run continues until you die.
+8. **20 waves.** Clearing W20 wins the run; otherwise it ends when you die.
+
+## Enemies and waves (2026-09-26)
+
+Every enemy asks one question, so a build without the answer loses a
+specific wave (v2's lesson: if every ability answers every threat,
+missing an answer costs nothing). Numbers live in `ENEMIES` / `CONFIG`.
+
+| enemy | behaviour | question |
+|---|---|---|
+| **Grunt** | packs of 3–5; walk in and explode | can you hit many at once? |
+| **Archer** | stop ~300u out, flat arrows (aim-line tell); walk in after 12s | can you reach the back, or block? |
+| **Fire-caster** | stop ~340u out, lobbed fireballs land on you and **pass over shields** | can you kill or blind the back line? |
+| **Brute** | slow, big hit, **armour**: area hits deal 35% until a single-target hit cracks it for 3s | can you crack armour? |
+| **Warden** (W10 boss) | armoured; boulders every 6s; stands and slams | armour + blocking |
+| **Cinder King** (W20 boss) | armoured; ring of fire on you every 5s; reinforcements at 75/50/25% | armour + fire |
+
+- **Budget:** each wave spends `16 + 4·w` threat weight (grunt 1,
+  archer 1.6, caster 2, brute 4) in squads; half on boss waves.
+- **Themes:** each 3-wave block has a theme (Swarm / Volley / Pyre /
+  Iron) whose enemy takes 45% of the budget. Block 1 is Swarm or Volley;
+  never the same theme twice in a row. The level-up screen and pickers
+  preview this block, the next one and the next boss. Facts only.
+- **Hit class** (`HIT_CLASS`): Focused Beam, Refraction Bolt, Prism
+  Strike and Mirror Wall reflect are single-target; everything else is
+  area.
+- Enemy shots ignore i-frames and grant none. Blinded shooters deal half.
 
 Result: every run has clean, predictable structure. No items, no
 fusions, no random card offers, no synergy hubs.
@@ -353,7 +380,30 @@ Same checklist as abilities — to add a new companion: 1 entry in
 `MINIONS`, a `kind` discriminator, a `_tickXxx` and `_drawXxx`
 behavior pair, and you're done. Mods come from `computeMinionMods()`.
 
-## The Optician — second class (shipped)
+## The Optician — kit as of 2026-09-26
+
+Cut to picks that each answer a different threat and leave you weak to
+another. **Retired** (flagged `retired`, code kept): Prism Burst (same
+job as Burning Lens), Mirror Maze (~0.4 dps; Crystal Cage shoved enemies
+at you), War Drummer (~+4% average). The sections below describe the
+original design; where they disagree, this table and the code win.
+
+| slot | pick | answers | weak to |
+|---|---|---|---|
+| T1 | Focused Beam | one tanky enemy (Brute, boss); a target switch keeps 15% of the ramp (Wide Lens +12%/pt) | swarms, back line |
+| T1 | Refraction Bolt | back line: aims at the farthest enemy holding position to shoot | Brutes |
+| T1 | Burning Lens | swarms (zone on the densest group) | armour, back line |
+| T2 | Mirror Wall | arrows/boulders: absorbed shots go back at the shooter (reflect% × 5) | fire |
+| T2 | Lantern Ring | melee that gets close | ranged |
+| T3 | Prism Strike | Brute/boss nuke, aims at the enemy with the most HP left | swarms |
+| T3 | Solar Eclipse | swarms; Umbra spec slows 40% inside | armour |
+| T3 | Blinding Flash | halves everything's damage, shooters included | nothing dies from it |
+| Comp | Linker / Decoy / Mender | spread damage / taunt melee / heal in-wave | — |
+
+T2 structures are rebuilt at every wave start with current points and
+spec (before 2026-09-26 they kept their first cast's numbers forever).
+
+## The Optician — second class (original design)
 
 **Role thesis:** A meticulous artificer who manipulates light through
 lenses, mirrors, and shadow. Her power comes from *concentration* —
